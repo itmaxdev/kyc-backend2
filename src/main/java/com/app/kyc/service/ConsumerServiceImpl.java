@@ -1921,7 +1921,7 @@ public class ConsumerServiceImpl implements ConsumerService {
     private List<String> checkErrors(Consumer consumer) {
         List<String> errors = new ArrayList<>();
         if (consumer.getMsisdn() == null) {
-            errors.add("MSSIDN");
+            errors.add("MSISDN");
         }
         if (consumer.getSubscriberType() == null) {
             errors.add("Subscriber Type");
@@ -1963,7 +1963,7 @@ public class ConsumerServiceImpl implements ConsumerService {
     private List<String> checkNullAttributesForFile(Consumer consumer){
         List <String> nullAttributesOfFile = new ArrayList<>();
         if (consumer.getMsisdn() == null || consumer.getMsisdn().equals("")) {
-            nullAttributesOfFile.add("MSSIDN");
+            nullAttributesOfFile.add("MSISDN");
         }
 
         if (consumer.getRegistrationDate() == null || consumer.getRegistrationDate().equals("")) {
