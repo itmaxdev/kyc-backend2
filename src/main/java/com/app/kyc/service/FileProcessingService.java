@@ -7,7 +7,6 @@ import com.app.kyc.entity.User;
 import com.app.kyc.repository.ConsumerRepository;
 import com.app.kyc.repository.ProcessedFileRepository;
 import com.app.kyc.repository.ServiceProviderRepository;
-import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,7 +24,6 @@ import com.opencsv.CSVParserBuilder;
 
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.InputStream;
 import java.io.Reader;
 import java.io.InputStreamReader;
@@ -69,6 +67,26 @@ public class FileProcessingService {
 
     // Guard to avoid overlapping checkConsumer per-operator
     private static final Set<Long> RUNNING_CHECKS = ConcurrentHashMap.newKeySet();
+
+    // === Helpers for MSISDN & clipping ===
+    private static final int E164_MAX = 15;
+
+    private static String digitsOnly(String raw) {
+        return raw == null ? null : raw.replaceAll("\\D", "");
+    }
+
+    /** Allow empty/invalid MSISDN: return NULL instead of throwing/skip. */
+    private static String normalizeMsisdnAllowNull(String raw) {
+        String s = digitsOnly(raw);
+        if (s == null || s.isEmpty()) return null;
+        if (s.length() > E164_MAX) return null;
+        return s;
+    }
+
+    /** Prevent "Data too long" for bounded VARCHAR columns. */
+    private static String clip(String s, int max) {
+        return (s != null && s.length() > max) ? s.substring(0, max) : s;
+    }
 
     // registration_date is VARCHAR in DB
     private static final String UPSERT_SQL =
@@ -172,8 +190,6 @@ public class FileProcessingService {
         log.info("DONE: processed={} in {} ms", totalProcessed, (System.currentTimeMillis() - t0));
     }
 
-
-
     public void processFileAirtel(Path filePath, String operator) throws IOException {
         long t0 = System.currentTimeMillis();
         log.info("ENTER processFile: {} | operator={}", filePath, operator);
@@ -201,16 +217,13 @@ public class FileProcessingService {
         int totalProcessed = 0;
 
         try {
-            // Work on a copy outside OneDrive (prevents locks)
             workingCopy = createWorkingCopy(filePath);
 
-            // Detect charset & separator on the working copy
             Charset cs = pickCharset(workingCopy);
             log.info("Detected charset: {}", cs.displayName());
             char sep = detectSeparator(workingCopy, cs);
             log.info("Detected CSV separator: '{}'", sep == '\t' ? "\\t" : String.valueOf(sep));
 
-            // Do the actual ingestion inside a short transaction
             totalProcessed = ingestFileTxAirtel(workingCopy, spId, sep, cs);
             success = true;
 
@@ -233,7 +246,6 @@ public class FileProcessingService {
             }
         }
 
-        // Move original after IO closes
         try {
             moveOriginal(filePath, success ? "processed" : "failed", fileLog);
         } catch (IOException moveEx) {
@@ -244,14 +256,12 @@ public class FileProcessingService {
             processedFileRepository.save(fileLog);
         }
 
-        // Kick off checkConsumer WITHOUT blocking the scheduler thread
         if (success) {
             runCheckConsumerAsync(sp);
         }
 
         log.info("DONE: processed={} in {} ms", totalProcessed, (System.currentTimeMillis() - t0));
     }
-
 
     public void processFileOrange(Path filePath, String operator) throws IOException {
         long t0 = System.currentTimeMillis();
@@ -280,16 +290,13 @@ public class FileProcessingService {
         int totalProcessed = 0;
 
         try {
-            // Work on a copy outside OneDrive (prevents locks)
             workingCopy = createWorkingCopy(filePath);
 
-            // Detect charset & separator on the working copy
             Charset cs = pickCharset(workingCopy);
             log.info("Detected charset: {}", cs.displayName());
             char sep = detectSeparator(workingCopy, cs);
             log.info("Detected CSV separator: '{}'", sep == '\t' ? "\\t" : String.valueOf(sep));
 
-            // Do the actual ingestion inside a short transaction
             totalProcessed = ingestFileTxOrange(workingCopy, spId, sep, cs);
             success = true;
 
@@ -312,7 +319,6 @@ public class FileProcessingService {
             }
         }
 
-        // Move original after IO closes
         try {
             moveOriginal(filePath, success ? "processed" : "failed", fileLog);
         } catch (IOException moveEx) {
@@ -323,18 +329,15 @@ public class FileProcessingService {
             processedFileRepository.save(fileLog);
         }
 
-        // Kick off checkConsumer WITHOUT blocking the scheduler thread
         if (success) {
             log.info("successs: processed={}");
             runCheckConsumerAsync(sp);
-        }else{
+        } else {
             log.info("Failure: processed={}");
-
         }
 
         log.info("DONE: processed={} in {} ms", totalProcessed, (System.currentTimeMillis() - t0));
     }
-
 
     public void processFileAfricell(Path filePath, String operator) throws IOException {
         long t0 = System.currentTimeMillis();
@@ -363,16 +366,13 @@ public class FileProcessingService {
         int totalProcessed = 0;
 
         try {
-            // Work on a copy outside OneDrive (prevents locks)
             workingCopy = createWorkingCopy(filePath);
 
-            // Detect charset & separator on the working copy
             Charset cs = pickCharset(workingCopy);
             log.info("Detected charset: {}", cs.displayName());
             char sep = detectSeparator(workingCopy, cs);
             log.info("Detected CSV separator: '{}'", sep == '\t' ? "\\t" : String.valueOf(sep));
 
-            // Do the actual ingestion inside a short transaction
             totalProcessed = ingestFileTxAfricell(workingCopy, spId, sep, cs);
             success = true;
 
@@ -395,7 +395,6 @@ public class FileProcessingService {
             }
         }
 
-        // Move original after IO closes
         try {
             moveOriginal(filePath, success ? "processed" : "failed", fileLog);
         } catch (IOException moveEx) {
@@ -406,17 +405,16 @@ public class FileProcessingService {
             processedFileRepository.save(fileLog);
         }
 
-        // Kick off checkConsumer WITHOUT blocking the scheduler thread
         if (success) {
             log.info("successs: processed={}");
             runCheckConsumerAsync(sp);
-        }else{
+        } else {
             log.info("Failure: processed={}");
-
         }
 
         log.info("DONE: processed={} in {} ms", totalProcessed, (System.currentTimeMillis() - t0));
     }
+
     /* ================= Ingest (short TX) ================= */
 
     @Transactional(rollbackFor = Exception.class)
@@ -441,7 +439,24 @@ public class FileProcessingService {
                 if (row.length == 0) continue;
 
                 RowData r = mapRowVodacom(row, spId, nowTs);
-                if (r == null || r.msisdn == null || r.msisdn.isEmpty()) continue;
+                if (r == null) continue;
+
+                // Allow empty/invalid msisdn: store NULL, do not skip
+                r.msisdn = normalizeMsisdnAllowNull(r.msisdn);
+
+                // clip to schema bounds
+                r.firstName           = clip(r.firstName, 100);
+                r.middleName          = clip(r.middleName, 255);
+                r.lastName            = clip(r.lastName, 45);
+                r.gender              = clip(r.gender, 45);
+                r.birthDateStr        = clip(r.birthDateStr, 45);
+                r.birthPlace          = clip(r.birthPlace, 45);
+                r.alt1                = clip(r.alt1, 255);
+                r.alt2                = clip(r.alt2, 255);
+                r.idType              = clip(r.idType, 45);
+                r.idNumber            = clip(r.idNumber, 45);
+                r.registrationDateStr = clip(r.registrationDateStr, 50);
+                // address is TEXT
 
                 batch.add(r);
                 if (batch.size() >= BATCH_SIZE) {
@@ -458,7 +473,6 @@ public class FileProcessingService {
 
         return total;
     }
-
 
     @Transactional(rollbackFor = Exception.class)
     protected int ingestFileTxAirtel(Path workingCopy, Long spId, char sep, Charset cs) throws Exception {
@@ -482,7 +496,20 @@ public class FileProcessingService {
                 if (row.length == 0) continue;
 
                 RowData r = mapRowAirtel(row, spId, nowTs);
-                if (r == null || r.msisdn == null || r.msisdn.isEmpty()) continue;
+                if (r == null) continue;
+
+                r.msisdn             = normalizeMsisdnAllowNull(r.msisdn);
+                r.firstName          = clip(r.firstName, 100);
+                r.middleName         = clip(r.middleName, 255);
+                r.lastName           = clip(r.lastName, 45);
+                r.gender             = clip(r.gender, 45);
+                r.birthDateStr       = clip(r.birthDateStr, 45);
+                r.birthPlace         = clip(r.birthPlace, 45);
+                r.alt1               = clip(r.alt1, 255);
+                r.alt2               = clip(r.alt2, 255);
+                r.idType             = clip(r.idType, 45);
+                r.idNumber           = clip(r.idNumber, 45);
+                r.registrationDateStr= clip(r.registrationDateStr, 50);
 
                 batch.add(r);
                 if (batch.size() >= BATCH_SIZE) {
@@ -499,7 +526,6 @@ public class FileProcessingService {
 
         return total;
     }
-
 
     @Transactional(rollbackFor = Exception.class)
     protected int ingestFileTxOrange(Path workingCopy, Long spId, char sep, Charset cs) throws Exception {
@@ -523,7 +549,20 @@ public class FileProcessingService {
                 if (row.length == 0) continue;
 
                 RowData r = mapRowOrange(row, spId, nowTs);
-                if (r == null || r.msisdn == null || r.msisdn.isEmpty()) continue;
+                if (r == null) continue;
+
+                r.msisdn             = normalizeMsisdnAllowNull(r.msisdn);
+                r.firstName          = clip(r.firstName, 100);
+                r.middleName         = clip(r.middleName, 255);
+                r.lastName           = clip(r.lastName, 45);
+                r.gender             = clip(r.gender, 45);
+                r.birthDateStr       = clip(r.birthDateStr, 45);
+                r.birthPlace         = clip(r.birthPlace, 45);
+                r.alt1               = clip(r.alt1, 255);
+                r.alt2               = clip(r.alt2, 255);
+                r.idType             = clip(r.idType, 45);
+                r.idNumber           = clip(r.idNumber, 45);
+                r.registrationDateStr= clip(r.registrationDateStr, 50);
 
                 batch.add(r);
                 if (batch.size() >= BATCH_SIZE) {
@@ -540,7 +579,6 @@ public class FileProcessingService {
 
         return total;
     }
-
 
     @Transactional(rollbackFor = Exception.class)
     protected int ingestFileTxAfricell(Path workingCopy, Long spId, char sep, Charset cs) throws Exception {
@@ -564,7 +602,20 @@ public class FileProcessingService {
                 if (row.length == 0) continue;
 
                 RowData r = mapRowAfricell(row, spId, nowTs);
-                if (r == null || r.msisdn == null || r.msisdn.isEmpty()) continue;
+                if (r == null) continue;
+
+                r.msisdn             = normalizeMsisdnAllowNull(r.msisdn);
+                r.firstName          = clip(r.firstName, 100);
+                r.middleName         = clip(r.middleName, 255);
+                r.lastName           = clip(r.lastName, 45);
+                r.gender             = clip(r.gender, 45);
+                r.birthDateStr       = clip(r.birthDateStr, 45);
+                r.birthPlace         = clip(r.birthPlace, 45);
+                r.alt1               = clip(r.alt1, 255);
+                r.alt2               = clip(r.alt2, 255);
+                r.idType             = clip(r.idType, 45);
+                r.idNumber           = clip(r.idNumber, 45);
+                r.registrationDateStr= clip(r.registrationDateStr, 50);
 
                 batch.add(r);
                 if (batch.size() >= BATCH_SIZE) {
@@ -581,6 +632,7 @@ public class FileProcessingService {
 
         return total;
     }
+
     private int executeBatch(List<RowData> rows) {
         jdbcTemplate.batchUpdate(UPSERT_SQL, new BatchPreparedStatementSetter() {
             @Override public void setValues(PreparedStatement ps, int i) throws SQLException {
@@ -777,14 +829,13 @@ public class FileProcessingService {
         return r;
     }
 
-
     private RowData mapRowAirtel(String[] f, Long spId, Timestamp nowTs) {
         Date date = new Date();
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
         String rgnNumber = fmt.format(date.toInstant().atZone(ZoneId.systemDefault()));
+        System.out.println("rgnNumber is "+rgnNumber);
         RowData r = new RowData();
         r.msisdn              = idx(f, 1);
-        r.registrationDateStr =  rgnNumber;
         r.firstName           = idx(f, 2);
         r.middleName          = idx(f, 3);
         r.lastName            = idx(f, 4);
@@ -796,8 +847,10 @@ public class FileProcessingService {
         r.alt2                = idx(f,17);
         r.idType              = idx(f,11);
         r.idNumber            = idx(f,14);
+        r.registrationDateStr = rgnNumber;
         r.createdOnTs         = nowTs;
         r.serviceProviderId   = spId;
+        System.out.println("registrationDateStr is "+r.registrationDateStr);
         return r;
     }
 
@@ -807,17 +860,15 @@ public class FileProcessingService {
         String rgnNumber = fmt.format(date.toInstant().atZone(ZoneId.systemDefault()));
         RowData r = new RowData();
         r.msisdn              = idx(f, 0);
-        r.registrationDateStr = rgnNumber; // keep as String
-        //r.firstName           = idx(f, 2);
-        r.firstName          = idx(f, 3);
+        r.registrationDateStr = rgnNumber;
+        r.firstName           = idx(f, 3);
         r.lastName            = idx(f, 6);
         r.gender              = idx(f, 4);
-        r.address             = idx(f, 5);;
+        r.address             = idx(f, 5);
         r.createdOnTs         = nowTs;
         r.serviceProviderId   = spId;
         return r;
     }
-
 
     private RowData mapRowAfricell(String[] f, Long spId, Timestamp nowTs) {
         Date date = new Date();
@@ -825,19 +876,16 @@ public class FileProcessingService {
         String rgnNumber = fmt.format(date.toInstant().atZone(ZoneId.systemDefault()));
         RowData r = new RowData();
         r.msisdn              = idx(f, 0);
-        r.registrationDateStr = rgnNumber; // keep as String
-        //r.firstName           = idx(f, 2);
-        r.firstName          = idx(f, 1);
+        r.registrationDateStr = rgnNumber;
+        r.firstName           = idx(f, 1);
         r.lastName            = idx(f, 2);
         r.gender              = idx(f, 4);
-        r.address             = idx(f, 3);;
+        r.address             = idx(f, 3);
         r.birthDateStr        = idx(f, 5);
         r.createdOnTs         = nowTs;
         r.serviceProviderId   = spId;
         return r;
     }
-
-
 
     private String idx(String[] a, int i) {
         if (a == null || i < 0 || i >= a.length) return null;
