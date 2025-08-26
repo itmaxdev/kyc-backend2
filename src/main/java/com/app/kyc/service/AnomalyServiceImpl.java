@@ -285,7 +285,8 @@ public class AnomalyServiceImpl implements AnomalyService
 
    @Override
    public int getAnomaliesReportedByServiceProvidersAndDates(List<Long> serviceProviderIds, List<AnomalyStatus> statuses, Date startDate, Date endDate) {
-      return (int) anomalyRepository.countDistinctByConsumers_ServiceProvider_IdInAndStatusInAndReportedOnBetween(serviceProviderIds ,statuses ,startDate, endDate);
+      //return (int) anomalyRepository.countDistinctByConsumers_ServiceProvider_IdInAndStatusInAndReportedOnBetween(serviceProviderIds ,statuses ,startDate, endDate);
+      return (int) anomalyRepository.countDistinctMsisdns(serviceProviderIds ,statuses ,startDate, endDate);
    }
 
    @Override

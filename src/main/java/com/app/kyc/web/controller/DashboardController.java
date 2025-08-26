@@ -63,7 +63,6 @@ public class DashboardController
 	@GetMapping("/get-v2")
 	public ResponseEntity<?> getDashboardV2(HttpServletRequest request, @RequestParam("filter") String filter)
 			throws JsonProcessingException, NullPointerException {
-		log.info("DashboardController/getDashboardV2>>>>>>>>>>>>>>"); 
 		try {
 			List<String> roles = new ArrayList<String>();
 			roles.add("Compliance Admin");
