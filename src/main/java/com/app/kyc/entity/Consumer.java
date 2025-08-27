@@ -27,12 +27,11 @@ import org.apache.commons.lang3.builder.ToStringStyle;
 @Setter
 @Getter
 @Table(name = "consumers")
-public class Consumer
-{
+public class Consumer {
 
-   @Id
-   @GeneratedValue(strategy = GenerationType.IDENTITY)
-   private Long id;
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
     private String msisdn;
     private String registrationDate;
     private String firstName;
@@ -46,38 +45,37 @@ public class Consumer
     private String alternateMsisdn2;
     private String identificationNumber;
     private String identificationType;
-   private Date createdOn;
-   private String nationality;
-   private Date identityValitidyDate;
-   private String identityCapturePath;
-   private String subscriberType;
-   private Boolean isConsistent;
-   private int consumerStatus;
+    private String createdOn;
+    private String nationality;
+    private Date identityValitidyDate;
+    private String identityCapturePath;
+    private String subscriberType;
+    private Boolean isConsistent;
+    private int consumerStatus;
 
-   @OneToMany(cascade = {CascadeType.ALL},mappedBy = "consumer")
-   private List<ConsumerService> consumerService;
+    @OneToMany(cascade = {CascadeType.ALL}, mappedBy = "consumer")
+    private List<ConsumerService> consumerService;
 
-   @ManyToMany(cascade = {
-      CascadeType.PERSIST, 
-      CascadeType.MERGE
-  })
-   @JoinTable(name = "consumers_services", joinColumns = @JoinColumn(name = "consumer_id"), inverseJoinColumns = @JoinColumn(name = "service_id"))
-   private List<Service> services;
+    @ManyToMany(cascade = {
+            CascadeType.PERSIST,
+            CascadeType.MERGE
+    })
+    @JoinTable(name = "consumers_services", joinColumns = @JoinColumn(name = "consumer_id"), inverseJoinColumns = @JoinColumn(name = "service_id"))
+    private List<Service> services;
 
-   @ManyToMany(cascade = CascadeType.ALL,fetch = FetchType.LAZY)
-   @JoinTable(name = "consumers_anomalies", joinColumns = @JoinColumn(name = "consumer_id"), inverseJoinColumns = @JoinColumn(name = "anomaly_id"))
-   List<Anomaly> anomalies = new ArrayList<>();
+    @ManyToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JoinTable(name = "consumers_anomalies", joinColumns = @JoinColumn(name = "consumer_id"), inverseJoinColumns = @JoinColumn(name = "anomaly_id"))
+    List<Anomaly> anomalies = new ArrayList<>();
 
 
-   @ManyToOne
-   private ServiceProvider serviceProvider;
+    @ManyToOne
+    private ServiceProvider serviceProvider;
 
 
     @Override
-   public String toString()
-   {
-      return ReflectionToStringBuilder.toString(this, ToStringStyle.SHORT_PREFIX_STYLE);
-   }
+    public String toString() {
+        return ReflectionToStringBuilder.toString(this, ToStringStyle.SHORT_PREFIX_STYLE);
+    }
 
     @Override
     public boolean equals(Object o) {
