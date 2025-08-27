@@ -639,7 +639,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                     // tempConsumer.setIdentityCapturePath(line.get(18));
                     tempConsumer.setServiceProvider(serviceProvider);
                     java.util.Date currentDate = new java.util.Date();
-                    tempConsumer.setCreatedOn(currentDate);
+                    tempConsumer.setCreatedOn(String.valueOf(currentDate));
                     tempConsumer.setIsConsistent(true);
                     if (!line.get(17).equals("") && !line.get(17).equals("\\N")) {
                         tempConsumer.setRegistrationDate(String.valueOf(registrationDate));
@@ -805,7 +805,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                 // tempConsumer.setIdentityCapturePath(line.get(18));
                 tempConsumer.setServiceProvider(serviceProvider);
                 java.util.Date currentDate = new java.util.Date();
-                tempConsumer.setCreatedOn(currentDate);
+                tempConsumer.setCreatedOn(String.valueOf(currentDate));
                 consumers.add(tempConsumer);
                 
             }
@@ -948,7 +948,7 @@ public class ConsumerServiceImpl implements ConsumerService {
 
                     tempConsumer.setServiceProvider(serviceProvider);
                     java.util.Date date = new java.util.Date();
-                    tempConsumer.setCreatedOn(date);
+                    tempConsumer.setCreatedOn(String.valueOf(date));
                     consumers.add(tempConsumer);
                 }
                 this.checkConsumer(consumers, user, serviceProvider);
@@ -1062,7 +1062,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                 }
                 tempConsumer.setServiceProvider(serviceProvider);
                 java.util.Date date = new java.util.Date();
-                tempConsumer.setCreatedOn(date);
+                tempConsumer.setCreatedOn(String.valueOf(date));
                 consumers.add(tempConsumer);
             }
             this.checkConsumer(consumers, user, serviceProvider);
@@ -1198,7 +1198,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                     // tempConsumer.setIdentityCapturePath(line.get(18));
                     tempConsumer.setServiceProvider(serviceProvider);
                     java.util.Date currentDate = new java.util.Date();
-                    tempConsumer.setCreatedOn(currentDate);
+                    tempConsumer.setCreatedOn(String.valueOf(currentDate));
                     tempConsumer.setIsConsistent(true);
                     if (!line.get(18).equals("") && !line.get(18).equals("\\N")) {
                         tempConsumer.setIdentityCapturePath(line.get(18));
@@ -1668,29 +1668,28 @@ public class ConsumerServiceImpl implements ConsumerService {
         }
         return consumer;
     }
-    
+
     private void tagDuplicateAnomalies(Consumer consumer, User user) {
-        
         AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Duplicate Records");
-        
+
         Anomaly tempAnomaly = new Anomaly();
         Anomaly anomaly = new Anomaly();
         String note = "You can't have more than one active record per MSISDN: " + consumer.getMsisdn();
-        tempAnomaly.setNote("Duplicate Anomaly: "+note);
-        
+        tempAnomaly.setNote("Duplicate Anomaly: " + note);
+
         // get previous consumers
         List<Consumer> duplicateConsumers = consumerRepository.findByMsisdnAndConsumerStatus(consumer.getMsisdn(), 0);
         List<Long> duplicateConsumerIds = duplicateConsumers.stream().map(Consumer::getId).collect(Collectors.toList());
-        
+
         consumer.setIsConsistent(false);
         consumer = consumerRepository.save(consumer);
-        
+
         // check anomaly of previous consumers
-        List<Long> consumerAnomalies = consumerAnomalyRepository.findAnomaliesIdByConsumerAndAnomalyTypeId(duplicateConsumerIds, anomalyType.getId());
-        
+        List<Long> consumerAnomalies = consumerAnomalyRepository
+                .findAnomaliesIdByConsumerAndAnomalyTypeId(duplicateConsumerIds, anomalyType.getId());
+
         if (consumerAnomalies.isEmpty()) {
             // make new anomaly
-            tempAnomaly.setNote("Duplicate Anomaly: "+note);
             tempAnomaly.setStatus(AnomalyStatus.REPORTED);
             tempAnomaly.setReportedOn(new Date());
             tempAnomaly.setReportedBy(user);
@@ -1700,18 +1699,29 @@ public class ConsumerServiceImpl implements ConsumerService {
             tempAnomaly.setAnomalyType(anomalyType);
             tempAnomaly = anomalyRepository.save(tempAnomaly);
 
-            AnomalyTracking anomalyTracking = new AnomalyTracking(tempAnomaly, new Date(), AnomalyStatus.REPORTED, "", user.getFirstName()+" "+user.getLastName(), tempAnomaly.getUpdatedOn());
+            AnomalyTracking anomalyTracking = new AnomalyTracking(
+                    tempAnomaly, new Date(), AnomalyStatus.REPORTED, "",
+                    user.getFirstName() + " " + user.getLastName(), tempAnomaly.getUpdatedOn()
+            );
             anomalyTrackingRepository.save(anomalyTracking);
 
-            List<ConsumerAnomaly> temp = consumerAnomalyRepository.findByAnomaly_IdAndConsumer_Id(tempAnomaly.getId(), consumer.getId());
-            if (!temp.isEmpty()) {
-            	ConsumerAnomaly consumerAnomaly = temp.get(0);
-            	consumerAnomaly.setNotes("Duplicate Anomaly: " + note);
-                consumerAnomalyRepository.save(consumerAnomaly);
+            // ✅ FIX: check before using get(0)
+            List<ConsumerAnomaly> links =
+                    consumerAnomalyRepository.findByAnomaly_IdAndConsumer_Id(tempAnomaly.getId(), consumer.getId());
+
+            if (links == null || links.isEmpty()) {
+                ConsumerAnomaly link = new ConsumerAnomaly();
+                link.setAnomaly(tempAnomaly);
+                link.setConsumer(consumer);
+                link.setNotes("Duplicate Anomaly: " + note);
+                consumerAnomalyRepository.save(link);
+            } else {
+                ConsumerAnomaly link = links.get(0);
+                link.setNotes("Duplicate Anomaly: " + note);
+                consumerAnomalyRepository.save(link);
             }
-            
         } else {
-            //load anomaly nad tag to new consumer
+            //load anomaly and tag to new consumer
             tempAnomaly = anomalyRepository.findByIdAndAnomalyType_Id(consumerAnomalies, anomalyType.getId());
             if (!Objects.isNull(tempAnomaly)) {
                 ConsumerAnomaly consumerAnomaly = new ConsumerAnomaly();
@@ -1720,53 +1730,35 @@ public class ConsumerServiceImpl implements ConsumerService {
                 anomaly.setStatus(tempAnomaly.getStatus());
                 anomaly.setReportedOn(tempAnomaly.getReportedOn());
                 anomaly.setReportedBy(tempAnomaly.getReportedBy());
-                anomaly.getConsumers().remove(consumer);
-                anomaly.setUpdatedOn(tempAnomaly.getUpdatedOn());
                 anomaly.addConsumer(consumer);
                 anomaly.setAnomalyType(tempAnomaly.getAnomalyType());
-                
+                anomaly.setUpdatedOn(tempAnomaly.getUpdatedOn());
+
                 consumerAnomaly.setAnomaly(anomaly);
                 consumerAnomaly.setConsumer(consumer);
-                consumerAnomaly.setNotes("Duplicate Anomaly: "+note);
-                consumerAnomalyRepository.save(consumerAnomaly);
-
-            } else {
-                tempAnomaly = new Anomaly();
-                tempAnomaly.setNote("Duplicate Anomaly: "+note);
-                tempAnomaly.setStatus(AnomalyStatus.REPORTED);
-                tempAnomaly.setReportedOn(new Date());
-                tempAnomaly.setReportedBy(user);
-                tempAnomaly.setAnomalyType(anomalyType);
-                tempAnomaly.setUpdatedOn(new Date());
-                tempAnomaly.setUpdateBy(user.getFirstName()+" "+ user.getLastName());
-                Anomaly savedAnomaly = anomalyRepository.save(tempAnomaly);
-                AnomalyTracking anomalyTracking = new AnomalyTracking(tempAnomaly, new Date(), AnomalyStatus.REPORTED, "", user.getFirstName()+" "+user.getLastName(), tempAnomaly.getUpdatedOn());
-                anomalyTrackingRepository.save(anomalyTracking);
-                ConsumerAnomaly consumerAnomaly= new ConsumerAnomaly();
-                consumerAnomaly.setNotes("Duplicate Anomaly: "+note);
-                consumerAnomaly.setAnomaly(savedAnomaly);
-                consumerAnomaly.setConsumer(consumer);
+                consumerAnomaly.setNotes("Duplicate Anomaly: " + note);
                 consumerAnomalyRepository.save(consumerAnomaly);
             }
         }
-        
-        
-        // tag anomaly to new duplicate consumers
+
+        // tag anomaly to all duplicate consumers
         for (Consumer temp : duplicateConsumers) {
-            List<ConsumerAnomaly> consumerAnomaly = consumerAnomalyRepository.findByAnomaly_AnomalyTypeAndConsumer(anomalyType, temp);
-            if (consumerAnomaly.size() < 1) {
+            List<ConsumerAnomaly> consumerAnomaly =
+                    consumerAnomalyRepository.findByAnomaly_AnomalyTypeAndConsumer(anomalyType, temp);
+            if (consumerAnomaly == null || consumerAnomaly.isEmpty()) {
                 ConsumerAnomaly tempConsumerAnomaly = new ConsumerAnomaly();
                 tempConsumerAnomaly.setAnomaly(tempAnomaly);
                 tempConsumerAnomaly.setConsumer(temp);
-                tempConsumerAnomaly.setNotes("Duplicate Anomaly: "+note);
+                tempConsumerAnomaly.setNotes("Duplicate Anomaly: " + note);
                 consumerAnomalyRepository.save(tempConsumerAnomaly);
             }
         }
-        
-        // mark inConsistent consumers
+
         consumerRepository.markConsumersConsistent(0, duplicateConsumerIds);
     }
-    
+
+
+
     private Consumer resolvedAndDeleteExceedingConsumers(Consumer consumer, Boolean flag,User user) {
         // Exceeding records
         AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Exceeding Threshold");
@@ -1826,49 +1818,65 @@ public class ConsumerServiceImpl implements ConsumerService {
         }
         return consumer;
     }
-    
+
     private void tagExceedingAnomalies(Consumer consumer, User user) {
-        
         AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Exceeding Threshold");
-        
+
         Anomaly tempAnomaly = new Anomaly();
         Anomaly anomaly = new Anomaly();
-        String note = "You can't have more than two active records per operator for a given combination of (ID Card Type + ID Number + ServiceProviderName): (" + consumer.getIdentificationType() + " + " + consumer.getIdentificationNumber() + consumer.getServiceProvider().getName() +  ") ";
-        tempAnomaly.setNote("Exceeding Anomaly: "+note);
+        String note = "You can't have more than two active records per operator for a given combination of "
+                + "(ID Card Type + ID Number + ServiceProviderName): (" +
+                Objects.toString(consumer.getIdentificationType(), "") + " + " +
+                Objects.toString(consumer.getIdentificationNumber(), "") + " + " +
+                consumer.getServiceProvider().getName() + ")";
+
         // get previous consumers
-        List<Consumer> duplicateConsumers = consumerRepository.findByIdentificationTypeAndIdentificationNumberAndServiceProviderAndConsumerStatus(consumer.getIdentificationType(), consumer.getIdentificationNumber(), consumer.getServiceProvider(), 0);
+        List<Consumer> duplicateConsumers =
+                consumerRepository.findByIdentificationTypeAndIdentificationNumberAndServiceProviderAndConsumerStatus(
+                        consumer.getIdentificationType(), consumer.getIdentificationNumber(), consumer.getServiceProvider(), 0);
         List<Long> duplicateConsumerIds = duplicateConsumers.stream().map(Consumer::getId).collect(Collectors.toList());
-        
+
         consumer.setIsConsistent(false);
         consumer = consumerRepository.save(consumer);
-        
+
         // check anomaly of previous consumers
-        List<Long> consumerAnomalies = consumerAnomalyRepository.findAnomaliesIdByConsumerAndAnomalyTypeId(duplicateConsumerIds, anomalyType.getId());
-        
+        List<Long> consumerAnomalies =
+                consumerAnomalyRepository.findAnomaliesIdByConsumerAndAnomalyTypeId(duplicateConsumerIds, anomalyType.getId());
+
         if (consumerAnomalies.isEmpty()) {
             // make new anomaly
-            tempAnomaly.setNote("Exceeding Anomaly: "+note);
+            tempAnomaly.setNote("Exceeding Anomaly: " + note);
             tempAnomaly.setStatus(AnomalyStatus.REPORTED);
             tempAnomaly.setReportedOn(new Date());
             tempAnomaly.setReportedBy(user);
-            tempAnomaly.setUpdatedOn(new Date());
             tempAnomaly.getConsumers().remove(consumer);
             tempAnomaly.addConsumer(consumer);
+            tempAnomaly.setUpdatedOn(new Date());
             tempAnomaly.setAnomalyType(anomalyType);
             tempAnomaly = anomalyRepository.save(tempAnomaly);
 
-            AnomalyTracking anomalyTracking = new AnomalyTracking(tempAnomaly, new Date(), AnomalyStatus.REPORTED, "", user.getFirstName()+" "+user.getLastName(), tempAnomaly.getUpdatedOn());
+            AnomalyTracking anomalyTracking = new AnomalyTracking(
+                    tempAnomaly, new Date(), AnomalyStatus.REPORTED, "",
+                    user.getFirstName() + " " + user.getLastName(), tempAnomaly.getUpdatedOn()
+            );
             anomalyTrackingRepository.save(anomalyTracking);
 
-            List<ConsumerAnomaly> temp = consumerAnomalyRepository.findByAnomaly_IdAndConsumer_Id(tempAnomaly.getId(), consumer.getId());
-            if (!temp.isEmpty()) {
-	            ConsumerAnomaly consumerAnomaly = temp.get(0);
-	            consumerAnomaly.setNotes("Exceeding Anomaly: " + note);
-	            consumerAnomalyRepository.save(consumerAnomaly);
+            // ✅ FIX: check before using get(0)
+            List<ConsumerAnomaly> links =
+                    consumerAnomalyRepository.findByAnomaly_IdAndConsumer_Id(tempAnomaly.getId(), consumer.getId());
+
+            if (links == null || links.isEmpty()) {
+                ConsumerAnomaly link = new ConsumerAnomaly();
+                link.setAnomaly(tempAnomaly);
+                link.setConsumer(consumer);
+                link.setNotes("Exceeding Anomaly: " + note);
+                consumerAnomalyRepository.save(link);
+            } else {
+                ConsumerAnomaly link = links.get(0);
+                link.setNotes("Exceeding Anomaly: " + note);
+                consumerAnomalyRepository.save(link);
             }
-           
         } else {
-            //load anomaly nad tag to new consumer
             tempAnomaly = anomalyRepository.findByIdAndAnomalyType_Id(consumerAnomalies, anomalyType.getId());
             if (!Objects.isNull(tempAnomaly)) {
                 ConsumerAnomaly consumerAnomaly = new ConsumerAnomaly();
@@ -1877,53 +1885,31 @@ public class ConsumerServiceImpl implements ConsumerService {
                 anomaly.setStatus(tempAnomaly.getStatus());
                 anomaly.setReportedOn(tempAnomaly.getReportedOn());
                 anomaly.setReportedBy(tempAnomaly.getReportedBy());
-                anomaly.getConsumers().remove(consumer);
                 anomaly.addConsumer(consumer);
                 anomaly.setAnomalyType(tempAnomaly.getAnomalyType());
                 anomaly.setUpdatedOn(tempAnomaly.getUpdatedOn());
-                
+
                 consumerAnomaly.setAnomaly(anomaly);
                 consumerAnomaly.setConsumer(consumer);
-                consumerAnomaly.setNotes("Exceeding Anomaly: "+note);
-                consumerAnomalyRepository.save(consumerAnomaly);
-            } else {
-                
-                tempAnomaly = new Anomaly();
-                tempAnomaly.setStatus(AnomalyStatus.REPORTED);
-                tempAnomaly.setNote("Exceeding Anomaly: "+note);
-                tempAnomaly.setReportedOn(new Date());
-                tempAnomaly.setReportedBy(user);
-                tempAnomaly.setAnomalyType(anomalyType);
-                tempAnomaly.setUpdateBy(user.getFirstName()+" "+user.getLastName());
-                tempAnomaly.setUpdatedOn(new Date());
-                Anomaly savedAnomaly = anomalyRepository.save(tempAnomaly);
-
-                AnomalyTracking anomalyTracking = new AnomalyTracking(tempAnomaly, new Date(), AnomalyStatus.REPORTED, "", user.getFirstName()+" "+user.getLastName(), tempAnomaly.getUpdatedOn());
-                anomalyTrackingRepository.save(anomalyTracking);
-                
-                ConsumerAnomaly consumerAnomaly = new ConsumerAnomaly();
-                consumerAnomaly.setNotes("Exceeding Anomaly: "+note);
-                consumerAnomaly.setAnomaly(savedAnomaly);
-                consumerAnomaly.setConsumer(consumer);
+                consumerAnomaly.setNotes("Exceeding Anomaly: " + note);
                 consumerAnomalyRepository.save(consumerAnomaly);
             }
         }
-        
-        
-        // tag anomaly to new duplicate consumers
+
+        // tag anomaly to all duplicate consumers
         for (Consumer temp : duplicateConsumers) {
-            List<ConsumerAnomaly> consumerAnomaly = consumerAnomalyRepository.findByAnomaly_AnomalyTypeAndConsumer(anomalyType, temp);
-            if (consumerAnomaly.size() < 1) {
+            List<ConsumerAnomaly> consumerAnomaly =
+                    consumerAnomalyRepository.findByAnomaly_AnomalyTypeAndConsumer(anomalyType, temp);
+            if (consumerAnomaly == null || consumerAnomaly.isEmpty()) {
                 ConsumerAnomaly tempConsumerAnomaly = new ConsumerAnomaly();
                 tempConsumerAnomaly.setAnomaly(anomaly.getId() == null ? tempAnomaly : anomaly);
                 tempConsumerAnomaly.setConsumer(temp);
-                tempConsumerAnomaly.setNotes("Exceeding Anomaly: "+note);
+                tempConsumerAnomaly.setNotes("Exceeding Anomaly: " + note);
                 consumerAnomalyRepository.save(tempConsumerAnomaly);
             }
         }
-        
+
         consumerRepository.markConsumersConsistent(0, duplicateConsumerIds);
-        
     }
     
     private List<String> checkErrors(Consumer consumer) {
