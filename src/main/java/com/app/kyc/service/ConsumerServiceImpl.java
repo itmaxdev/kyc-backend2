@@ -1704,12 +1704,8 @@ public class ConsumerServiceImpl implements ConsumerService {
             anomalyTrackingRepository.save(anomalyTracking);
 
             List<ConsumerAnomaly> temp = consumerAnomalyRepository.findByAnomaly_IdAndConsumer_Id(tempAnomaly.getId(), consumer.getId());
-            if (!temp.isEmpty()) {
-            	ConsumerAnomaly consumerAnomaly = temp.get(0);
-            	consumerAnomaly.setNotes("Duplicate Anomaly: " + note);
-                consumerAnomalyRepository.save(consumerAnomaly);
-            }
-            
+            temp.get(0).setNotes("Duplicate Anomaly: "+note);
+            consumerAnomalyRepository.save(temp.get(0));
         } else {
             //load anomaly nad tag to new consumer
             tempAnomaly = anomalyRepository.findByIdAndAnomalyType_Id(consumerAnomalies, anomalyType.getId());
@@ -1861,12 +1857,8 @@ public class ConsumerServiceImpl implements ConsumerService {
             anomalyTrackingRepository.save(anomalyTracking);
 
             List<ConsumerAnomaly> temp = consumerAnomalyRepository.findByAnomaly_IdAndConsumer_Id(tempAnomaly.getId(), consumer.getId());
-            if (!temp.isEmpty()) {
-	            ConsumerAnomaly consumerAnomaly = temp.get(0);
-	            consumerAnomaly.setNotes("Exceeding Anomaly: " + note);
-	            consumerAnomalyRepository.save(consumerAnomaly);
-            }
-           
+            temp.get(0).setNotes("Exceeding Anomaly: "+note);
+            consumerAnomalyRepository.save(temp.get(0));
         } else {
             //load anomaly nad tag to new consumer
             tempAnomaly = anomalyRepository.findByIdAndAnomalyType_Id(consumerAnomalies, anomalyType.getId());
