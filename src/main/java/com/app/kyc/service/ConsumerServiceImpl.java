@@ -152,7 +152,7 @@ public class ConsumerServiceImpl implements ConsumerService {
         // 1) Resolve pageable + filter (null-safe) and cap page size
         final Pagination pagination = PaginationUtil.getFilterObject(params);
         final Pageable requested    = PaginationUtil.getPageable(params);
-        final int MAX_PAGE_SIZE     = 1000;
+        final int MAX_PAGE_SIZE     = 5000;
         final Pageable pageable     = PageRequest.of(
                 requested.getPageNumber(),
                 Math.min(requested.getPageSize(), MAX_PAGE_SIZE),
@@ -1403,7 +1403,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                     log.error("checkConsumer error msisdn={} sp={} ", safeMsisdn(consumer), serviceProvider.getName(), ex);
                 } finally {
                     long durMs = (System.nanoTime() - startOne) / 1_000_000;
-                    if (durMs > 1000) {
+                    if (durMs > 5000) {
                         log.warn("slow record msisdn={} took {} ms", safeMsisdn(consumer), durMs);
                     }
                 }
