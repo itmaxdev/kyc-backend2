@@ -131,6 +131,8 @@ public interface ConsumerRepository extends JpaRepository<Consumer, Long>
     @Modifying
     @Transactional
     void markConsumersConsistent(@Param("flag") int flag, @Param("id") List<Long> id);
+    
+    List<Consumer> findByIdentificationTypeAndIdentificationNumberAndServiceProvider(String identificationType, String identificationNumber, ServiceProvider serviceProvider);
 
     List<Consumer> findByIdentificationTypeAndIdentificationNumberAndServiceProviderAndConsumerStatus(String identificationType, String identificationNumber, ServiceProvider serviceProvider, int consumerStatus);
 
