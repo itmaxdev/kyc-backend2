@@ -5,6 +5,8 @@ import java.util.*;
 import javax.persistence.*;
 
 import com.app.kyc.model.AnomalyStatus;
+import lombok.Getter;
+import lombok.Setter;
 
 @Entity
 @Table(name = "anomalies")
@@ -13,6 +15,10 @@ public class Anomaly
    @Id
    @GeneratedValue(strategy = GenerationType.IDENTITY)
    private Long id;
+
+   @Setter
+   @Getter
+   private String formattedId;
    
    @ManyToOne
    private User reportedBy;

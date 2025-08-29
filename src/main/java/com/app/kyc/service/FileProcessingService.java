@@ -859,10 +859,12 @@ public class FileProcessingService {
         r.msisdn              = idx(f, 0);
         r.registrationDateStr = idx(f, 1);
         r.firstName           = idx(f, 3);
-        r.lastName            = idx(f, 6);
+        r.lastName            = idx(f, 2);
         r.gender              = idx(f, 4);
         r.address             = idx(f, 7);
-        r.createdOnTs         =  idx(f, 1);;
+        r.createdOnTs         =  idx(f, 1);
+        r.birthDateStr        = idx(f, 5);
+        r.birthPlace          = idx(f, 6);
         r.idType =  idx(f, 8);
         r.idNumber =  idx(f, 9);
         r.serviceProviderId   = spId;
