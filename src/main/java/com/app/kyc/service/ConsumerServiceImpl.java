@@ -297,14 +297,9 @@ public class ConsumerServiceImpl implements ConsumerService {
 
     @Transactional(readOnly = true)
     public Map<String, Object> getAllConsumers(String params)
-            throws JsonProcessingException {
+            throws JsonMappingException, JsonProcessingException {
 
-        // Robust counters
-        final long allCount        = consumerRepository.count();
-        final long consistentCount = consumerRepository.countConsistent();
-        final long inconsistentCount = consumerRepository.countInconsistent();
-
-        // Pageable (with cap)
+        // Pageable (null-safe) + cap page size
         final Pageable requested = Optional.ofNullable(PaginationUtil.getPageable(params))
                 .orElse(PageRequest.of(0, 50));
         final int MAX_PAGE_SIZE = 5000;
@@ -314,10 +309,35 @@ public class ConsumerServiceImpl implements ConsumerService {
                 requested.getSort()
         );
 
-        // Fetch ONE page
-        final Page<Consumer> page = consumerRepository.findAll(pageable);
+        // Pull filter fields (type + serviceProviderID), tolerating missing fields
+        final Pagination pagination = PaginationUtil.getFilterObject(params);
+        final String type = Optional.ofNullable(pagination)
+                .map(Pagination::getFilter).map(f -> f.getType())
+                .map(String::trim).map(String::toUpperCase)
+                .orElse("ALL");
+        final Long spId = Optional.ofNullable(pagination)
+                .map(Pagination::getFilter).map(f -> f.getServiceProviderID())
+                .orElse(null);
 
-        // De-dup by id (in case of join fetch)
+        // Provider-scoped or global counters
+        final long allCount, consistentCount, inconsistentCount;
+        if (spId != null) {
+            allCount          = consumerRepository.countByServiceProviderId(spId);
+            consistentCount   = consumerRepository.countConsistentByServiceProviderId(spId);
+            inconsistentCount = consumerRepository.countInconsistentByServiceProviderId(spId);
+        } else {
+            allCount          = consumerRepository.count();
+            // robust global counts (include NULLs as inconsistent)
+            consistentCount   = consumerRepository.countConsistent();
+            inconsistentCount = consumerRepository.countInconsistent();
+        }
+
+        // Fetch ONE page (scoped to provider if provided)
+        final Page<Consumer> page = (spId != null)
+                ? consumerRepository.findByServiceProvider_Id(spId, pageable)
+                : consumerRepository.findAll(pageable);
+
+        // De-dup (just in case upstream fetch joins leaked dups)
         final List<Consumer> consumers = page.getContent().stream()
                 .collect(Collectors.collectingAndThen(
                         Collectors.toMap(Consumer::getId, c -> c, (a,b)->a, LinkedHashMap::new),
@@ -335,16 +355,16 @@ public class ConsumerServiceImpl implements ConsumerService {
             if (ca == null || ca.getAnomaly() == null || ca.getAnomaly().getAnomalyType() == null || ca.getConsumer() == null) continue;
             if (!Objects.equals(ca.getAnomaly().getAnomalyType().getId(), NOTES_ANOMALY_TYPE_ID)) continue;
             if (ca.getNotes() == null) continue;
-            notesByConsumerId.putIfAbsent(ca.getConsumer().getId(), ca.getNotes());
+            notesByConsumerId.putIfAbsent(ca.getConsumer().getId(), ca.getNotes()); // first note wins
         }
 
         // Map ONCE
         final List<ConsumersHasSubscriptionsResponseDTO> allData = new ArrayList<>(consumers.size());
         for (Consumer c : consumers) {
             ConsumerDto dto = new ConsumerDto(c, Collections.emptyList());
-            dto.setIsConsistent(c.getIsConsistent()); // <-- IMPORTANT
+            dto.setIsConsistent(c.getIsConsistent());            // needed for bucketing
             if (dto.getFirstName() == null) dto.setFirstName("");
-            if (dto.getLastName() == null) dto.setLastName("");
+            if (dto.getLastName()  == null) dto.setLastName("");
             String notes = notesByConsumerId.get(c.getId());
             if (notes != null) dto.setNotes(notes);
 
@@ -352,7 +372,7 @@ public class ConsumerServiceImpl implements ConsumerService {
             allData.add(new ConsumersHasSubscriptionsResponseDTO(dto, hasSubs));
         }
 
-        // Partition (null → inconsistent)
+        // Partition (null -> inconsistent)
         final List<ConsumersHasSubscriptionsResponseDTO> consistentData   = new ArrayList<>();
         final List<ConsumersHasSubscriptionsResponseDTO> inconsistentData = new ArrayList<>();
         for (ConsumersHasSubscriptionsResponseDTO row : allData) {
@@ -361,15 +381,24 @@ public class ConsumerServiceImpl implements ConsumerService {
             else                          inconsistentData.add(row);
         }
 
+        // Choose "data" bucket by filter.type
+        final List<ConsumersHasSubscriptionsResponseDTO> dataBucket;
+        switch (type) {
+            case "CONSISTENT":   dataBucket = consistentData;   break;
+            case "INCONSISTENT": dataBucket = inconsistentData; break;
+            default:             dataBucket = allData;          break; // "ALL"
+        }
+
         Map<String, Object> resp = new HashMap<>();
         resp.put("count", allCount);
         resp.put("consistentCount", consistentCount);
         resp.put("inconsistentCount", inconsistentCount);
-        resp.put("data", allData);                     // this page
-        resp.put("consistentData", consistentData);    // subset of this page
-        resp.put("inconsistentData", inconsistentData);// subset of this page
+        resp.put("data", dataBucket);              // shaped by filter.type
+        resp.put("consistentData", consistentData);
+        resp.put("inconsistentData", inconsistentData);
         return resp;
     }
+
 
 
 
