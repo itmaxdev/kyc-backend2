@@ -104,6 +104,7 @@ public class ConsumerController
          roles.add("SP Admin");
          roles.add("Compliance Admin");
          roles.add("KYC Admin");
+         roles.add("SP User");
          if(securityHelper.hasRole(request, roles))
          {
             Map<String, Object> consumers = consumerService.getAllConsumers(params);
