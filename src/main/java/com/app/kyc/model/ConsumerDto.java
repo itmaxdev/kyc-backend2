@@ -38,6 +38,7 @@ public class ConsumerDto {
     private ServiceProvider serviceProvider;
     private List<Service> services;
     private String notes;
+    private Boolean isConsistent;
     public  ConsumerDto(Consumer consumer,List<Anomaly> anomlies){
         this.id = consumer.getId();
         this.firstName = consumer.getFirstName();
