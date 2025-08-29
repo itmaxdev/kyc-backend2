@@ -235,11 +235,22 @@ public class AnomalyServiceImpl implements AnomalyService
          anomlyDto= new AnomlyDto(anomaly);
       }
 
-      List<AnomalyTrackingDto> anomalyTracking = anomalyTrackingRepository.findAllByAnomalyId(id)
+     /* List<AnomalyTrackingDto> anomalyTracking = anomalyTrackingRepository.findAllByAnomalyId(id)
               .stream()
               .map(c-> new AnomalyTrackingDto(c.getId(),c.getCreatedOn(),c.getStatus(),c.getNote(),c.getAnomaly(), c.getUpdateBy(), c.getUpdateOn()))
-              .collect(Collectors.toList());
+              .collect(Collectors.toList());*/
 
+      List<AnomalyTrackingDto> anomalyTracking = anomalyTrackingRepository.findAllByAnomalyId(id)
+              .stream()
+              .map(c -> {
+                 AnomalyTrackingDto dto = new AnomalyTrackingDto(
+                         c.getId(), c.getCreatedOn(), c.getStatus(), c.getNote(),
+                         c.getAnomaly(), c.getUpdateBy(), c.getUpdateOn()
+                 );
+                 dto.setUpdatedBy("System for Anomaly");
+                 return dto;
+              })
+              .collect(Collectors.toList());
 
 
 //      anomlyDto.getConsumers().forEach(c -> {

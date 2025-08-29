@@ -651,7 +651,7 @@ public class FileProcessingService {
                 ps.setString(p++, r.alt2);
                 ps.setString(p++, r.idType);
                 ps.setString(p++, r.idNumber);
-                ps.setTimestamp(p++, r.createdOnTs);
+                ps.setString(p++, r.createdOnTs);
                 ps.setLong(p++, r.serviceProviderId);
                 ps.setInt(p++, 1); // is_consistent
                 ps.setInt(p++, 0); // consumer_status
@@ -824,16 +824,16 @@ public class FileProcessingService {
         r.alt2                = idx(f,14);
         r.idType              = idx(f,15);
         r.idNumber            = idx(f,16);
-        r.createdOnTs         = nowTs;
+        r.createdOnTs         =  idx(f, 1);;
         r.serviceProviderId   = spId;
         return r;
     }
 
     private RowData mapRowAirtel(String[] f, Long spId, Timestamp nowTs) {
         Date date = new Date();
-        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-        String rgnNumber = fmt.format(date.toInstant().atZone(ZoneId.systemDefault()));
-        System.out.println("rgnNumber is "+rgnNumber);
+
+
+
         RowData r = new RowData();
         r.msisdn              = idx(f, 1);
         r.firstName           = idx(f, 2);
@@ -847,42 +847,39 @@ public class FileProcessingService {
         r.alt2                = idx(f,17);
         r.idType              = idx(f,11);
         r.idNumber            = idx(f,14);
-        r.registrationDateStr = rgnNumber;
-        r.createdOnTs         = nowTs;
+        r.registrationDateStr = idx(f, 19);;
+        r.createdOnTs         =  idx(f, 19);
         r.serviceProviderId   = spId;
         System.out.println("registrationDateStr is "+r.registrationDateStr);
         return r;
     }
 
     private RowData mapRowOrange(String[] f, Long spId, Timestamp nowTs) {
-        Date date = new Date();
-        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-        String rgnNumber = fmt.format(date.toInstant().atZone(ZoneId.systemDefault()));
+
+
         RowData r = new RowData();
         r.msisdn              = idx(f, 0);
-        r.registrationDateStr = rgnNumber;
+        r.registrationDateStr = idx(f, 1);
         r.firstName           = idx(f, 3);
         r.lastName            = idx(f, 6);
         r.gender              = idx(f, 4);
         r.address             = idx(f, 5);
-        r.createdOnTs         = nowTs;
+        r.createdOnTs         =  idx(f, 1);;
         r.serviceProviderId   = spId;
         return r;
     }
 
     private RowData mapRowAfricell(String[] f, Long spId, Timestamp nowTs) {
-        Date date = new Date();
-        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-        String rgnNumber = fmt.format(date.toInstant().atZone(ZoneId.systemDefault()));
+
         RowData r = new RowData();
         r.msisdn              = idx(f, 0);
-        r.registrationDateStr = rgnNumber;
+        r.registrationDateStr = idx(f, 5);;
         r.firstName           = idx(f, 1);
         r.lastName            = idx(f, 2);
         r.gender              = idx(f, 4);
         r.address             = idx(f, 3);
         r.birthDateStr        = idx(f, 5);
-        r.createdOnTs         = nowTs;
+        r.createdOnTs         = idx(f, 5);
         r.serviceProviderId   = spId;
         return r;
     }
@@ -922,7 +919,7 @@ public class FileProcessingService {
         String alt2;
         String idType;
         String idNumber;
-        Timestamp createdOnTs;
+        String createdOnTs;
         Long serviceProviderId;
     }
 }
