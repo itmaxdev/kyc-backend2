@@ -244,18 +244,27 @@ public class AnomalyServiceImpl implements AnomalyService
 
 
 
-      anomlyDto.getConsumers().forEach(c -> {
-         if(Objects.isNull(c.getFirstName()))
-            c.setFirstName("");
-         if(Objects.isNull(c.getLastName()))
-            c.setLastName("");
-         List<ConsumerAnomaly> temp = consumerAnomalyRepository.findByAnomaly_IdAndConsumer_Id(anomlyDto.getId(), c.getId());
-            temp.forEach(t -> {
-               if (Objects.nonNull(t.getNotes())) {
-                  c.setNotes(t.getNotes());
-               }
-            });
-         });
+//      anomlyDto.getConsumers().forEach(c -> {
+//         if(Objects.isNull(c.getFirstName()))
+//            c.setFirstName("");
+//         if(Objects.isNull(c.getLastName()))
+//            c.setLastName("");
+//         List<ConsumerAnomaly> temp = consumerAnomalyRepository.findByAnomaly_IdAndConsumer_Id(anomlyDto.getId(), c.getId());
+//            temp.forEach(t -> {
+//               if (Objects.nonNull(t.getNotes())) {
+//                  c.setNotes(t.getNotes());
+//               }
+//            });
+//         });
+      
+      List<ConsumerDto> consumerDtos = new ArrayList<ConsumerDto>();
+      List<ConsumerAnomaly> consumerAnomalyList = consumerAnomalyRepository.findByAnomaly_Id(anomlyDto.getId());
+      consumerAnomalyList.forEach(c -> {
+    	  ConsumerDto consumerDto = new ConsumerDto(c.getConsumer());
+    	  consumerDtos.add(consumerDto);
+      });
+      
+      anomlyDto.setConsumers(consumerDtos);
 
       anomalyTracking.forEach(a -> {
          if (a.getAnomlyDto().getAnomalyType().getId() == 1){
