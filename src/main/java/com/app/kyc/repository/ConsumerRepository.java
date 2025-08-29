@@ -47,6 +47,17 @@ public interface ConsumerRepository extends JpaRepository<Consumer, Long>
     long countByIsConsistent(boolean isConsistent);
     long countByIsConsistentIsNull(); // counts rows where isConsistent is NULL
 
+    @Query("select count(c) from Consumer c where c.serviceProvider.id = :spId")
+    long countByServiceProviderId(@Param("spId") Long spId);
+
+    @Query("select coalesce(sum(case when c.isConsistent = true then 1 else 0 end),0) " +
+            "from Consumer c where c.serviceProvider.id = :spId")
+    long countConsistentByServiceProviderId(@Param("spId") Long spId);
+
+    @Query("select coalesce(sum(case when c.isConsistent = false or c.isConsistent is null then 1 else 0 end),0) " +
+            "from Consumer c where c.serviceProvider.id = :spId")
+    long countInconsistentByServiceProviderId(@Param("spId") Long spId);
+
 
     Page<Consumer> findByServiceProvider_Id(Long serviceProviderId, Pageable pageable);
 

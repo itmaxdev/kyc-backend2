@@ -1,29 +1,32 @@
 package com.app.kyc.model;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Filter {
-    Boolean consistent;
-    Long serviceProviderID;
-    Boolean isResolved;
+    private Boolean consistent;
 
-    public Boolean getConsistent() {
-        return consistent;
-    }
+    @JsonAlias({"serviceProviderID","serviceProviderId"})
+    @JsonProperty("serviceProviderID")
+    private Long serviceProviderID;
 
-    public void setConsistent(Boolean consistent) {
-        this.consistent = consistent;
-    }
+    private Boolean isResolved;
 
+    // NEW: "ALL" | "CONSISTENT" | "INCONSISTENT"
+    @JsonAlias({"type"})
+    private String type;
 
-    public Long getServiceProviderID() {
-        return serviceProviderID;
-    }
+    public Boolean getConsistent() { return consistent; }
+    public void setConsistent(Boolean consistent) { this.consistent = consistent; }
 
-    public void setServiceProviderID(Long serviceProviderID) {
-        this.serviceProviderID = serviceProviderID;
-    }
-
+    public Long getServiceProviderID() { return serviceProviderID; }
+    public void setServiceProviderID(Long serviceProviderID) { this.serviceProviderID = serviceProviderID; }
 
     public Boolean getIsResolved() { return isResolved; }
-
     public void setIsResolved(Boolean isResolved) { this.isResolved = isResolved; }
+
+    public String getType() { return type; }
+    public void setType(String type) { this.type = type; }
 }
