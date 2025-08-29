@@ -873,13 +873,11 @@ public class FileProcessingService {
 
         RowData r = new RowData();
         r.msisdn              = idx(f, 0);
-        r.registrationDateStr = idx(f, 5);;
         r.firstName           = idx(f, 1);
         r.lastName            = idx(f, 2);
-        r.gender              = idx(f, 4);
         r.address             = idx(f, 3);
+        r.registrationDateStr = idx(f, 4);;
         r.birthDateStr        = idx(f, 5);
-        r.createdOnTs         = idx(f, 5);
         r.serviceProviderId   = spId;
         return r;
     }
