@@ -34,6 +34,18 @@ public interface ConsumerRepository extends JpaRepository<Consumer, Long>
     List<FlaggedConsumersListDTO> getAllFlaggedConsumers();
 
 
+    @Query("select count(c) from Consumer c")
+    long countAllUnsafe(); // optional
+
+    @Query("select coalesce(sum(case when c.isConsistent = true then 1 else 0 end),0) from Consumer c")
+    long countConsistent();
+
+    @Query("select coalesce(sum(case when c.isConsistent = false or c.isConsistent is null then 1 else 0 end),0) from Consumer c")
+    long countInconsistent();
+
+
+    long countByIsConsistent(boolean isConsistent);
+    long countByIsConsistentIsNull(); // counts rows where isConsistent is NULL
 
 
     Page<Consumer> findByServiceProvider_Id(Long serviceProviderId, Pageable pageable);

@@ -57,39 +57,39 @@ import javax.persistence.PersistenceContext;
 public class ConsumerServiceImpl implements ConsumerService {
     @Autowired
     private ServiceProviderRepository serviceProviderRepository;
-    
+
     @Autowired
     private ConsumerAnomalyRepository consumerAnomalyRepository;
-    
+
     @Autowired
     AnomalyRepository anomalyRepository;
 
     @PersistenceContext
     EntityManager em;
-    
+
     @Autowired
     AnomalyTypeRepository anomalyTypeRepository;
-    
+
     @Autowired
     ConsumerRepository consumerRepository;
-    
+
     @Autowired
     ConsumerServiceService consumerServiceService;
 
     @Autowired
     private AnomalyTrackingRepository anomalyTrackingRepository;
-    
+
     static final Integer DEFAULT_FIRST_ROW = 0;
-    
+
     List<Consumer> consumers = new ArrayList<>();
-    
+
     public ConsumerDto getConsumerById(Long id) {
         Optional<Consumer> consumer = Optional.ofNullable(consumerRepository.findByIdAndConsumerStatus(id, 0));
         ConsumerDto consumerDto = null;
         if (consumer.isPresent()) {
             consumerDto = new ConsumerDto(consumer.get(), consumer.get().getAnomalies());
         }
-        
+
         return consumerDto;
     }
 
@@ -146,7 +146,7 @@ public class ConsumerServiceImpl implements ConsumerService {
     }*/
 
     // @Transactional(readOnly = true) // optional, recommended
-    @Transactional(readOnly = true)
+    /*@Transactional(readOnly = true)
     public Map<String, Object> getAllConsumers(String params) throws JsonMappingException, JsonProcessingException {
 
         // 1) Resolve pageable + filter (null-safe) and cap page size
@@ -206,7 +206,7 @@ public class ConsumerServiceImpl implements ConsumerService {
             if (notes != null) dto.setNotes(notes);
 
             boolean hasSubs =
-                    /* withSubs != null ? withSubs.contains(c.getId()) : */
+                    *//* withSubs != null ? withSubs.contains(c.getId()) : *//*
                     consumerServiceService.countConsumersByConsumerId(c.getId()) > 0;
 
             data.add(new ConsumersHasSubscriptionsResponseDTO(dto, hasSubs));
@@ -216,17 +216,204 @@ public class ConsumerServiceImpl implements ConsumerService {
         resp.put("data",  data);
         resp.put("count", total);
         return resp;
+    }*/
+
+   /* @Transactional(readOnly = true)
+    public Map<String, Object> getAllConsumers(String params)
+            throws JsonMappingException, JsonProcessingException {
+
+        // 0) Global counters (independent of paging/filter)
+        final long allCount          = consumerRepository.count();
+        final long consistentCount   = consumerRepository.countByIsConsistentTrue();
+        final long inconsistentCount = consumerRepository.countByIsConsistentFalse();
+
+        // 1) Resolve pageable + filter (null-safe) and cap page size
+        final Pagination pagination = PaginationUtil.getFilterObject(params);
+        final Pageable requested    = PaginationUtil.getPageable(params);
+        final int MAX_PAGE_SIZE     = 5000;
+        final Pageable pageable     = PageRequest.of(
+                requested.getPageNumber(),
+                Math.min(requested.getPageSize(), MAX_PAGE_SIZE),
+                requested.getSort()
+        );
+
+        final Boolean consistent = (pagination != null && pagination.getFilter() != null)
+                ? pagination.getFilter().getConsistent()
+                : null;
+
+        // 2) Page base entities (filter only affects the page content, not the global counters)
+        final Page<Consumer> consumerPage =
+                Boolean.FALSE.equals(consistent) ? consumerRepository.findByIsConsistentFalse(pageable)
+                        : Boolean.TRUE.equals(consistent) ? consumerRepository.findByIsConsistentTrue(pageable)
+                        : consumerRepository.findAll(pageable);
+
+        final List<Consumer> consumers = consumerPage.getContent();
+
+        // 3) If page empty, still return global counters
+        if (consumers.isEmpty()) {
+            Map<String, Object> resp = new HashMap<>();
+            resp.put("data", Collections.emptyList());
+            resp.put("count", allCount);                 // <- all consumers
+            resp.put("consistentCount", consistentCount);
+            resp.put("inconsistentCount", inconsistentCount);
+            return resp;
+        }
+
+        // 4) BULK anomalies for this page (avoid touching c.getAnomalies())
+        final List<ConsumerAnomaly> pageAnomalies = consumerAnomalyRepository.findAllByConsumerIn(consumers);
+
+        // Build notes map for anomalyTypeId = 1 (adjust if different)
+        final long NOTES_ANOMALY_TYPE_ID = 1L;
+        final Map<Long, String> notesByConsumerId = new HashMap<>();
+        for (Consumer caConsumer : consumers) { *//* pre-size optional *//* }
+        for (ConsumerAnomaly ca : pageAnomalies) {
+            if (ca == null || ca.getAnomaly() == null || ca.getAnomaly().getAnomalyType() == null || ca.getConsumer() == null) continue;
+            if (ca.getAnomaly().getAnomalyType().getId() != NOTES_ANOMALY_TYPE_ID) continue;
+            if (ca.getNotes() == null) continue;
+            notesByConsumerId.putIfAbsent(ca.getConsumer().getId(), ca.getNotes()); // first note wins
+        }
+
+        // 5) Map to DTOs (don’t touch lazy collections)
+        final List<ConsumersHasSubscriptionsResponseDTO> data = new ArrayList<>(consumers.size());
+        for (Consumer c : consumers) {
+            ConsumerDto dto = new ConsumerDto(c, Collections.emptyList()); // avoid lazy-load of c.getAnomalies()
+            if (dto.getFirstName() == null) dto.setFirstName("");
+            if (dto.getLastName()  == null) dto.setLastName("");
+            String notes = notesByConsumerId.get(c.getId());
+            if (notes != null) dto.setNotes(notes);
+
+            boolean hasSubs = consumerServiceService.countConsumersByConsumerId(c.getId()) > 0;
+            data.add(new ConsumersHasSubscriptionsResponseDTO(dto, hasSubs));
+        }
+
+        // 6) Build response with global counters
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("data", data);
+        resp.put("count", allCount);                 // <- all consumers in DB
+        resp.put("consistentCount", consistentCount);
+        resp.put("inconsistentCount", inconsistentCount);
+        return resp;
+    }*/
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getAllConsumers(String params)
+            throws JsonProcessingException {
+
+        // Robust counters
+        final long allCount        = consumerRepository.count();
+        final long consistentCount = consumerRepository.countConsistent();
+        final long inconsistentCount = consumerRepository.countInconsistent();
+
+        // Pageable (with cap)
+        final Pageable requested = Optional.ofNullable(PaginationUtil.getPageable(params))
+                .orElse(PageRequest.of(0, 50));
+        final int MAX_PAGE_SIZE = 5000;
+        final Pageable pageable = PageRequest.of(
+                requested.getPageNumber(),
+                Math.min(requested.getPageSize(), MAX_PAGE_SIZE),
+                requested.getSort()
+        );
+
+        // Fetch ONE page
+        final Page<Consumer> page = consumerRepository.findAll(pageable);
+
+        // De-dup by id (in case of join fetch)
+        final List<Consumer> consumers = page.getContent().stream()
+                .collect(Collectors.collectingAndThen(
+                        Collectors.toMap(Consumer::getId, c -> c, (a,b)->a, LinkedHashMap::new),
+                        m -> new ArrayList<>(m.values())
+                ));
+
+        // Bulk anomalies for notes (type id = 1)
+        final List<ConsumerAnomaly> pageAnomalies = consumers.isEmpty()
+                ? Collections.emptyList()
+                : consumerAnomalyRepository.findAllByConsumerIn(consumers);
+
+        final long NOTES_ANOMALY_TYPE_ID = 1L;
+        final Map<Long, String> notesByConsumerId = new HashMap<>();
+        for (ConsumerAnomaly ca : pageAnomalies) {
+            if (ca == null || ca.getAnomaly() == null || ca.getAnomaly().getAnomalyType() == null || ca.getConsumer() == null) continue;
+            if (!Objects.equals(ca.getAnomaly().getAnomalyType().getId(), NOTES_ANOMALY_TYPE_ID)) continue;
+            if (ca.getNotes() == null) continue;
+            notesByConsumerId.putIfAbsent(ca.getConsumer().getId(), ca.getNotes());
+        }
+
+        // Map ONCE
+        final List<ConsumersHasSubscriptionsResponseDTO> allData = new ArrayList<>(consumers.size());
+        for (Consumer c : consumers) {
+            ConsumerDto dto = new ConsumerDto(c, Collections.emptyList());
+            dto.setIsConsistent(c.getIsConsistent()); // <-- IMPORTANT
+            if (dto.getFirstName() == null) dto.setFirstName("");
+            if (dto.getLastName() == null) dto.setLastName("");
+            String notes = notesByConsumerId.get(c.getId());
+            if (notes != null) dto.setNotes(notes);
+
+            boolean hasSubs = consumerServiceService.countConsumersByConsumerId(c.getId()) > 0;
+            allData.add(new ConsumersHasSubscriptionsResponseDTO(dto, hasSubs));
+        }
+
+        // Partition (null → inconsistent)
+        final List<ConsumersHasSubscriptionsResponseDTO> consistentData   = new ArrayList<>();
+        final List<ConsumersHasSubscriptionsResponseDTO> inconsistentData = new ArrayList<>();
+        for (ConsumersHasSubscriptionsResponseDTO row : allData) {
+            Boolean ic = row.getConsumer().getIsConsistent();
+            if (Boolean.TRUE.equals(ic)) consistentData.add(row);
+            else                          inconsistentData.add(row);
+        }
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("count", allCount);
+        resp.put("consistentCount", consistentCount);
+        resp.put("inconsistentCount", inconsistentCount);
+        resp.put("data", allData);                     // this page
+        resp.put("consistentData", consistentData);    // subset of this page
+        resp.put("inconsistentData", inconsistentData);// subset of this page
+        return resp;
     }
+
+
+
+    private List<ConsumersHasSubscriptionsResponseDTO> toDtoPage(List<Consumer> consumers) {
+        if (consumers == null || consumers.isEmpty()) return Collections.emptyList();
+
+        // Bulk anomalies for this slice (avoid touching c.getAnomalies())
+        final List<ConsumerAnomaly> sliceAnomalies = consumerAnomalyRepository.findAllByConsumerIn(consumers);
+
+        // Build notes map for anomalyTypeId = 1 (adjust if needed)
+        final long NOTES_ANOMALY_TYPE_ID = 1L;
+        final Map<Long, String> notesByConsumerId = new HashMap<>();
+        for (ConsumerAnomaly ca : sliceAnomalies) {
+            if (ca == null || ca.getAnomaly() == null || ca.getAnomaly().getAnomalyType() == null || ca.getConsumer() == null) continue;
+            if (!Objects.equals(ca.getAnomaly().getAnomalyType().getId(), NOTES_ANOMALY_TYPE_ID)) continue;
+            if (ca.getNotes() == null) continue;
+            notesByConsumerId.putIfAbsent(ca.getConsumer().getId(), ca.getNotes()); // first note wins
+        }
+
+        // Map to DTOs (don’t touch lazy collections)
+        final List<ConsumersHasSubscriptionsResponseDTO> data = new ArrayList<>(consumers.size());
+        for (Consumer c : consumers) {
+            ConsumerDto dto = new ConsumerDto(c, Collections.emptyList());
+            if (dto.getFirstName() == null) dto.setFirstName("");
+            if (dto.getLastName()  == null) dto.setLastName("");
+            String notes = notesByConsumerId.get(c.getId());
+            if (notes != null) dto.setNotes(notes);
+
+            boolean hasSubs = consumerServiceService.countConsumersByConsumerId(c.getId()) > 0;
+            data.add(new ConsumersHasSubscriptionsResponseDTO(dto, hasSubs));
+        }
+        return data;
+    }
+
 
 
     public void addConsumer(Consumer consumer) {
         consumerRepository.save(consumer);
     }
-    
+
     public Consumer updateConsumer(Consumer consumer) {
         return consumerRepository.save(consumer);
     }
-    
+
     @Override
     public Map<String, Object> getAllFlaggedConsumers(String params) {
         List<FlaggedConsumersListDTO> consumers = consumerRepository.getAllFlaggedConsumers();
@@ -235,12 +422,12 @@ public class ConsumerServiceImpl implements ConsumerService {
         consumersWithCount.put("count", consumers.size());
         return consumersWithCount;
     }
-    
+
     @Override
     public int countConsumersByIndustryId(Long industryId, Date start, Date end) {
         return (int) consumerRepository.countByIndustryIdAndCreatedOnGreaterThanAndCreatedOnLessThanEqual(0, industryId, start, end);
     }
-    
+
     @Override
     public List<Consumer> getConsumersByCreatedOnGreaterThanAndCreatedOnLessThanEqual(Long industryId, Date start, Date end) {
         return consumerRepository.findAllConsumersByCreatedOnGreaterThanAndCreatedOnLessThanEqual(0, industryId, start, end);
@@ -255,42 +442,42 @@ public class ConsumerServiceImpl implements ConsumerService {
     public List<Consumer> getConsumersByServiceTypeId(Long serviceTypeId, Date start, Date end) {
         return consumerRepository.findAllConsumersByServiceTypeAndCreatedOnGreaterThanAndCreatedOnLessThanEqual(0, serviceTypeId, start, end);
     }
-    
+
     @Override
     public List<Consumer> getConsumersByServiceProviderIdAndDateRange(Long serviceProviderId, Date start, Date end) {
         return consumerRepository.findAllConsumersByServiceProviderIdAndCreatedOnGreaterThanAndCreatedOnLessThanEqualAndConsumerStatus(serviceProviderId, start, end, 0);
     }
-    
+
     @Override
     public List<Consumer> getConsumersByServiceProviderId(Long serviceProviderId) {
         return consumerRepository.findAllConsumersByServiceProviderIdAndConsumerStatus(serviceProviderId, 0);
     }
-    
+
     @Override
     public List<Consumer> getConsumersByServiceProviderIdAndServiceTypeId(Long serviceProviderId, Long serviceTypeId, Date start, Date end) {
         return consumerRepository.findAllConsumersByServiceProviderIdAndServiceTypeIdAndCreatedOnGreaterThanAndCreatedOnLessThanEqual(0, serviceProviderId, serviceTypeId, start, end);
     }
-    
+
     @Override
     public Map<String, Object> getAllByServiceIdAndUserId(Long userId, Long serviceId) {
         List<ConsumerDto> consumers = consumerRepository.getAllByServiceIdAndUserId(0, userId, serviceId)
         .stream()
         .map(c -> new ConsumerDto(c, null)).collect(Collectors.toList());
-        
+
         List<ConsumersHasSubscriptionsResponseDTO> consumersHasSubscriptionsResponseDTOS = new ArrayList<>();
-        
+
         for (ConsumerDto a : consumers) {
             int countSucscriptions = consumerRepository.countById(a.getId());
             consumersHasSubscriptionsResponseDTOS.add(new ConsumersHasSubscriptionsResponseDTO(a, countSucscriptions > 0 ? true : false));
         }
-        
-        
+
+
         Map<String, Object> consumersWithCount = new HashMap<String, Object>();
         consumersWithCount.put("data", consumersHasSubscriptionsResponseDTOS);
         consumersWithCount.put("count", consumers.size());
         return consumersWithCount;
     }
-    
+
     @Override
     public ConsumersDetailsResponseDTO getConsumerByIdwithSubscriptions(Long id) {
         Optional<Consumer> consumer = Optional.ofNullable(consumerRepository.findByIdAndConsumerStatus(id, 0));
@@ -305,12 +492,12 @@ public class ConsumerServiceImpl implements ConsumerService {
     public List<DashboardObjectInterface> getAndCountConsumersGroupedByServiceProviderId(List<Long> serviceProvidersIdList, Date start, Date end) {
         return consumerRepository.getAndCountConsumersGroupedByServiceProviderId(serviceProvidersIdList, start, end);
     }*/
-    
+
     @Override
     public List<DashboardObjectInterface> getAndCountDistinctConsumersGroupedByServiceProviderId(List<Long> serviceProvidersIdList, Date start, Date end) {
         return consumerRepository.getAndCountDistinctConsumersGroupedByServiceProviderId(serviceProvidersIdList, start, end);
     }
-    
+
     @Override
     public long countConsumersByServiceProvidersBetweenDates(Collection<Long> serviceProvidersIds, Date createdOnStart, Date createdOnEnd, boolean isConsistent, int consumerStatus){
         return consumerRepository.countConsumersByServiceProvider_IdInAndRegistrationDateBetweenAndIsConsistentAndConsumerStatus(serviceProvidersIds,  createdOnStart, createdOnEnd, isConsistent, consumerStatus);
@@ -320,27 +507,27 @@ public class ConsumerServiceImpl implements ConsumerService {
     public long countSubscribersByServiceProvidersBetweenDates(Collection<Long> serviceProvidersIds, Date createdOnStart, Date createdOnEnd, int consumerStatus){
         return consumerRepository.countSubscribersByServiceProvider_IdInAndRegistrationDateBetweenAndConsumerStatus(serviceProvidersIds,  createdOnStart, createdOnEnd, consumerStatus);
     }
-    
+
     @Override
     public long countDistinctConsumerByServiceProvidersBetweenDates(Collection<Long> serviceProvidersIds, Date createdOnStart, Date createdOnEnd) {
         return consumerRepository.countDistinctByServiceProvider_IdInAndCreatedOnBetween(serviceProvidersIds, createdOnStart, createdOnEnd);
     }
-    
+
     @Override
     public List<DashboardObjectInterface> getAndCountConsumersByServiceProviderBetweenDatesGroupByMonthYear(Collection<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd) {
         return consumerRepository.countByServiceProvider_IdInAndCreatedOnBetweenGroupByYearMonth(serviceProviderIds,createdOnStart,createdOnEnd);
     }
-    
+
     @Override
     public List<DashboardObjectInterface> getAndCountConsumersByServiceProviderBetweenDatesGroupByDateMonthYear(Collection<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd) {
         return consumerRepository.countByServiceProvider_IdInAndCreatedOnBetweenGroupByYearMonthDate(serviceProviderIds,createdOnStart,createdOnEnd);
     }
-    
+
     @Override
     public List<DashboardObjectInterface> getAndCountDistinctConsumersByServiceProviderBetweenDatesGroupByMonthYear(Collection<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd, int consumerStatus) {
         return consumerRepository.countDistinctByServiceProvider_IdInAndCreatedOnBetweenGroupByYearMonth(serviceProviderIds, createdOnStart, createdOnEnd, consumerStatus);
     }
-    
+
     @Override
     public List<DashboardObjectInterface> getAndCountDistinctConsumersByServiceProviderBetweenDatesGroupByDateMonthYear(Collection<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd, int consumerStatus) {
         return consumerRepository.countDistinctByServiceProvider_IdInAndCreatedOnBetweenGroupByYearMonthDate(serviceProviderIds, createdOnStart, createdOnEnd, consumerStatus);
@@ -385,7 +572,7 @@ public class ConsumerServiceImpl implements ConsumerService {
         return consumerRepository.getConsumersPerOperatorBreakdown();
     }
 */
-    
+
     @Override
     public Map<String, Object> getAllFlaggedConsumers2(String params) throws JsonMappingException, JsonProcessingException {
         //List<AnomlyDto> pageAnomaly = anomalyRepository.findAll(PaginationUtil.getPageable(params)).stream().map(a -> new AnomlyDto(a)).collect(Collectors.toList());
@@ -462,13 +649,13 @@ public class ConsumerServiceImpl implements ConsumerService {
                 });
             });
         });
-        
+
         Map<String, Object> anomaliesWithCount = new HashMap<String, Object>();
         anomaliesWithCount.put("data", pageAnomaly);
         anomaliesWithCount.put("count", totalAnomaliesCount);
         return anomaliesWithCount;
     }
-    
+
     public List<List<String>> loadConsumers(Long serviceProviderId, User user) {
         ServiceProvider serviceProvider = serviceProviderRepository.findById(serviceProviderId).get();
         List<List<String>> read = null;
@@ -477,20 +664,20 @@ public class ConsumerServiceImpl implements ConsumerService {
             // get orange xlsx
             log.warn("Orange");
             loadOrangeConsumers(serviceProvider, user);
-            
+
             break;
             case "Airtel":
             // get Airtel csv
             log.warn("Airtel");
             loadAirtelConsumers(serviceProvider, user);
-            
+
             break;
             case "Africell":
             // get Africell xlsx
             log.warn("Africell");
             loadAfricellConsumers(serviceProvider, user);
             break;
-            
+
             case "Vodacom":
             // get Vodacom xlsx
             log.warn("Vodacom");
@@ -504,7 +691,7 @@ public class ConsumerServiceImpl implements ConsumerService {
         }
         return read;
     }
-    
+
     private List<List<String>> loadOrangeConsumers(ServiceProvider serviceProvider, User user) {
         this.consumers.clear();
         String fileLocation = "files/orange.xlsx";
@@ -524,7 +711,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                     if(row.getRowNum() > DEFAULT_FIRST_ROW){
                         for (int cn = 0; cn < row.getLastCellNum(); cn++) {
                             Cell cell = row.getCell(cn);
-                            
+
                             if (!Objects.isNull(cell)) {
                                 if(cn == 7){
 
@@ -535,7 +722,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                                     } else {
                                         line.add("");
                                     }
-                                    
+
                                 } else if(cn == 17){
                                     if(cell.getCellType().equals(CellType.NUMERIC)) {
                                         line.add(cell.getDateCellValue().toString());
@@ -544,7 +731,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                                     } else {
                                         line.add("");
                                     }
-                                } 
+                                }
                                 else{
                                     cell.setCellType(org.apache.poi.ss.usermodel.CellType.STRING);
                                     line.add(cell.getStringCellValue());
@@ -589,7 +776,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                         lastName = String.join(" ",lastNameList);
                     }
                     tempConsumer.setLastName(lastName);
-                    
+
                     if (line.get(4).toLowerCase().trim().equals("male") || line.get(4).toLowerCase().trim().equals("masculin") || line.get(4).toLowerCase().trim().equals("m")) {
                         tempConsumer.setGender("MALE");
                     } else if (line.get(4).toLowerCase().trim().equals("feminin") || line.get(4).toLowerCase().trim().equals("female") || line.get(4).toLowerCase().trim().equals("f") ) {
@@ -668,10 +855,10 @@ public class ConsumerServiceImpl implements ConsumerService {
             log.error(sw.toString());
         }
         // log.warn(file.toString());
-        
+
         return null;
     }
-    
+
     private List<List<String>> loadAfricellConsumers(ServiceProvider serviceProvider, User user) {
         this.consumers.clear();
         String fileLocation = "files/Africell.xlsx";
@@ -723,13 +910,13 @@ public class ConsumerServiceImpl implements ConsumerService {
                         } else {
                             line.add("");
                         }
-                        
+
                     }
                 }
                 if (line.size() == 0) {
                     continue;
                 }
-                
+
                 boolean emptyCheck = false;
                 for(int i=0;i<line.size();i++){
                     if(!Objects.equals(line.get(i), "")){
@@ -739,7 +926,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                 if(!emptyCheck){
                     break;
                 }
-                
+
                 Consumer tempConsumer = new Consumer();
                 tempConsumer.setMsisdn(line.get(0));
                 tempConsumer.setFirstName(line.get(1));
@@ -789,7 +976,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                     address = String.join(" ",addressList);
                 }
                 tempConsumer.setAddress(address);
-                
+
                 tempConsumer.setIdentityCapturePath(line.get(17));
                 try{
                     if (!line.get(18).equals("") && !line.get(18).equals("")) {
@@ -799,15 +986,15 @@ public class ConsumerServiceImpl implements ConsumerService {
                     }
                 }
                 catch(Exception e){
-                    
+
                 }
-                
+
                 // tempConsumer.setIdentityCapturePath(line.get(18));
                 tempConsumer.setServiceProvider(serviceProvider);
                 java.util.Date currentDate = new java.util.Date();
                 tempConsumer.setCreatedOn(String.valueOf(currentDate));
                 consumers.add(tempConsumer);
-                
+
             }
             this.checkConsumer(consumers, user, serviceProvider);
             this.consumers.clear();
@@ -826,10 +1013,10 @@ public class ConsumerServiceImpl implements ConsumerService {
             log.error(sw.toString());
         }
         // log.warn(file.toString());
-        
+
         return null;
     }
-    
+
     private List<List<String>> loadVodacomConsumers(ServiceProvider serviceProvider, User user) {
         this.consumers.clear();
         String fileLocation = "files/Vodacom.xlsx";
@@ -845,7 +1032,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                     List<String> line = new ArrayList<>();
                     Row row = rowIterator.next();
                     //For each row, iterate through all the columns
-                    
+
                     Date registrationDate = null;
                     if(row.getRowNum() == 0){
                         headerSize = row.getLastCellNum();
@@ -874,7 +1061,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                                 line.add("");
                             }
                         }
-                        
+
                     }
                     if (line.size() == 0) {
                         continue;
@@ -893,7 +1080,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                     tempConsumer.setRegistrationDate(String.valueOf(registrationDate));
                     tempConsumer.setFirstName(line.get(5));
                     tempConsumer.setLastName(line.get(6));
-                    
+
                     List<String> address = new ArrayList<>();
                     if (!line.get(7).equals("")) {
                         address.add(line.get(7));
@@ -901,16 +1088,16 @@ public class ConsumerServiceImpl implements ConsumerService {
                     if (!line.get(8).equals("")) {
                         address.add(line.get(8));
                     }
-                    
+
                     if (!line.get(9).equals("")) {
                         address.add(line.get(9));
                     }
                     if (!line.get(10).equals("")) {
                         address.add(line.get(10));
                     }
-                    
+
                     tempConsumer.setAddress(String.join(" ", address));
-                    
+
                     if (line.get(11).toLowerCase().trim().equals("male") || line.get(11).toLowerCase().trim().equals("masculin") || line.get(11).toLowerCase().trim().equals("m")) {
                         tempConsumer.setGender("MALE");
                     } else if (line.get(11).toLowerCase().trim().equals("feminin") || line.get(11).toLowerCase().trim().equals("female") || line.get(11).toLowerCase().trim().equals("f") ) {
@@ -969,22 +1156,22 @@ public class ConsumerServiceImpl implements ConsumerService {
             log.error(sw.toString());
         }
         // log.warn(file.toString());
-        
+
         return null;
     }
-    
+
     public List<List<String>> loadAirtelConsumers(ServiceProvider serviceProvider, User user) {
         this.consumers.clear();
         String fileName = "files/Airtel.csv";
         try (FileReader filereader = new FileReader(fileName)) {
-            
+
             CSVParser parser = new CSVParserBuilder().withSeparator('|').build();
-            
+
             CSVReader csvReader = new CSVReaderBuilder(filereader)
             .withSkipLines(1)
             .withCSVParser(parser)
             .build();
-            
+
             List<List<String>> rows = new ArrayList<>();
             for (String[] nextLine : csvReader) {
                 // log.warn(Arrays.asList(nextLine).toString());
@@ -1056,7 +1243,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                     if (!line.get(17).equals("\\N") && !line.get(17).equals("")){
                         registrationDate = new SimpleDateFormat("dd-MMM-yy HH.mm.ss.SSSSSS a").parse(line.get(17));
                         tempConsumer.setRegistrationDate(String.valueOf(registrationDate));
-                        
+
                     }
                 } catch (Exception e) {
                 }
@@ -1444,37 +1631,37 @@ public class ConsumerServiceImpl implements ConsumerService {
 
 
     private void checkConsumerIncompleteAnomaly(Consumer consumer, List<String> errors, User user, Boolean flag,AnomalyCollection collection) {
-        
+
         Set<String> setForDefaultErrors = new HashSet<>();
         Set<String> setForFileErrors = new HashSet<>();
         for (String s : errors)
         setForDefaultErrors.add(s);
         for (String s : checkNullAttributesForFile(consumer))
         setForFileErrors.add(s);
-        
+
         Set<String> combinedErrors = Stream.concat(setForDefaultErrors.stream(), setForFileErrors.stream())
         .collect(Collectors.toSet());
         collection.setParentAnomalyNoteSet(Stream.concat(combinedErrors.stream(), collection.getParentAnomalyNoteSet().stream())
         .collect(Collectors.toSet()));
-        
+
         String distinctErrors = String.join(", ", combinedErrors);
         String err_str = String.join(", ", errors);
         String fileErrors = String.join(", ", checkNullAttributesForFile(consumer));
-        
+
         Anomaly tempAnomaly = new Anomaly();
-        
+
         AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Incomplete Data");
-        
+
         List<Consumer> tempConsumer = consumerRepository.findConsumerIdsByMsisdnAndConsumerStatusAndIdNumberAndIdTypeAndServiceProviderID(consumer.getMsisdn(), 0, consumer.getIdentificationType(), consumer.getIdentificationNumber(), consumer.getServiceProvider().getId());
         List<Long> consumerIds = tempConsumer.stream().map(Consumer::getId).collect(Collectors.toList());
         List<Long> consumerAnomalies = consumerAnomalyRepository.findAnomaliesIdByConsumerAndAnomalyTypeId(consumerIds, anomalyType.getId());
-        
+
         consumer.setIsConsistent(false);
         consumer = consumerRepository.save(consumer);
-        
+
         tempAnomaly.setNote("Missing Fields: " + distinctErrors);
         ConsumerAnomaly tempCA = new ConsumerAnomaly();
-        
+
         if (!consumerAnomalies.isEmpty()) {
             Anomaly anomaly = anomalyRepository.findByIdAndAnomalyType_Id(consumerAnomalies, anomalyType.getId());
             if (!Objects.isNull(anomaly)) {
@@ -1484,7 +1671,7 @@ public class ConsumerServiceImpl implements ConsumerService {
 
                     AnomalyTracking anomalyTracking = new AnomalyTracking(anomaly, new Date(), AnomalyStatus.RESOLVED_SUCCESSFULLY, "", user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn());
                     anomalyTrackingRepository.save(anomalyTracking);
-                    
+
                     tempAnomaly.setStatus(AnomalyStatus.REPORTED);
                     tempAnomaly.getConsumers().remove(consumer);
                     tempAnomaly.addConsumer(consumer);
@@ -1493,15 +1680,15 @@ public class ConsumerServiceImpl implements ConsumerService {
                     tempAnomaly.setAnomalyType(anomalyType);
                     tempAnomaly.setUpdatedOn(new Date());
                     tempAnomaly.setUpdateBy(anomaly.getReportedBy().getFirstName() + " " + anomaly.getReportedBy().getLastName());
-                    
+
                     anomalyRepository.save(tempAnomaly);
                     anomalyTracking = new AnomalyTracking(anomaly, new Date(), AnomalyStatus.REPORTED, "", user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn());
                     anomalyTrackingRepository.save(anomalyTracking);
-                    
+
                 }
                 if (anomaly.getStatus().getCode() == 0 || anomaly.getStatus().getCode() == 1 ||
                 anomaly.getStatus().getCode() == 2 || anomaly.getStatus().getCode() == 3) {
-                    
+
                     tempAnomaly.setId(anomaly.getId());
                     tempAnomaly.setStatus(anomaly.getStatus());
                     tempAnomaly.getConsumers().remove(consumer);
@@ -1511,11 +1698,11 @@ public class ConsumerServiceImpl implements ConsumerService {
                     tempAnomaly.setAnomalyType(anomalyType);
                     tempAnomaly.setUpdatedOn(anomaly.getUpdatedOn());
                     tempAnomaly.setUpdateBy(anomaly.getReportedBy().getFirstName() + " " + anomaly.getReportedBy().getLastName());
-                    
+
                     tempCA.setAnomaly(tempAnomaly);
                     tempCA.setConsumer(consumer);
                     if (!anomaly.getNote().equals(collection.getParentAnomalyNoteSet().toString())) {
-                        
+
                         anomaly.setNote("Missing Fields are: "+collection.getParentAnomalyNoteSet().toString());
                         anomalyRepository.save(anomaly);
                     }
@@ -1533,15 +1720,15 @@ public class ConsumerServiceImpl implements ConsumerService {
             Anomaly savedAnomaly = anomalyRepository.save(tempAnomaly);
             AnomalyTracking anomalyTracking = new AnomalyTracking(tempAnomaly, new Date(), AnomalyStatus.REPORTED, "", user.getFirstName()+" "+user.getLastName(), tempAnomaly.getUpdatedOn());
             anomalyTrackingRepository.save(anomalyTracking);
-            
+
             ConsumerAnomaly consumerAnomaly = new ConsumerAnomaly();
             consumerAnomaly.setNotes("Missing Fields are: " + distinctErrors);
             consumerAnomaly.setAnomaly(savedAnomaly);
             consumerAnomaly.setConsumer(consumer);
-            
+
             consumerAnomalyRepository.save(consumerAnomaly);
         }
-        
+
         // soft deleted old consumers
         if (flag) {
             if ((consumerAnomalies.size() == 0 || consumerAnomalies.size() == 1) && consumerIds.size() == 1) {
@@ -1550,7 +1737,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                 }
             }
         }
-        
+
     }
 
     private void resolveIncompleteAnomaly(Consumer consumer,User user){
@@ -1610,12 +1797,12 @@ public class ConsumerServiceImpl implements ConsumerService {
     private Consumer resolvedAndSoftDeleteConsumers(Consumer consumer, Boolean flag,User user) {
         // duplicate records
         AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Duplicate Records");
-        
+
         //previously inserted consumer
         List<Long> consumerIds = consumerRepository.findConsumerIdsByMsisdnAndConsumerStatus(consumer.getMsisdn(), 0);
-        
+
         Anomaly tempAnomaly = new Anomaly();
-        
+
         //previously tagged anomalies
         List<Long> consumerAnomalies = consumerAnomalyRepository.findAnomaliesIdByConsumerAndAnomalyTypeId(consumerIds, anomalyType.getId());
         if (consumerAnomalies.size() > 0) {
@@ -1643,19 +1830,19 @@ public class ConsumerServiceImpl implements ConsumerService {
                     tempAnomaly.setUpdatedOn(anomaly.getUpdatedOn());
                     tempAnomaly.setAnomalyType(anomalyType);
                     tempConsumerAnomaly.setAnomaly(tempAnomaly);
-                    
+
                     consumer = consumerRepository.save(consumer);
-                    
+
                     tempConsumerAnomaly.setConsumer(consumer);
                     tempConsumerAnomaly.setNotes(anomaly.getNote());
-                    
+
                     consumerAnomalyRepository.save(tempConsumerAnomaly);
                 }
             }
         }
-        
+
         consumerIds.remove(consumer.getId());
-        
+
         //soft deleted old consumers
         if (flag && !(consumerIds.size() > 2)) {
             if (consumerAnomalies.size() > 1 && consumerIds.size() > 1) {
@@ -1669,7 +1856,7 @@ public class ConsumerServiceImpl implements ConsumerService {
         return consumer;
     }
 
-    private void tagDuplicateAnomalies(Consumer consumer, User user) {
+    /*private void tagDuplicateAnomalies(Consumer consumer, User user) {
         AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Duplicate Records");
 
         Anomaly tempAnomaly = new Anomaly();
@@ -1755,22 +1942,138 @@ public class ConsumerServiceImpl implements ConsumerService {
         }
 
         consumerRepository.markConsumersConsistent(0, duplicateConsumerIds);
+    }*/
+
+    private void tagDuplicateAnomalies(Consumer consumer, User user) {
+        // ----- Guard 1: skip if this consumer MSISDN is blank/null -----
+        if (consumer == null || isBlank(consumer.getMsisdn())) {
+            // No duplicate anomaly for blank MSISDN
+            return;
+        }
+
+        AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Duplicate Records");
+
+        Anomaly tempAnomaly = new Anomaly();
+        Anomaly anomaly = new Anomaly();
+
+        final String msisdn = consumer.getMsisdn().trim();
+        final String note = "You can't have more than one active record per MSISDN: " + msisdn;
+        tempAnomaly.setNote("Duplicate Anomaly: " + note);
+
+        // get previous consumers (active only, status=0)
+        List<Consumer> duplicateConsumers = consumerRepository.findByMsisdnAndConsumerStatus(msisdn, 0);
+
+        // ----- Guard 2: if duplicates include >= 2 blank-MSISDN consumers, skip -----
+        long blankMsisdnCount = duplicateConsumers.stream()
+                .map(Consumer::getMsisdn)
+                .filter(this::isBlank)
+                .count();
+        if (blankMsisdnCount >= 2) {
+            // Do not annotate with the duplicate MSISDN message when duplicates are blank
+            return;
+        }
+
+        List<Long> duplicateConsumerIds = duplicateConsumers.stream()
+                .map(Consumer::getId)
+                .collect(Collectors.toList());
+
+        consumer.setIsConsistent(false);
+        consumer = consumerRepository.save(consumer);
+
+        // check anomaly of previous consumers
+        List<Long> consumerAnomalies = consumerAnomalyRepository
+                .findAnomaliesIdByConsumerAndAnomalyTypeId(duplicateConsumerIds, anomalyType.getId());
+
+        if (consumerAnomalies.isEmpty()) {
+            // make new anomaly
+            Date now = new Date();
+            tempAnomaly.setStatus(AnomalyStatus.REPORTED);
+            tempAnomaly.setReportedOn(now);
+            tempAnomaly.setReportedBy(user);
+            tempAnomaly.getConsumers().remove(consumer);
+            tempAnomaly.addConsumer(consumer);
+            tempAnomaly.setUpdatedOn(now);
+            tempAnomaly.setAnomalyType(anomalyType);
+            tempAnomaly = anomalyRepository.save(tempAnomaly);
+
+            // tracking (force updatedBy)
+            AnomalyTracking anomalyTracking = new AnomalyTracking(
+                    tempAnomaly, now, AnomalyStatus.REPORTED, "",
+                    "System for Anomaly", tempAnomaly.getUpdatedOn() // <-- hard-coded here
+            );
+            anomalyTrackingRepository.save(anomalyTracking);
+
+            // link consumer <-> anomaly (idempotent)
+            List<ConsumerAnomaly> links =
+                    consumerAnomalyRepository.findByAnomaly_IdAndConsumer_Id(tempAnomaly.getId(), consumer.getId());
+
+            if (links == null || links.isEmpty()) {
+                ConsumerAnomaly link = new ConsumerAnomaly();
+                link.setAnomaly(tempAnomaly);
+                link.setConsumer(consumer);
+                link.setNotes("Duplicate Anomaly: " + note);
+                consumerAnomalyRepository.save(link);
+            } else {
+                ConsumerAnomaly link = links.get(0);
+                link.setNotes("Duplicate Anomaly: " + note);
+                consumerAnomalyRepository.save(link);
+            }
+        } else {
+            // load anomaly and tag to new consumer
+            tempAnomaly = anomalyRepository.findByIdAndAnomalyType_Id(consumerAnomalies, anomalyType.getId());
+            if (tempAnomaly != null) {
+                ConsumerAnomaly consumerAnomaly = new ConsumerAnomaly();
+                anomaly.setId(tempAnomaly.getId());
+                anomaly.setNote(tempAnomaly.getNote());
+                anomaly.setStatus(tempAnomaly.getStatus());
+                anomaly.setReportedOn(tempAnomaly.getReportedOn());
+                anomaly.setReportedBy(tempAnomaly.getReportedBy());
+                anomaly.addConsumer(consumer);
+                anomaly.setAnomalyType(tempAnomaly.getAnomalyType());
+                anomaly.setUpdatedOn(tempAnomaly.getUpdatedOn());
+
+                consumerAnomaly.setAnomaly(anomaly);
+                consumerAnomaly.setConsumer(consumer);
+                consumerAnomaly.setNotes("Duplicate Anomaly: " + note);
+                consumerAnomalyRepository.save(consumerAnomaly);
+            }
+        }
+
+        // tag anomaly to all duplicate consumers (only if we actually created/loaded tempAnomaly)
+        if (tempAnomaly.getId() != null) {
+            for (Consumer temp : duplicateConsumers) {
+                List<ConsumerAnomaly> ca =
+                        consumerAnomalyRepository.findByAnomaly_AnomalyTypeAndConsumer(anomalyType, temp);
+                if (ca == null || ca.isEmpty()) {
+                    ConsumerAnomaly tempConsumerAnomaly = new ConsumerAnomaly();
+                    tempConsumerAnomaly.setAnomaly(tempAnomaly);
+                    tempConsumerAnomaly.setConsumer(temp);
+                    tempConsumerAnomaly.setNotes("Duplicate Anomaly: " + note);
+                    consumerAnomalyRepository.save(tempConsumerAnomaly);
+                }
+            }
+        }
+
+        consumerRepository.markConsumersConsistent(0, duplicateConsumerIds);
     }
 
+    private boolean isBlank(String s) {
+        return s == null || s.trim().isEmpty();
+    }
 
 
     private Consumer resolvedAndDeleteExceedingConsumers(Consumer consumer, Boolean flag,User user) {
         // Exceeding records
         AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Exceeding Threshold");
-        
+
         //previously inserted consumer
         List<Consumer> duplicateConsumers = consumerRepository.findByIdentificationTypeAndIdentificationNumberAndServiceProviderAndConsumerStatus(consumer.getIdentificationType(), consumer.getIdentificationNumber(), consumer.getServiceProvider(), 0);
         List<Long> consumerIds = duplicateConsumers.stream().map(Consumer::getId).collect(Collectors.toList());
-        
+
         Anomaly tempAnomaly = new Anomaly();
         //previously tagged anomalies
         List<Long> consumerAnomalies = consumerAnomalyRepository.findAnomaliesIdByConsumerAndAnomalyTypeId(consumerIds, anomalyType.getId());
-        
+
         if (consumerAnomalies.size() > 0) {
             //get anomaly for duplicate that is tagged previously
             Anomaly anomaly = anomalyRepository.findByIdAndAnomalyType_Id(consumerAnomalies, anomalyType.getId());
@@ -1798,10 +2101,10 @@ public class ConsumerServiceImpl implements ConsumerService {
                     tempConsumerAnomaly.setAnomaly(tempAnomaly);
                     consumer.setIsConsistent(false);
                     consumer = consumerRepository.save(consumer);
-                    
+
                     tempConsumerAnomaly.setConsumer(consumer);
                     tempConsumerAnomaly.setNotes(anomaly.getNote());
-                    
+
                     consumerAnomalyRepository.save(tempConsumerAnomaly);
                 }
             }
@@ -1819,7 +2122,7 @@ public class ConsumerServiceImpl implements ConsumerService {
         return consumer;
     }
 
-    private void tagExceedingAnomalies(Consumer consumer, User user) {
+    /*private void tagExceedingAnomalies(Consumer consumer, User user) {
         AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Exceeding Threshold");
 
         Anomaly tempAnomaly = new Anomaly();
@@ -1910,8 +2213,124 @@ public class ConsumerServiceImpl implements ConsumerService {
         }
 
         consumerRepository.markConsumersConsistent(0, duplicateConsumerIds);
+    }*/
+
+
+    private void tagExceedingAnomalies(Consumer consumer, User user) {
+        AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Exceeding Threshold");
+
+        // ----- Build note once (safe null handling) -----
+        final String idType = Objects.toString(consumer.getIdentificationType(), "");
+        final String idNumber = Objects.toString(consumer.getIdentificationNumber(), "");
+        final String spName = consumer.getServiceProvider() != null ? consumer.getServiceProvider().getName() : "";
+        final String note = "You can't have more than two active records per operator for a given combination of "
+                + "(ID Card Type + ID Number + ServiceProviderName): (" + idType + " + " + idNumber + " + " + spName + ")";
+
+        // ----- Get previous consumers for same (idType, idNumber, SP, active) -----
+        List<Consumer> duplicateConsumers =
+                consumerRepository.findByIdentificationTypeAndIdentificationNumberAndServiceProviderAndConsumerStatus(
+                        consumer.getIdentificationType(), consumer.getIdentificationNumber(), consumer.getServiceProvider(), 0);
+
+        // ----- Guard: if ≥ 2 blank MSISDNs (including current consumer) -> skip tagging -----
+        long blankMsisdnCount = duplicateConsumers.stream()
+                .map(Consumer::getMsisdn)
+                .filter(this::isBlank)
+                .count();
+        if (isBlank(consumer.getMsisdn())) {
+            blankMsisdnCount++; // include current consumer if blank
+        }
+        if (blankMsisdnCount >= 2) {
+            // Do not create/update "Exceeding Threshold" anomaly when multiple blanks MSISDN exist
+            return;
+        }
+
+        List<Long> duplicateConsumerIds = duplicateConsumers.stream().map(Consumer::getId).collect(Collectors.toList());
+
+        // mark current record inconsistent
+        consumer.setIsConsistent(false);
+        consumer = consumerRepository.save(consumer);
+
+        // check existing anomalies of this type linked to these consumers
+        List<Long> consumerAnomalies =
+                consumerAnomalyRepository.findAnomaliesIdByConsumerAndAnomalyTypeId(duplicateConsumerIds, anomalyType.getId());
+
+        Anomaly tempAnomaly;
+        Anomaly anomaly = new Anomaly();
+
+        if (consumerAnomalies.isEmpty()) {
+            // create a new anomaly
+            Date now = new Date();
+            tempAnomaly = new Anomaly();
+            tempAnomaly.setNote("Exceeding Anomaly: " + note);
+            tempAnomaly.setStatus(AnomalyStatus.REPORTED);
+            tempAnomaly.setReportedOn(now);
+            tempAnomaly.setReportedBy(user);
+            tempAnomaly.addConsumer(consumer);
+            tempAnomaly.setUpdatedOn(now);
+            tempAnomaly.setAnomalyType(anomalyType);
+            tempAnomaly = anomalyRepository.save(tempAnomaly);
+
+            // tracking with hard-coded updatedBy
+            AnomalyTracking anomalyTracking = new AnomalyTracking(
+                    tempAnomaly, now, AnomalyStatus.REPORTED, "",
+                    "System for Anomaly", tempAnomaly.getUpdatedOn()
+            );
+            anomalyTrackingRepository.save(anomalyTracking);
+
+            // link consumer <-> anomaly (idempotent safeguard)
+            List<ConsumerAnomaly> links =
+                    consumerAnomalyRepository.findByAnomaly_IdAndConsumer_Id(tempAnomaly.getId(), consumer.getId());
+            if (links == null || links.isEmpty()) {
+                ConsumerAnomaly link = new ConsumerAnomaly();
+                link.setAnomaly(tempAnomaly);
+                link.setConsumer(consumer);
+                link.setNotes("Exceeding Anomaly: " + note);
+                consumerAnomalyRepository.save(link);
+            } else {
+                ConsumerAnomaly link = links.get(0);
+                link.setNotes("Exceeding Anomaly: " + note);
+                consumerAnomalyRepository.save(link);
+            }
+        } else {
+            // attach new consumer to existing anomaly
+            tempAnomaly = anomalyRepository.findByIdAndAnomalyType_Id(consumerAnomalies, anomalyType.getId());
+            if (tempAnomaly != null) {
+                ConsumerAnomaly consumerAnomaly = new ConsumerAnomaly();
+                anomaly.setId(tempAnomaly.getId());
+                anomaly.setNote(tempAnomaly.getNote());
+                anomaly.setStatus(tempAnomaly.getStatus());
+                anomaly.setReportedOn(tempAnomaly.getReportedOn());
+                anomaly.setReportedBy(tempAnomaly.getReportedBy());
+                anomaly.addConsumer(consumer);
+                anomaly.setAnomalyType(tempAnomaly.getAnomalyType());
+                anomaly.setUpdatedOn(tempAnomaly.getUpdatedOn());
+
+                consumerAnomaly.setAnomaly(anomaly);
+                consumerAnomaly.setConsumer(consumer);
+                consumerAnomaly.setNotes("Exceeding Anomaly: " + note);
+                consumerAnomalyRepository.save(consumerAnomaly);
+            }
+        }
+
+        // tag anomaly to all duplicate consumers (only if we have a target anomaly)
+        if (tempAnomaly != null && tempAnomaly.getId() != null) {
+            for (Consumer temp : duplicateConsumers) {
+                List<ConsumerAnomaly> ca =
+                        consumerAnomalyRepository.findByAnomaly_AnomalyTypeAndConsumer(anomalyType, temp);
+                if (ca == null || ca.isEmpty()) {
+                    ConsumerAnomaly tempConsumerAnomaly = new ConsumerAnomaly();
+                    tempConsumerAnomaly.setAnomaly(anomaly.getId() == null ? tempAnomaly : anomaly);
+                    tempConsumerAnomaly.setConsumer(temp);
+                    tempConsumerAnomaly.setNotes("Exceeding Anomaly: " + note);
+                    consumerAnomalyRepository.save(tempConsumerAnomaly);
+                }
+            }
+        }
+
+        consumerRepository.markConsumersConsistent(0, duplicateConsumerIds);
     }
-    
+
+
     private List<String> checkErrors(Consumer consumer) {
         List<String> errors = new ArrayList<>();
         if (consumer.getMsisdn() == null) {
