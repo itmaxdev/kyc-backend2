@@ -93,8 +93,15 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
    long countDistinctByConsumers_ServiceProvider_IdInAndStatusInAndReportedOnBetween(Collection<Long> ids, Collection<AnomalyStatus> statuses, Date reportedOnStart, Date reportedOnEnd);
   
    
-   @Query("select count(distinct consumers.msisdn) from Anomaly a inner join a.consumers consumers where consumers.serviceProvider.id in ?1 and a.status in ?2 and a.reportedOn between ?3 and ?4")
+   /*@Query("select count(consumers.msisdn) from Anomaly a inner join a.consumers consumers where consumers.serviceProvider.id in ?1 and a.status in ?2 and a.reportedOn between ?3 and ?4")
    long countDistinctMsisdns(Collection<Long> ids, Collection<AnomalyStatus> statuses, Date reportedOnStart, Date reportedOnEnd);
+*/
+
+   @Query("select count(consumers) from Anomaly a join a.consumers consumers where consumers.serviceProvider.id in ?1 and a.status in ?2 and a.reportedOn between ?3 and ?4 ")
+   long countDistinctMsisdns(Collection<Long> ids,
+                                   Collection<AnomalyStatus> statuses,
+                                   Date reportedOnStart,
+                                   Date reportedOnEnd);
 
    @Query("select count(distinct a.id) from Anomaly a inner join a.consumers consumers " +
            "where consumers.serviceProvider.id in ?1 and a.status in ?2 and a.reportedOn between ?3 and ?4")
