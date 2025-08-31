@@ -295,7 +295,7 @@ public class ConsumerServiceImpl implements ConsumerService {
         return resp;
     }*/
 
-    @Transactional(readOnly = true)
+    /*@Transactional(readOnly = true)
     public Map<String, Object> getAllConsumers(String params)
             throws JsonMappingException, JsonProcessingException {
 
@@ -397,12 +397,12 @@ public class ConsumerServiceImpl implements ConsumerService {
         resp.put("consistentData", consistentData);
         resp.put("inconsistentData", inconsistentData);
         return resp;
-    }
+    }*/
 
 
 
 
-    private List<ConsumersHasSubscriptionsResponseDTO> toDtoPage(List<Consumer> consumers) {
+    /*private List<ConsumersHasSubscriptionsResponseDTO> toDtoPage(List<Consumer> consumers) {
         if (consumers == null || consumers.isEmpty()) return Collections.emptyList();
 
         // Bulk anomalies for this slice (avoid touching c.getAnomalies())
@@ -431,8 +431,124 @@ public class ConsumerServiceImpl implements ConsumerService {
             data.add(new ConsumersHasSubscriptionsResponseDTO(dto, hasSubs));
         }
         return data;
+    }*/
+
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getAllConsumers(String params)
+            throws JsonMappingException, JsonProcessingException {
+
+        // Pageable (null-safe) + cap page size
+        final Pageable requested = Optional.ofNullable(PaginationUtil.getPageable(params))
+                .orElse(PageRequest.of(0, 50));
+        final int MAX_PAGE_SIZE = 5000;
+        final Pageable pageable = PageRequest.of(
+                requested.getPageNumber(),
+                Math.min(requested.getPageSize(), MAX_PAGE_SIZE),
+                requested.getSort()
+        );
+
+        // Filters
+        final Pagination pagination = PaginationUtil.getFilterObject(params);
+        final String type = Optional.ofNullable(pagination)
+                .map(Pagination::getFilter).map(f -> f.getType())
+                .map(String::trim).map(String::toUpperCase)
+                .orElse("ALL");
+        final Long spId = Optional.ofNullable(pagination)
+                .map(Pagination::getFilter).map(f -> f.getServiceProviderID())
+                .orElse(null);
+
+        // Counters (provider-scoped when spId provided)
+        final long allCount, consistentCount, inconsistentCount;
+        if (spId != null) {
+            allCount          = consumerRepository.countByServiceProviderId(spId);
+            consistentCount   = consumerRepository.countConsistentByServiceProviderId(spId);
+            inconsistentCount = consumerRepository.countInconsistentByServiceProviderId(spId);
+        } else {
+            allCount          = consumerRepository.count();
+            consistentCount   = consumerRepository.countConsistent();
+            inconsistentCount = consumerRepository.countInconsistent();
+        }
+
+        // ===== Fetch THREE independent pages =====
+        // A) ALL
+        final Page<Consumer> allPage = (spId != null)
+                ? consumerRepository.findByServiceProvider_Id(spId, pageable)
+                : consumerRepository.findAll(pageable);
+
+        // B) CONSISTENT
+        final Page<Consumer> consistentPage = (spId != null)
+                ? consumerRepository.findByIsConsistentTrueAndConsumerStatusAndServiceProvider_Id(pageable, 0, spId)
+                : consumerRepository.findByIsConsistentTrue(pageable);
+
+        // C) INCONSISTENT
+        final Page<Consumer> inconsistentPage = (spId != null)
+                ? consumerRepository.findByIsConsistentFalseAndConsumerStatusAndServiceProvider_Id(pageable, 0, spId)
+                : consumerRepository.findByIsConsistentFalse(pageable);
+
+        // Map each slice independently (with de-dup just in case)
+        final List<ConsumersHasSubscriptionsResponseDTO> allData          = toDtoPage(dedup(allPage.getContent()));
+        final List<ConsumersHasSubscriptionsResponseDTO> consistentData   = toDtoPage(dedup(consistentPage.getContent()));
+        final List<ConsumersHasSubscriptionsResponseDTO> inconsistentData = toDtoPage(dedup(inconsistentPage.getContent()));
+
+        // "data" shaped by filter.type
+        final List<ConsumersHasSubscriptionsResponseDTO> dataBucket =
+                "CONSISTENT".equals(type)   ? consistentData :
+                        "INCONSISTENT".equals(type) ? inconsistentData :
+                                allData;
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("count", allCount);
+        resp.put("consistentCount", consistentCount);
+        resp.put("inconsistentCount", inconsistentCount);
+        resp.put("data", dataBucket);              // page of ALL / CONSISTENT / INCONSISTENT based on type
+        resp.put("consistentData", consistentData);      // always a consistent page
+        resp.put("inconsistentData", inconsistentData);  // always an inconsistent page
+        return resp;
     }
 
+// --- helpers ---
+
+    private List<Consumer> dedup(List<Consumer> items) {
+        if (items == null || items.isEmpty()) return Collections.emptyList();
+        return items.stream()
+                .collect(Collectors.collectingAndThen(
+                        Collectors.toMap(Consumer::getId, c -> c, (a, b) -> a, LinkedHashMap::new),
+                        m -> new ArrayList<>(m.values())
+                ));
+    }
+
+    private List<ConsumersHasSubscriptionsResponseDTO> toDtoPage(List<Consumer> consumers) {
+        if (consumers == null || consumers.isEmpty()) return Collections.emptyList();
+
+        // Bulk anomalies for this slice (avoid touching lazy collections)
+        final List<ConsumerAnomaly> sliceAnomalies = consumerAnomalyRepository.findAllByConsumerIn(consumers);
+
+        // Build notes map for anomalyTypeId = 1 (adjust if needed)
+        final long NOTES_ANOMALY_TYPE_ID = 1L;
+        final Map<Long, String> notesByConsumerId = new HashMap<>();
+        for (ConsumerAnomaly ca : sliceAnomalies) {
+            if (ca == null || ca.getAnomaly() == null || ca.getAnomaly().getAnomalyType() == null || ca.getConsumer() == null) continue;
+            if (!Objects.equals(ca.getAnomaly().getAnomalyType().getId(), NOTES_ANOMALY_TYPE_ID)) continue;
+            if (ca.getNotes() == null) continue;
+            notesByConsumerId.putIfAbsent(ca.getConsumer().getId(), ca.getNotes());
+        }
+
+        final List<ConsumersHasSubscriptionsResponseDTO> data = new ArrayList<>(consumers.size());
+        for (Consumer c : consumers) {
+            ConsumerDto dto = new ConsumerDto(c, Collections.emptyList());
+            // IMPORTANT: ensure ConsumerDto has a Boolean isConsistent field
+            dto.setIsConsistent(c.getIsConsistent());
+            if (dto.getFirstName() == null) dto.setFirstName("");
+            if (dto.getLastName()  == null) dto.setLastName("");
+            String notes = notesByConsumerId.get(c.getId());
+            if (notes != null) dto.setNotes(notes);
+
+            boolean hasSubs = consumerServiceService.countConsumersByConsumerId(c.getId()) > 0;
+            data.add(new ConsumersHasSubscriptionsResponseDTO(dto, hasSubs));
+        }
+        return data;
+    }
 
 
     public void addConsumer(Consumer consumer) {
