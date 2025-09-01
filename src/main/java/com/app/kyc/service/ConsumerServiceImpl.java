@@ -52,6 +52,8 @@ import javax.persistence.EntityManager;
 import javax.persistence.FlushModeType;
 import javax.persistence.PersistenceContext;
 
+import static java.util.stream.Collectors.toList;
+
 @Service
 @Slf4j
 public class ConsumerServiceImpl implements ConsumerService {
@@ -607,7 +609,7 @@ public class ConsumerServiceImpl implements ConsumerService {
     public Map<String, Object> getAllByServiceIdAndUserId(Long userId, Long serviceId) {
         List<ConsumerDto> consumers = consumerRepository.getAllByServiceIdAndUserId(0, userId, serviceId)
         .stream()
-        .map(c -> new ConsumerDto(c, null)).collect(Collectors.toList());
+        .map(c -> new ConsumerDto(c, null)).collect(toList());
 
         List<ConsumersHasSubscriptionsResponseDTO> consumersHasSubscriptionsResponseDTOS = new ArrayList<>();
 
@@ -734,7 +736,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                 anomalyStatus.add(AnomalyStatus.RESOLVED_SUCCESSFULLY);
                 Page<Anomaly> anomalyData = anomalyRepository.findAllByConsumerStatus(PaginationUtil.getPageable(params), consumerStatus, anomalyStatus);
                 pageAnomaly = anomalyData.stream()
-                        .map(a -> new AnomlyDto(a , 0)).collect(Collectors.toList());
+                        .map(a -> new AnomlyDto(a , 0)).collect(toList());
                 totalAnomaliesCount = anomalyData.getTotalElements();
 
 
@@ -746,7 +748,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                 anomalyStatus.add(AnomalyStatus.QUESTION_ANSWERED);
                 anomalyStatus.add(AnomalyStatus.RESOLUTION_SUBMITTED);
                 Page<Anomaly> anomalyData = anomalyRepository.findAllByConsumerStatus(PaginationUtil.getPageable(params), consumerStatus, anomalyStatus);
-                pageAnomaly = anomalyData.stream().map(a -> new AnomlyDto(a)).collect(Collectors.toList());
+                pageAnomaly = anomalyData.stream().map(a -> new AnomlyDto(a)).collect(toList());
                 totalAnomaliesCount = anomalyData.getTotalElements();
 
             }
@@ -759,7 +761,7 @@ public class ConsumerServiceImpl implements ConsumerService {
 
                 pageAnomaly = anomalyData
                 .stream()
-                .map(c -> new AnomlyDto(c,0)).collect(Collectors.toList());
+                .map(c -> new AnomlyDto(c,0)).collect(toList());
                 totalAnomaliesCount = anomalyData.getTotalElements();
             }
             else{
@@ -772,7 +774,7 @@ public class ConsumerServiceImpl implements ConsumerService {
 
                 pageAnomaly = anomalyData
                 .stream()
-                .map(c -> new AnomlyDto(c)).collect(Collectors.toList());
+                .map(c -> new AnomlyDto(c)).collect(toList());
                 totalAnomaliesCount = anomalyData.getTotalElements();
 
 
@@ -1798,7 +1800,7 @@ public class ConsumerServiceImpl implements ConsumerService {
         AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Incomplete Data");
 
         List<Consumer> tempConsumer = consumerRepository.findConsumerIdsByMsisdnAndConsumerStatusAndIdNumberAndIdTypeAndServiceProviderID(consumer.getMsisdn(), 0, consumer.getIdentificationType(), consumer.getIdentificationNumber(), consumer.getServiceProvider().getId());
-        List<Long> consumerIds = tempConsumer.stream().map(Consumer::getId).collect(Collectors.toList());
+        List<Long> consumerIds = tempConsumer.stream().map(Consumer::getId).collect(toList());
         List<Long> consumerAnomalies = consumerAnomalyRepository.findAnomaliesIdByConsumerAndAnomalyTypeId(consumerIds, anomalyType.getId());
 
         consumer.setIsConsistent(false);
@@ -1891,7 +1893,7 @@ public class ConsumerServiceImpl implements ConsumerService {
         List<Consumer> tempConsumer = consumerRepository.findConsumerIdsByMsisdnAndConsumerStatusAndIdNumberAndIdTypeAndServiceProviderID(
                 consumer.getMsisdn(), 0, consumer.getIdentificationType(),
                 consumer.getIdentificationNumber(), consumer.getServiceProvider().getId());
-        List<Long> consumerIds = tempConsumer.stream().map(Consumer::getId).collect(Collectors.toList());
+        List<Long> consumerIds = tempConsumer.stream().map(Consumer::getId).collect(toList());
 
         Anomaly tempAnomaly = new Anomaly();
 
@@ -2001,233 +2003,53 @@ public class ConsumerServiceImpl implements ConsumerService {
         return consumer;
     }
 
-    /*private void tagDuplicateAnomalies(Consumer consumer, User user) {
-        AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Duplicate Records");
 
-        Anomaly tempAnomaly = new Anomaly();
-        Anomaly anomaly = new Anomaly();
-        String note = "You can't have more than one active record per MSISDN: " + consumer.getMsisdn();
-        tempAnomaly.setNote("Duplicate Anomaly: " + note);
-
-        // get previous consumers
-        List<Consumer> duplicateConsumers = consumerRepository.findByMsisdnAndConsumerStatus(consumer.getMsisdn(), 0);
-        List<Long> duplicateConsumerIds = duplicateConsumers.stream().map(Consumer::getId).collect(Collectors.toList());
-
-        consumer.setIsConsistent(false);
-        consumer = consumerRepository.save(consumer);
-
-        // check anomaly of previous consumers
-        List<Long> consumerAnomalies = consumerAnomalyRepository
-                .findAnomaliesIdByConsumerAndAnomalyTypeId(duplicateConsumerIds, anomalyType.getId());
-
-        if (consumerAnomalies.isEmpty()) {
-            // make new anomaly
-            tempAnomaly.setStatus(AnomalyStatus.REPORTED);
-            tempAnomaly.setReportedOn(new Date());
-            tempAnomaly.setReportedBy(user);
-            tempAnomaly.getConsumers().remove(consumer);
-            tempAnomaly.addConsumer(consumer);
-            tempAnomaly.setUpdatedOn(new Date());
-            tempAnomaly.setAnomalyType(anomalyType);
-            tempAnomaly = anomalyRepository.save(tempAnomaly);
-
-            AnomalyTracking anomalyTracking = new AnomalyTracking(
-                    tempAnomaly, new Date(), AnomalyStatus.REPORTED, "",
-                    user.getFirstName() + " " + user.getLastName(), tempAnomaly.getUpdatedOn()
-            );
-            anomalyTrackingRepository.save(anomalyTracking);
-
-            // ✅ FIX: check before using get(0)
-            List<ConsumerAnomaly> links =
-                    consumerAnomalyRepository.findByAnomaly_IdAndConsumer_Id(tempAnomaly.getId(), consumer.getId());
-
-            if (links == null || links.isEmpty()) {
-                ConsumerAnomaly link = new ConsumerAnomaly();
-                link.setAnomaly(tempAnomaly);
-                link.setConsumer(consumer);
-                link.setNotes("Duplicate Anomaly: " + note);
-                consumerAnomalyRepository.save(link);
-            } else {
-                ConsumerAnomaly link = links.get(0);
-                link.setNotes("Duplicate Anomaly: " + note);
-                consumerAnomalyRepository.save(link);
-            }
-        } else {
-            //load anomaly and tag to new consumer
-            tempAnomaly = anomalyRepository.findByIdAndAnomalyType_Id(consumerAnomalies, anomalyType.getId());
-            if (!Objects.isNull(tempAnomaly)) {
-                ConsumerAnomaly consumerAnomaly = new ConsumerAnomaly();
-                anomaly.setId(tempAnomaly.getId());
-                anomaly.setNote(tempAnomaly.getNote());
-                anomaly.setStatus(tempAnomaly.getStatus());
-                anomaly.setReportedOn(tempAnomaly.getReportedOn());
-                anomaly.setReportedBy(tempAnomaly.getReportedBy());
-                anomaly.addConsumer(consumer);
-                anomaly.setAnomalyType(tempAnomaly.getAnomalyType());
-                anomaly.setUpdatedOn(tempAnomaly.getUpdatedOn());
-
-                consumerAnomaly.setAnomaly(anomaly);
-                consumerAnomaly.setConsumer(consumer);
-                consumerAnomaly.setNotes("Duplicate Anomaly: " + note);
-                consumerAnomalyRepository.save(consumerAnomaly);
-            }
-        }
-
-        // tag anomaly to all duplicate consumers
-        for (Consumer temp : duplicateConsumers) {
-            List<ConsumerAnomaly> consumerAnomaly =
-                    consumerAnomalyRepository.findByAnomaly_AnomalyTypeAndConsumer(anomalyType, temp);
-            if (consumerAnomaly == null || consumerAnomaly.isEmpty()) {
-                ConsumerAnomaly tempConsumerAnomaly = new ConsumerAnomaly();
-                tempConsumerAnomaly.setAnomaly(tempAnomaly);
-                tempConsumerAnomaly.setConsumer(temp);
-                tempConsumerAnomaly.setNotes("Duplicate Anomaly: " + note);
-                consumerAnomalyRepository.save(tempConsumerAnomaly);
-            }
-        }
-
-        consumerRepository.markConsumersConsistent(0, duplicateConsumerIds);
-    }*/
-
-
-
-    /*private void tagDuplicateAnomalies(Consumer consumer, User user) {
-        // ----- Guard 1: skip if this consumer MSISDN is blank/null -----
-        if (consumer == null || isBlank(consumer.getMsisdn())) {
-            return; // No duplicate anomaly for blank MSISDN
-        }
-
-        final String msisdn = consumer.getMsisdn().trim();
-
-        // Pull ACTIVE duplicates with the same MSISDN (exclude blanks at DB, and status=0)
-        // Prefer this repo method; it already exists in your repo:
-        List<Consumer> duplicateConsumers = consumerRepository.findByMsisdnAndConsumerStatus(msisdn, 0);
-
-        // Ensure the current consumer is saved and included in the evaluation
-        consumer.setIsConsistent(false);
-        consumer = consumerRepository.save(consumer);
-
-        // If current consumer isn’t in the fetched list yet, add it (when just created/updated)
-        Consumer finalConsumer = consumer;
-        boolean currentIncluded = duplicateConsumers.stream().anyMatch(c -> Objects.equals(c.getId(), finalConsumer.getId()));
-        if (!currentIncluded) {
-            duplicateConsumers.add(consumer);
-        }
-
-        // ----- Only proceed if we truly have duplicates (>= 2 ACTIVE consumers with same MSISDN) -----
-        if (duplicateConsumers.size() < 2) {
-            return; // do NOT report anomaly for a single active record
-        }
-
-        // (Optional extra safety; usually zero since msisdn filter used)
-        long blankMsisdnCount = duplicateConsumers.stream().map(Consumer::getMsisdn).filter(this::isBlank).count();
-        if (blankMsisdnCount >= 2) {
-            return; // don’t create duplicate anomaly for multiple blanks
-        }
-
-        // Build IDs for downstream calls
-        List<Long> duplicateConsumerIds = duplicateConsumers.stream().map(Consumer::getId).collect(Collectors.toList());
-
-        AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Duplicate Records");
-        final String note = "You can't have more than one active record per MSISDN: " + msisdn;
-
-        // Check existing anomaly of this type for any of these consumers
-        List<Long> consumerAnomalies = consumerAnomalyRepository
-                .findAnomaliesIdByConsumerAndAnomalyTypeId(duplicateConsumerIds, anomalyType.getId());
-
-        Anomaly targetAnomaly;
-        Date now = new Date();
-
-        if (consumerAnomalies == null || consumerAnomalies.isEmpty()) {
-            // Create a new anomaly
-            targetAnomaly = new Anomaly();
-            targetAnomaly.setNote("Duplicate Anomaly: " + note);
-            targetAnomaly.setStatus(AnomalyStatus.REPORTED);
-            targetAnomaly.setReportedOn(now);
-            targetAnomaly.setReportedBy(user);
-            targetAnomaly.setUpdatedOn(now);
-            targetAnomaly.setAnomalyType(anomalyType);
-            targetAnomaly = anomalyRepository.save(targetAnomaly);
-
-            // Tracking with hard-coded updatedBy
-            AnomalyTracking anomalyTracking = new AnomalyTracking(
-                    targetAnomaly, now, AnomalyStatus.REPORTED, "",
-                    "System for Anomaly", targetAnomaly.getUpdatedOn()
-            );
-            anomalyTrackingRepository.save(anomalyTracking);
-        } else {
-            // Load the existing anomaly for this group
-            targetAnomaly = anomalyRepository.findByIdAndAnomalyType_Id(consumerAnomalies, anomalyType.getId());
-            if (targetAnomaly == null) return; // nothing to do
-        }
-
-        // ----- Link ALL involved consumers (including current) to the anomaly (idempotent) -----
-        for (Consumer cons : duplicateConsumers) {
-            List<ConsumerAnomaly> links =
-                    consumerAnomalyRepository.findByAnomaly_IdAndConsumer_Id(targetAnomaly.getId(), cons.getId());
-
-            if (links == null || links.isEmpty()) {
-                ConsumerAnomaly link = new ConsumerAnomaly();
-                link.setAnomaly(targetAnomaly);
-                link.setConsumer(cons);
-                link.setNotes("Duplicate Anomaly: " + note);
-                consumerAnomalyRepository.save(link);
-            } else {
-                ConsumerAnomaly link = links.get(0);
-                // Update note to latest phrasing (optional)
-                link.setNotes("Duplicate Anomaly: " + note);
-                consumerAnomalyRepository.save(link);
-            }
-        }
-
-        // Mark all involved consumers as inconsistent (include current)
-        consumerRepository.markConsumersConsistent(0, duplicateConsumerIds);
-    }*/
-
-    // helper (already in your class)
 
     private static boolean hasText(String s) { return s != null && !s.trim().isEmpty(); }
     private String norm(String s) { return s == null ? null : s.trim(); }
 
-    @Transactional // NOT readOnly
+
+
+    @Transactional // MUST be writable (not readOnly)
     private void tagDuplicateAnomalies(Consumer consumer, User user) {
         if (consumer == null) return;
 
-        // 1) Hard guards
-        String msisdn = norm(consumer.getMsisdn());
-        if (!hasText(msisdn)) return; // no anomaly for blank msisdn
+        // normalize
+        final String msisdnRaw = consumer.getMsisdn();
+        final String msisdn = msisdnRaw == null ? null : msisdnRaw.trim();
+        final boolean hasMsisdn = (msisdn != null && !msisdn.isEmpty());
 
-        // 2) Work with ACTIVE only and normalized key
-        List<Consumer> sameMsisdnActive =
-                consumerRepository.findByMsisdnAndConsumerStatus(msisdn, 0);
+        // Build candidate set (ACTIVE only)
+        final List<Consumer> candidates = hasMsisdn
+                ? consumerRepository.findActiveByMsisdnNormalized(msisdn)
+                : consumerRepository.findActiveWithBlankMsisdn();
 
-        // Ensure current consumer is included in evaluation
-        boolean included = sameMsisdnActive.stream().anyMatch(c -> Objects.equals(c.getId(), consumer.getId()));
-        if (!included) sameMsisdnActive.add(consumer);
+        // Ensure current consumer participates
+        if (candidates.stream().noneMatch(c -> Objects.equals(c.getId(), consumer.getId()))) {
+            candidates.add(consumer);
+        }
 
-        // 3) True duplicate only if >= 2 ACTIVE
-        if (sameMsisdnActive.size() < 2) return;
+        // True duplicate only if >= 2 ACTIVE in the set
+        if (candidates.size() < 2) return;
 
-        // 4) Optional guard: if your data may have multiple blanks (shouldn’t hit here, but safe)
-        long blankCnt = sameMsisdnActive.stream().map(Consumer::getMsisdn).filter(s -> !hasText(s)).count();
-        if (blankCnt >= 2) return;
+        // Note text (no value shown for blank)
+        final String NOTE_BASE = "You can't have more than one active record per MSISDN:";
+        final String note = hasMsisdn ? NOTE_BASE + " " + msisdn : NOTE_BASE;
 
-        // 5) Mark all involved inconsistent
-        sameMsisdnActive.forEach(c -> c.setIsConsistent(false));
-        consumerRepository.save(consumer); // persist current at least
-        List<Long> ids = sameMsisdnActive.stream().map(Consumer::getId).collect(Collectors.toList());
+        // Mark all involved inconsistent; persist current at least
+        candidates.forEach(c -> c.setIsConsistent(false));
+        consumerRepository.save(consumer);
 
-        // 6) Find/create anomaly
-        AnomalyType type = anomalyTypeRepository.findFirstByName("Duplicate Records");
-        String note = "You can't have more than one active record per MSISDN: " + msisdn;
+        final List<Long> ids = candidates.stream().map(Consumer::getId).collect(Collectors.toList());
 
-        List<Long> existingAnomalyIds =
+        // Find/create anomaly
+        final AnomalyType type = anomalyTypeRepository.findFirstByName("Duplicate Records");
+        final List<Long> existing =
                 consumerAnomalyRepository.findAnomaliesIdByConsumerAndAnomalyTypeId(ids, type.getId());
 
+        final Date now = new Date();
         Anomaly anomaly;
-        Date now = new Date();
-
-        if (existingAnomalyIds == null || existingAnomalyIds.isEmpty()) {
+        if (existing == null || existing.isEmpty()) {
             anomaly = new Anomaly();
             anomaly.setNote("Duplicate Anomaly: " + note);
             anomaly.setStatus(AnomalyStatus.REPORTED);
@@ -2237,18 +2059,17 @@ public class ConsumerServiceImpl implements ConsumerService {
             anomaly.setAnomalyType(type);
             anomaly = anomalyRepository.save(anomaly);
 
-            // Tracking
             anomalyTrackingRepository.save(
                     new AnomalyTracking(anomaly, now, AnomalyStatus.REPORTED, "",
                             "System for Anomaly", anomaly.getUpdatedOn())
             );
         } else {
-            anomaly = anomalyRepository.findByIdAndAnomalyType_Id(existingAnomalyIds, type.getId());
+            anomaly = anomalyRepository.findByIdAndAnomalyType_Id(existing, type.getId());
             if (anomaly == null) return;
         }
 
-        // 7) Idempotent linking (IMPORTANT: create if missing)
-        for (Consumer c : sameMsisdnActive) {
+        // **Create** links if missing (don’t only update)
+        for (Consumer c : candidates) {
             List<ConsumerAnomaly> links =
                     consumerAnomalyRepository.findByAnomaly_IdAndConsumer_Id(anomaly.getId(), c.getId());
             if (links == null || links.isEmpty()) {
@@ -2264,7 +2085,7 @@ public class ConsumerServiceImpl implements ConsumerService {
             }
         }
 
-        // 8) DB flag all involved
+        // DB flag
         consumerRepository.markConsumersConsistent(0, ids);
     }
 
@@ -2280,7 +2101,7 @@ public class ConsumerServiceImpl implements ConsumerService {
 
         //previously inserted consumer
         List<Consumer> duplicateConsumers = consumerRepository.findByIdentificationTypeAndIdentificationNumberAndServiceProviderAndConsumerStatus(consumer.getIdentificationType(), consumer.getIdentificationNumber(), consumer.getServiceProvider(), 0);
-        List<Long> consumerIds = duplicateConsumers.stream().map(Consumer::getId).collect(Collectors.toList());
+        List<Long> consumerIds = duplicateConsumers.stream().map(Consumer::getId).collect(toList());
 
         Anomaly tempAnomaly = new Anomaly();
         //previously tagged anomalies
@@ -2468,7 +2289,7 @@ public class ConsumerServiceImpl implements ConsumerService {
         // 5) Mark inconsistent & persist current
         sameKeyActive.forEach(c -> c.setIsConsistent(false));
         consumerRepository.save(consumer);
-        List<Long> ids = sameKeyActive.stream().map(Consumer::getId).collect(Collectors.toList());
+        List<Long> ids = sameKeyActive.stream().map(Consumer::getId).collect(toList());
 
         // 6) Find/create anomaly
         List<Long> existingAnomalyIds =
@@ -2631,7 +2452,7 @@ public class ConsumerServiceImpl implements ConsumerService {
 //        List<Consumer> previousConsumers = consumerRepository.findConsumerIdsByMsisdnAndConsumerStatusAndIdNumberAndIdTypeAndServiceProviderID(
 //            consumer.getMsisdn(), 1, consumer.getIdentificationType(),
 //            consumer.getIdentificationNumber(), consumer.getServiceProvider().getId());
-        List<Long> consumerIds = tempConsumer.stream().map(Consumer::getId).collect(Collectors.toList());
+        List<Long> consumerIds = tempConsumer.stream().map(Consumer::getId).collect(toList());
         List<Long> consumerAnomalies = consumerAnomalyRepository.findAnomaliesIdByConsumer(consumerIds);
 
         if (consumerAnomalies.size() ==0 && consumerIds.size() == 1) {
