@@ -17,6 +17,12 @@ public class Filter {
     // NEW: "ALL" | "CONSISTENT" | "INCONSISTENT"
     @JsonAlias({"type"})
     private String type;
+    
+    @JsonAlias({"anomalyStatus"})
+    private AnomalyStatus anomalyStatus;
+    
+    @JsonAlias({"anomalyType"})
+    private Long anomalyType;
 
     public Boolean getConsistent() { return consistent; }
     public void setConsistent(Boolean consistent) { this.consistent = consistent; }
@@ -29,4 +35,10 @@ public class Filter {
 
     public String getType() { return type; }
     public void setType(String type) { this.type = type; }
+    
+	public AnomalyStatus getAnomalyStatus() {return anomalyStatus;}
+	public void setAnomalyStatus(AnomalyStatus anomalyStatus) {this.anomalyStatus = anomalyStatus;}
+	
+	public Long getAnomalyType() {return anomalyType;}
+	public void setAnomalyType(Long anomalyType) {this.anomalyType = anomalyType;}
 }
