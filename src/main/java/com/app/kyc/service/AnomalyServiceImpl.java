@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import com.app.kyc.repository.AnomalyRepository;
 import com.app.kyc.repository.AnomalyTrackingRepository;
 import com.app.kyc.repository.ConsumerRepository;
+import com.app.kyc.repository.NotificationJobRepository;
 import com.app.kyc.request.UpdateAnomalyStatusRequest;
 import com.app.kyc.response.AnomalyDetailsResponseDTO;
 import com.app.kyc.util.PaginationUtil;
@@ -43,6 +44,9 @@ public class AnomalyServiceImpl implements AnomalyService
 
    @Autowired
    private ConsumerAnomalyRepository consumerAnomalyRepository;
+   
+   @Autowired
+   private NotificationJobRepository notificationJobRepository;
 
 
    public AnomlyDto getAnomalyById(Long id)
@@ -174,53 +178,78 @@ public class AnomalyServiceImpl implements AnomalyService
       return anomaliesWithCount;
    }
 
+//   @Override
+//   public void updateAnomaly(UpdateAnomalyStatusRequest updateAnomalyStatusRequest, User user)
+//   {
+//      Anomaly anomaly = anomalyRepository.findById(updateAnomalyStatusRequest.getAnomalyId()).get();
+//      AnomalyTracking anomalyTracking = new AnomalyTracking(anomaly, new Date(), updateAnomalyStatusRequest.getStatus(), updateAnomalyStatusRequest.getNote(), user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn());
+//      anomalyTrackingRepository.save(anomalyTracking);
+//
+//      anomaly.setStatus(updateAnomalyStatusRequest.getStatus());
+//      anomaly.setUpdatedOn(new Date());
+//      anomalyRepository.save(anomaly);
+//      List<Consumer> consumers = consumerRepository.getAllByAnomalies(anomaly);
+//      Consumer consumer = consumers.get(0);
+//      String message = "";
+//      boolean spUsrCheck = false;
+//      if(updateAnomalyStatusRequest.getStatus().equals(AnomalyStatus.WITHDRAWN)){
+//         message = "The anomaly for " + consumer.getFirstName() + " "  + consumer.getLastName() + " has been marked as withdrawn";
+//         spUsrCheck = true;
+//
+//      }
+//      else if(updateAnomalyStatusRequest.getStatus().equals(AnomalyStatus.RESOLVED_SUCCESSFULLY)){
+//         message = "The anomaly for " + consumer.getFirstName() + " "  + consumer.getLastName() + " has been marked as resolved";
+//         spUsrCheck = true;
+//      }
+//      else if(updateAnomalyStatusRequest.getStatus().equals(AnomalyStatus.QUESTION_ANSWERED)){
+//         message = "Question has been answered for anomaly " + consumer.getFirstName() + " "  + consumer.getLastName();
+//         spUsrCheck = true;
+//
+//      }
+//      else if(updateAnomalyStatusRequest.getStatus().equals(AnomalyStatus.QUESTION_SUBMITTED)){
+//         message = consumer.getServiceProvider().getName() + " has raised a question for anomaly reported on " + consumer.getFirstName() + " " + consumer.getLastName();
+//      }
+//      else if(updateAnomalyStatusRequest.getStatus().equals(AnomalyStatus.RESOLUTION_SUBMITTED)){
+//         message = consumer.getServiceProvider().getName() + " has raised a resolution for anomaly reported on " + consumer.getFirstName() + " " + consumer.getLastName();
+//      }
+//      else if(updateAnomalyStatusRequest.getStatus().equals(AnomalyStatus.UNDER_INVESTIGATION)){
+//         message = consumer.getServiceProvider().getName() + " has raised a under investigation for anomaly reported on " +consumer.getFirstName() + " " + consumer.getLastName();
+//      }
+//      if(spUsrCheck){
+//         List<User> spUsers = userService.getByServiceProviderId(consumer.getServiceProvider().getId());
+//         
+//         for (User u : spUsers) {
+//            notificationService.addNotification(message, u, NotificationType.ANOMALY_REPORTED, anomaly.getId());
+//         }
+//      }
+//      else{
+//         notificationService.addNotification(message,anomaly.getReportedBy(), NotificationType.ANOMALY_REPORTED, anomaly.getId());
+//      }
+//   }
+   
    @Override
-   public void updateAnomaly(UpdateAnomalyStatusRequest updateAnomalyStatusRequest, User user)
-   {
-      Anomaly anomaly = anomalyRepository.findById(updateAnomalyStatusRequest.getAnomalyId()).get();
-      AnomalyTracking anomalyTracking = new AnomalyTracking(anomaly, new Date(), updateAnomalyStatusRequest.getStatus(), updateAnomalyStatusRequest.getNote(), user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn());
-      anomalyTrackingRepository.save(anomalyTracking);
+   public void updateAnomaly(UpdateAnomalyStatusRequest request, User user) {
+       Anomaly anomaly = anomalyRepository.findById(request.getAnomalyId())
+               .orElseThrow(() -> new RuntimeException("Anomaly not found"));
 
-      anomaly.setStatus(updateAnomalyStatusRequest.getStatus());
-      anomaly.setUpdatedOn(new Date());
-      anomalyRepository.save(anomaly);
-      List<Consumer> consumers = consumerRepository.getAllByAnomalies(anomaly);
-      Consumer consumer = consumers.get(0);
-      String message = "";
-      boolean spUsrCheck = false;
-      if(updateAnomalyStatusRequest.getStatus().equals(AnomalyStatus.WITHDRAWN)){
-         message = "The anomaly for " + consumer.getFirstName() + " "  + consumer.getLastName() + " has been marked as withdrawn";
-         spUsrCheck = true;
+       // Save anomaly tracking
+       AnomalyTracking anomalyTracking = new AnomalyTracking(
+               anomaly,
+               new Date(),
+               request.getStatus(),
+               request.getNote(),
+               user.getFirstName() + " " + user.getLastName(),
+               anomaly.getUpdatedOn()
+       );
+       anomalyTrackingRepository.save(anomalyTracking);
 
-      }
-      else if(updateAnomalyStatusRequest.getStatus().equals(AnomalyStatus.RESOLVED_SUCCESSFULLY)){
-         message = "The anomaly for " + consumer.getFirstName() + " "  + consumer.getLastName() + " has been marked as resolved";
-         spUsrCheck = true;
-      }
-      else if(updateAnomalyStatusRequest.getStatus().equals(AnomalyStatus.QUESTION_ANSWERED)){
-         message = "Question has been answered for anomaly " + consumer.getFirstName() + " "  + consumer.getLastName();
-         spUsrCheck = true;
+       // Update anomaly
+       anomaly.setStatus(request.getStatus());
+       anomaly.setUpdatedOn(new Date());
+       anomalyRepository.save(anomaly);
 
-      }
-      else if(updateAnomalyStatusRequest.getStatus().equals(AnomalyStatus.QUESTION_SUBMITTED)){
-         message = consumer.getServiceProvider().getName() + " has raised a question for anomaly reported on " + consumer.getFirstName() + " " + consumer.getLastName();
-      }
-      else if(updateAnomalyStatusRequest.getStatus().equals(AnomalyStatus.RESOLUTION_SUBMITTED)){
-         message = consumer.getServiceProvider().getName() + " has raised a resolution for anomaly reported on " + consumer.getFirstName() + " " + consumer.getLastName();
-      }
-      else if(updateAnomalyStatusRequest.getStatus().equals(AnomalyStatus.UNDER_INVESTIGATION)){
-         message = consumer.getServiceProvider().getName() + " has raised a under investigation for anomaly reported on " +consumer.getFirstName() + " " + consumer.getLastName();
-      }
-      if(spUsrCheck){
-         List<User> spUsers = userService.getByServiceProviderId(consumer.getServiceProvider().getId());
-         
-         for (User u : spUsers) {
-            notificationService.addNotification(message, u, NotificationType.ANOMALY_REPORTED, anomaly.getId());
-         }
-      }
-      else{
-         notificationService.addNotification(message,anomaly.getReportedBy(), NotificationType.ANOMALY_REPORTED, anomaly.getId());
-      }
+       //Save job (async processing later)
+       notificationJobRepository.save(new NotificationJob(anomaly.getId(), request.getStatus()));
    }
 
    @Override
@@ -296,8 +325,7 @@ public class AnomalyServiceImpl implements AnomalyService
 
    @Override
    public int getAnomaliesReportedByServiceProvidersAndDates(List<Long> serviceProviderIds, List<AnomalyStatus> statuses, Date startDate, Date endDate) {
-      //return (int) anomalyRepository.countDistinctByConsumers_ServiceProvider_IdInAndStatusInAndReportedOnBetween(serviceProviderIds ,statuses ,startDate, endDate);
-      return (int) anomalyRepository.countDistinctMsisdns(serviceProviderIds ,statuses ,startDate, endDate);
+      return (int) anomalyRepository.countDistinctByConsumers_ServiceProvider_IdInAndStatusInAndReportedOnBetween(serviceProviderIds ,statuses ,startDate, endDate);
    }
 
    @Override
