@@ -33,16 +33,6 @@ public interface ConsumerRepository extends JpaRepository<Consumer, Long>
             "   note, id from anomalies) as b on a.id = b.consumers_services_id) as g on u.id = reported_by_id", nativeQuery = true)
     List<FlaggedConsumersListDTO> getAllFlaggedConsumers();
 
-    // Non-blank, normalized MSISDN
-    @Query(value = "SELECT * FROM consumers c WHERE c.consumer_status = 0 AND c.msisdn IS NOT NULL AND TRIM(c.msisdn) = TRIM(:msisdn)", nativeQuery = true)
-    List<Consumer> findActiveByMsisdnNormalized(@Param("msisdn") String msisdn);
-
-    // **Blank / NULL** MSISDN set (active only)
-    @Query(value = "SELECT * FROM consumers c WHERE c.consumer_status = 0 AND (c.msisdn IS NULL OR TRIM(c.msisdn) = '')", nativeQuery = true)
-    List<Consumer> findActiveWithBlankMsisdn();
-
-
-
 
     @Query("select count(c) from Consumer c")
     long countAllUnsafe(); // optional
