@@ -718,7 +718,7 @@ public class ConsumerServiceImpl implements ConsumerService {
     }
 */
 
-    @Override
+   /* @Override
     public Map<String, Object> getAllFlaggedConsumers2(String params) throws JsonMappingException, JsonProcessingException {
         //List<AnomlyDto> pageAnomaly = anomalyRepository.findAll(PaginationUtil.getPageable(params)).stream().map(a -> new AnomlyDto(a)).collect(Collectors.toList());
 
@@ -807,8 +807,167 @@ System.out.println("Get all flagged ");
         Map<String, Object> anomaliesWithCount = new HashMap<String, Object>();
         anomaliesWithCount.put("data", pageAnomaly);
         anomaliesWithCount.put("count", totalAnomaliesCount);
+        pageAnomaly.forEach(System.out::println);
+        return anomaliesWithCount;
+    }*/
+
+    @Override
+    public Map<String, Object> getAllFlaggedConsumers2(String params)
+            throws JsonMappingException, JsonProcessingException {
+
+        System.out.println("Get all flagged");
+
+        final Pagination pagination = PaginationUtil.getFilterObject(params);
+        final Pageable pageable     = PaginationUtil.getPageable(params);
+
+        final List<Integer> consumerStatus = new ArrayList<>();
+        final List<AnomalyStatus> anomalyStatus = new ArrayList<>();
+        List<AnomlyDto> pageAnomaly;
+        long totalAnomaliesCount;
+
+        final boolean noSpFilter = pagination != null
+                && pagination.getFilter() != null
+                && (pagination.getFilter().getServiceProviderID() == null
+                || pagination.getFilter().getServiceProviderID() == -1);
+
+        final boolean isResolved = pagination != null
+                && pagination.getFilter() != null
+                && Boolean.TRUE.equals(pagination.getFilter().getIsResolved());
+
+        if (noSpFilter) {
+            if (isResolved) {
+                consumerStatus.add(1);
+                anomalyStatus.add(AnomalyStatus.RESOLVED_SUCCESSFULLY);
+
+                Page<Anomaly> anomalyData =
+                        anomalyRepository.findAllByConsumerStatus(pageable, consumerStatus, anomalyStatus);
+
+                pageAnomaly = anomalyData.stream()
+                        .map(a -> new AnomlyDto(a, 0))
+                        .collect(Collectors.toList());
+                totalAnomaliesCount = anomalyData.getTotalElements();
+
+            } else {
+                anomalyStatus.add(AnomalyStatus.REPORTED);
+                anomalyStatus.add(AnomalyStatus.QUESTION_SUBMITTED);
+                anomalyStatus.add(AnomalyStatus.UNDER_INVESTIGATION);
+                anomalyStatus.add(AnomalyStatus.QUESTION_ANSWERED);
+                anomalyStatus.add(AnomalyStatus.RESOLUTION_SUBMITTED);
+
+                Page<Anomaly> anomalyData =
+                        anomalyRepository.findAllByConsumersAll(pageable, anomalyStatus);
+
+                pageAnomaly = anomalyData.stream()
+                        .map(AnomlyDto::new)
+                        .collect(Collectors.toList());
+                totalAnomaliesCount = anomalyData.getTotalElements();
+            }
+        } else {
+            final Long spId = pagination.getFilter().getServiceProviderID();
+
+            if (isResolved) {
+                consumerStatus.add(1);
+                anomalyStatus.add(AnomalyStatus.RESOLVED_SUCCESSFULLY);
+
+                Page<Anomaly> anomalyData =
+                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus, spId, anomalyStatus);
+
+                pageAnomaly = anomalyData.stream()
+                        .map(a -> new AnomlyDto(a, 0))
+                        .collect(Collectors.toList());
+                totalAnomaliesCount = anomalyData.getTotalElements();
+
+            } else {
+                consumerStatus.add(0);
+                anomalyStatus.add(AnomalyStatus.REPORTED);
+                anomalyStatus.add(AnomalyStatus.QUESTION_SUBMITTED);
+                anomalyStatus.add(AnomalyStatus.UNDER_INVESTIGATION);
+                anomalyStatus.add(AnomalyStatus.QUESTION_ANSWERED);
+                anomalyStatus.add(AnomalyStatus.RESOLUTION_SUBMITTED);
+
+                Page<Anomaly> anomalyData =
+                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus, spId, anomalyStatus);
+
+                pageAnomaly = anomalyData.stream()
+                        .map(AnomlyDto::new)
+                        .collect(Collectors.toList());
+                totalAnomaliesCount = anomalyData.getTotalElements();
+            }
+        }
+
+        if (pageAnomaly.isEmpty()) {
+            Map<String, Object> empty = new HashMap<>();
+            empty.put("data", Collections.emptyList());
+            empty.put("count", 0L);
+            return empty;
+        }
+
+        // --------- HYDRATE CONSUMERS VIA ConsumerAnomaly (fix for Duplicate Records showing []) ---------
+
+        // 1) Collect anomaly ids from the page
+        List<Long> anomalyIds = pageAnomaly.stream()
+                .map(AnomlyDto::getId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+
+        // 2) Bulk load all ConsumerAnomaly links (with Consumer fetched)
+        List<ConsumerAnomaly> links = consumerAnomalyRepository.findAllByAnomalyIdInFetchConsumer(anomalyIds);
+
+        // 3) Build maps for quick patching
+        //    a) anomalyId -> list of ConsumerDto (built from CA.consumer)
+        Map<Long, List<ConsumerDto>> consumersByAnomalyId = links.stream()
+                .collect(Collectors.groupingBy(
+                        ca -> ca.getAnomaly().getId(),
+                        Collectors.mapping(ca -> {
+                            ConsumerDto cd = new ConsumerDto(ca.getConsumer(), Collections.emptyList());
+                            if (cd.getFirstName() == null) cd.setFirstName("");
+                            if (cd.getLastName()  == null) cd.setLastName("");
+                            if (ca.getNotes() != null) cd.setNotes(ca.getNotes());
+                            return cd;
+                        }, Collectors.toList())
+                ));
+
+        //    b) anomalyId -> (consumerId -> notes)
+        Map<Long, Map<Long, String>> notesByAnomalyThenConsumer = new HashMap<>();
+        for (ConsumerAnomaly ca : links) {
+            final Long aId = ca.getAnomaly().getId();
+            final Long cId = ca.getConsumer().getId();
+            if (aId == null || cId == null) continue;
+            notesByAnomalyThenConsumer
+                    .computeIfAbsent(aId, k -> new HashMap<>())
+                    .put(cId, ca.getNotes());
+        }
+
+        // 4) Patch each AnomlyDto
+        for (AnomlyDto dto : pageAnomaly) {
+            List<ConsumerDto> fromLinks = consumersByAnomalyId.get(dto.getId());
+
+            if (dto.getConsumers() == null || dto.getConsumers().isEmpty()) {
+                // If entity-side collection was empty, hydrate entirely from links
+                if (fromLinks != null) dto.setConsumers(fromLinks);
+            } else {
+                // Normalize names and apply notes from CA map (avoid per-row queries)
+                Map<Long, String> notesForAnomaly = notesByAnomalyThenConsumer.get(dto.getId());
+                for (ConsumerDto c : dto.getConsumers()) {
+                    if (c.getFirstName() == null) c.setFirstName("");
+                    if (c.getLastName()  == null) c.setLastName("");
+                    if (notesForAnomaly != null && c.getId() != null) {
+                        String note = notesForAnomaly.get(c.getId());
+                        if (note != null) c.setNotes(note);
+                    }
+                }
+            }
+        }
+
+        // (Optional) debug
+        pageAnomaly.forEach(System.out::println);
+
+        Map<String, Object> anomaliesWithCount = new HashMap<>();
+        anomaliesWithCount.put("data", pageAnomaly);
+        anomaliesWithCount.put("count", totalAnomaliesCount);
         return anomaliesWithCount;
     }
+
 
     public List<List<String>> loadConsumers(Long serviceProviderId, User user) {
         ServiceProvider serviceProvider = serviceProviderRepository.findById(serviceProviderId).get();

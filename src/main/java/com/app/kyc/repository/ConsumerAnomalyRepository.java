@@ -1,5 +1,6 @@
 package com.app.kyc.repository;
 
+import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 
@@ -23,6 +24,9 @@ public interface ConsumerAnomalyRepository extends JpaRepository<ConsumerAnomaly
 
 //    @Query(value = "select anomaly_id from consumers_anomalies where consumer_id IN (:consumerIds)",  nativeQuery = true)
 //    List<Long> findAnomaliesIdByConsumer(@Param("consumerIds") List<Long> consumerIds);
+
+    @Query(" select ca from ConsumerAnomaly ca join fetch ca.consumer c where ca.anomaly.id in :anomalyIds")
+    List<ConsumerAnomaly> findAllByAnomalyIdInFetchConsumer(@Param("anomalyIds") Collection<Long> anomalyIds);
 
     @Query(value = "select a.id from consumers_anomalies ac join anomalies a on ac.anomaly_id = a.id where ac.consumer_id in (:consumerIds) AND a.status NOT IN (5, 6);",  nativeQuery = true)
     List<Long> findAnomaliesIdByConsumer(@Param("consumerIds") List<Long> consumerIds);
