@@ -721,15 +721,18 @@ public class ConsumerServiceImpl implements ConsumerService {
     @Override
     public Map<String, Object> getAllFlaggedConsumers2(String params) throws JsonMappingException, JsonProcessingException {
         //List<AnomlyDto> pageAnomaly = anomalyRepository.findAll(PaginationUtil.getPageable(params)).stream().map(a -> new AnomlyDto(a)).collect(Collectors.toList());
+
+System.out.println("Get all flagged ");
         Pagination pagination = PaginationUtil.getFilterObject(params);
         List<Integer> consumerStatus = new ArrayList<>();
-        consumerStatus.add(0);
+       // consumerStatus.add(0);
         List<AnomlyDto> pageAnomaly = null;
         List<AnomalyStatus> anomalyStatus = new ArrayList<>();
         long totalAnomaliesCount = 0L;
 
         if (Objects.nonNull(pagination.getFilter()) && (Objects.isNull(pagination.getFilter().getServiceProviderID()) || pagination.getFilter().getServiceProviderID() == -1)) {
             if(pagination.getFilter().getIsResolved()){
+                System.out.println("Consumer status is "+consumerStatus);
                 consumerStatus.add(1);
                 anomalyStatus.add(AnomalyStatus.RESOLVED_SUCCESSFULLY);
                 Page<Anomaly> anomalyData = anomalyRepository.findAllByConsumerStatus(PaginationUtil.getPageable(params), consumerStatus, anomalyStatus);
@@ -740,12 +743,15 @@ public class ConsumerServiceImpl implements ConsumerService {
 
             }
             else{
+                System.out.println("Consumer status is one "+consumerStatus);
                 anomalyStatus.add(AnomalyStatus.REPORTED);
                 anomalyStatus.add(AnomalyStatus.QUESTION_SUBMITTED);
                 anomalyStatus.add(AnomalyStatus.UNDER_INVESTIGATION);
                 anomalyStatus.add(AnomalyStatus.QUESTION_ANSWERED);
                 anomalyStatus.add(AnomalyStatus.RESOLUTION_SUBMITTED);
-                Page<Anomaly> anomalyData = anomalyRepository.findAllByConsumerStatus(PaginationUtil.getPageable(params), consumerStatus, anomalyStatus);
+
+
+                Page<Anomaly> anomalyData = anomalyRepository.findAllByConsumersAll(PaginationUtil.getPageable(params), anomalyStatus);
                 pageAnomaly = anomalyData.stream().map(a -> new AnomlyDto(a)).collect(Collectors.toList());
                 totalAnomaliesCount = anomalyData.getTotalElements();
 
@@ -753,6 +759,7 @@ public class ConsumerServiceImpl implements ConsumerService {
         }
         else {
             if(pagination.getFilter().getIsResolved()){
+                System.out.println("Consumer status is two"+consumerStatus);
                 consumerStatus.add(1);
                 anomalyStatus.add(AnomalyStatus.RESOLVED_SUCCESSFULLY);
                 Page<Anomaly> anomalyData = anomalyRepository.findAllByConsumerStatusAndServiceProviderId(PaginationUtil.getPageable(params), consumerStatus, pagination.getFilter().getServiceProviderID(), anomalyStatus);
@@ -763,6 +770,8 @@ public class ConsumerServiceImpl implements ConsumerService {
                 totalAnomaliesCount = anomalyData.getTotalElements();
             }
             else{
+                consumerStatus.add(0);
+                System.out.println("Consumer status is three"+consumerStatus);
                 anomalyStatus.add(AnomalyStatus.REPORTED);
                 anomalyStatus.add(AnomalyStatus.QUESTION_SUBMITTED);
                 anomalyStatus.add(AnomalyStatus.UNDER_INVESTIGATION);
@@ -2246,6 +2255,7 @@ public class ConsumerServiceImpl implements ConsumerService {
         }
 
         for (Consumer c : sameMsisdnAnyStatus) {
+
             List<ConsumerAnomaly> links =
                     consumerAnomalyRepository.findByAnomaly_IdAndConsumer_Id(anomaly.getId(), c.getId());
             if (links == null || links.isEmpty()) {

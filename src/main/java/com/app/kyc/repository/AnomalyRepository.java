@@ -82,6 +82,9 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
    @Query(value = "select Distinct a from Anomaly a join ConsumerAnomaly ca on a.id = ca.anomaly.id join Consumer c on ca.consumer.id = c.id where c.consumerStatus in (:consumer_status) and a.status in (:anomalyStatus)")
    Page<Anomaly> findAllByConsumerStatus(Pageable pageable, @Param("consumer_status") List<Integer> consumer_status, @Param("anomalyStatus") List<AnomalyStatus> anomalyStatus);
 
+   @Query(value = "select Distinct a from Anomaly a join ConsumerAnomaly ca on a.id = ca.anomaly.id join Consumer c on ca.consumer.id = c.id where a.status in (:anomalyStatus)")
+   Page<Anomaly> findAllByConsumersAll(Pageable pageable, @Param("anomalyStatus") List<AnomalyStatus> anomalyStatus);
+
    @Query(value = "select Distinct a from Anomaly a join ConsumerAnomaly ca on a.id = ca.anomaly.id join Consumer c on ca.consumer.id = c.id where c.consumerStatus in (:consumer_status) and c.serviceProvider.id = :serviceProviderId and a.status in(:anomalyStatus)")
    Page<Anomaly> findAllByConsumerStatusAndServiceProviderId(Pageable pageable, @Param("consumer_status") List<Integer> consumer_status, @Param("serviceProviderId") Long serviceProviderId, @Param("anomalyStatus") List<AnomalyStatus> anomalyStatus);
 
