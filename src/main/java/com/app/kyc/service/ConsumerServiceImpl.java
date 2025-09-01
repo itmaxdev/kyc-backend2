@@ -830,7 +830,7 @@ System.out.println("Get all flagged ");
                 anomalyStatus.add(AnomalyStatus.RESOLVED_SUCCESSFULLY);
 
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumerStatus(pageable, consumerStatus, anomalyStatus);
+                        anomalyRepository.findAllByConsumerStatus(pageable, consumerStatus, anomalyStatus,pagination.getFilter().getAnomalyType());
 
                 pageAnomaly = anomalyData.stream()
                         .map(a -> new AnomlyDto(a, 0))
@@ -838,14 +838,9 @@ System.out.println("Get all flagged ");
                 totalAnomaliesCount = anomalyData.getTotalElements();
 
             } else {
-                anomalyStatus.add(AnomalyStatus.REPORTED);
-                anomalyStatus.add(AnomalyStatus.QUESTION_SUBMITTED);
-                anomalyStatus.add(AnomalyStatus.UNDER_INVESTIGATION);
-                anomalyStatus.add(AnomalyStatus.QUESTION_ANSWERED);
-                anomalyStatus.add(AnomalyStatus.RESOLUTION_SUBMITTED);
-
+            	anomalyStatus.addAll(this.setStatusList(pagination.getFilter().getAnomalyStatus()));
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumersAll(pageable, anomalyStatus);
+                        anomalyRepository.findAllByConsumersAll(pageable, anomalyStatus,pagination.getFilter().getAnomalyType());
 
                 pageAnomaly = anomalyData.stream()
                         .map(AnomlyDto::new)
@@ -860,7 +855,7 @@ System.out.println("Get all flagged ");
                 anomalyStatus.add(AnomalyStatus.RESOLVED_SUCCESSFULLY);
 
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus, spId, anomalyStatus);
+                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus, spId, anomalyStatus, pagination.getFilter().getAnomalyType());
 
                 pageAnomaly = anomalyData.stream()
                         .map(a -> new AnomlyDto(a, 0))
@@ -869,14 +864,11 @@ System.out.println("Get all flagged ");
 
             } else {
                 consumerStatus.add(0);
-                anomalyStatus.add(AnomalyStatus.REPORTED);
-                anomalyStatus.add(AnomalyStatus.QUESTION_SUBMITTED);
-                anomalyStatus.add(AnomalyStatus.UNDER_INVESTIGATION);
-                anomalyStatus.add(AnomalyStatus.QUESTION_ANSWERED);
-                anomalyStatus.add(AnomalyStatus.RESOLUTION_SUBMITTED);
+                
+                anomalyStatus.addAll(this.setStatusList(pagination.getFilter().getAnomalyStatus()));
 
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus, spId, anomalyStatus);
+                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus, spId, anomalyStatus, pagination.getFilter().getAnomalyType());
 
                 pageAnomaly = anomalyData.stream()
                         .map(AnomlyDto::new)
