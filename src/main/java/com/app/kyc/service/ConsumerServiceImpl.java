@@ -2605,7 +2605,7 @@ System.out.println("Get all flagged ");
 */
 
 
-    @Transactional // NOT readOnly
+   /* @Transactional // NOT readOnly
     private void tagExceedingAnomalies(Consumer consumer, User user) {
         if (consumer == null) return;
 
@@ -2686,6 +2686,89 @@ System.out.println("Get all flagged ");
 
         consumerRepository.markConsumersConsistent(0, ids);
     }
+*/
+
+
+    @Transactional
+    private void tagExceedingAnomalies(Consumer consumer, User user) {
+        if (consumer == null) return;
+
+        // ---- Guard: don't report when ID fields are blank/null (your rule) ----
+        final String idType   = norm(consumer.getIdentificationType());
+        final String idNumber = norm(consumer.getIdentificationNumber());
+        final ServiceProvider sp = consumer.getServiceProvider();
+        if (!hasText(idType) || !hasText(idNumber) || sp == null) return;
+
+        // ---- Fetch duplicates for SAME operator (any status) ----
+        // To make it "active-only", use a method that also filters consumer_status=0.
+        List<Consumer> candidates =
+                consumerRepository.findByIdKeyNormalizedAnyStatus(sp.getId(), idType, idNumber);
+
+        // Ensure current consumer is included
+        if (candidates.stream().noneMatch(c -> Objects.equals(c.getId(), consumer.getId()))) {
+            candidates.add(consumer);
+        }
+
+        // ---- Exceeding threshold: more than two (i.e., >=3) ----
+        if (candidates.size() <= 2) return;
+
+        // Mark all involved inconsistent (persist at least current)
+        candidates.forEach(c -> c.setIsConsistent(false));
+        consumerRepository.save(consumer);
+        List<Long> ids = candidates.stream().map(Consumer::getId).collect(Collectors.toList());
+
+        // Build note
+        final String spName = sp.getName() == null ? "" : sp.getName();
+        final String note = "You can't have more than two active records per operator for a given combination of "
+                + "(ID Card Type + ID Number + ServiceProviderName): (" + idType + " + " + idNumber + " + " + spName + ")";
+
+        // Find or create anomaly
+        final AnomalyType type = anomalyTypeRepository.findFirstByName("Exceeding Threshold");
+        final Date now = new Date();
+        List<Long> existing = consumerAnomalyRepository
+                .findAnomaliesIdByConsumerAndAnomalyTypeId(ids, type.getId());
+
+        Anomaly anomaly;
+        if (existing == null || existing.isEmpty()) {
+            anomaly = new Anomaly();
+            anomaly.setNote("Exceeding Anomaly: " + note);
+            anomaly.setStatus(AnomalyStatus.REPORTED);
+            anomaly.setReportedOn(now);
+            anomaly.setReportedBy(user);
+            anomaly.setUpdatedOn(now);
+            anomaly.setAnomalyType(type);
+            anomaly = anomalyRepository.save(anomaly);
+
+            anomalyTrackingRepository.save(
+                    new AnomalyTracking(anomaly, now, AnomalyStatus.REPORTED, "",
+                            "System for Anomaly", anomaly.getUpdatedOn())
+            );
+        } else {
+            anomaly = anomalyRepository.findByIdAndAnomalyType_Id(existing, type.getId());
+            if (anomaly == null) return;
+        }
+
+        // Link ALL involved consumers (create if missing, otherwise update notes)
+        for (Consumer c : candidates) {
+            List<ConsumerAnomaly> links =
+                    consumerAnomalyRepository.findByAnomaly_IdAndConsumer_Id(anomaly.getId(), c.getId());
+            if (links == null || links.isEmpty()) {
+                ConsumerAnomaly link = new ConsumerAnomaly();
+                link.setAnomaly(anomaly);
+                link.setConsumer(c);
+                link.setNotes("Exceeding Anomaly: " + note);
+                consumerAnomalyRepository.save(link);
+            } else {
+                ConsumerAnomaly link = links.get(0);
+                link.setNotes("Exceeding Anomaly: " + note);
+                consumerAnomalyRepository.save(link);
+            }
+        }
+
+        // Persist DB flag for all involved
+        consumerRepository.markConsumersConsistent(0, ids);
+    }
+
 
 
 

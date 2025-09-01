@@ -34,6 +34,12 @@ public interface ConsumerRepository extends JpaRepository<Consumer, Long>
     List<FlaggedConsumersListDTO> getAllFlaggedConsumers();
 
 
+    // ANY status (used above). If you prefer active-only, add "AND c.consumer_status = 0".
+    @Query(value = "SELECT * FROM consumers c WHERE c.service_provider_id = :spId AND TRIM(c.identification_type)   = TRIM(:type) AND TRIM(c.identification_number) = TRIM(:number)", nativeQuery = true)
+    List<Consumer> findByIdKeyNormalizedAnyStatus(@Param("spId") Long spId,
+                                                  @Param("type") String type,
+                                                  @Param("number") String number);
+
     @Query("select count(c) from Consumer c")
     long countAllUnsafe(); // optional
 
