@@ -735,7 +735,7 @@ System.out.println("Get all flagged ");
                 System.out.println("Consumer status is "+consumerStatus);
                 consumerStatus.add(1);
                 anomalyStatus.add(AnomalyStatus.RESOLVED_SUCCESSFULLY);
-                Page<Anomaly> anomalyData = anomalyRepository.findAllByConsumerStatus(PaginationUtil.getPageable(params), consumerStatus, anomalyStatus);
+                Page<Anomaly> anomalyData = anomalyRepository.findAllByConsumerStatus(PaginationUtil.getPageable(params), consumerStatus, anomalyStatus, pagination.getFilter().getAnomalyType());
                 pageAnomaly = anomalyData.stream()
                         .map(a -> new AnomlyDto(a , 0)).collect(Collectors.toList());
                 totalAnomaliesCount = anomalyData.getTotalElements();
@@ -744,14 +744,8 @@ System.out.println("Get all flagged ");
             }
             else{
                 System.out.println("Consumer status is one "+consumerStatus);
-                anomalyStatus.add(AnomalyStatus.REPORTED);
-                anomalyStatus.add(AnomalyStatus.QUESTION_SUBMITTED);
-                anomalyStatus.add(AnomalyStatus.UNDER_INVESTIGATION);
-                anomalyStatus.add(AnomalyStatus.QUESTION_ANSWERED);
-                anomalyStatus.add(AnomalyStatus.RESOLUTION_SUBMITTED);
-
-
-                Page<Anomaly> anomalyData = anomalyRepository.findAllByConsumersAll(PaginationUtil.getPageable(params), anomalyStatus);
+                anomalyStatus = this.setStatusList(pagination.getFilter().getAnomalyStatus());
+                Page<Anomaly> anomalyData = anomalyRepository.findAllByConsumersAll(PaginationUtil.getPageable(params), anomalyStatus, pagination.getFilter().getAnomalyType());
                 pageAnomaly = anomalyData.stream().map(a -> new AnomlyDto(a)).collect(Collectors.toList());
                 totalAnomaliesCount = anomalyData.getTotalElements();
 
@@ -762,7 +756,7 @@ System.out.println("Get all flagged ");
                 System.out.println("Consumer status is two"+consumerStatus);
                 consumerStatus.add(1);
                 anomalyStatus.add(AnomalyStatus.RESOLVED_SUCCESSFULLY);
-                Page<Anomaly> anomalyData = anomalyRepository.findAllByConsumerStatusAndServiceProviderId(PaginationUtil.getPageable(params), consumerStatus, pagination.getFilter().getServiceProviderID(), anomalyStatus);
+                Page<Anomaly> anomalyData = anomalyRepository.findAllByConsumerStatusAndServiceProviderId(PaginationUtil.getPageable(params), consumerStatus, pagination.getFilter().getServiceProviderID(), anomalyStatus,pagination.getFilter().getAnomalyType());
 
                 pageAnomaly = anomalyData
                 .stream()
@@ -772,12 +766,8 @@ System.out.println("Get all flagged ");
             else{
                 consumerStatus.add(0);
                 System.out.println("Consumer status is three"+consumerStatus);
-                anomalyStatus.add(AnomalyStatus.REPORTED);
-                anomalyStatus.add(AnomalyStatus.QUESTION_SUBMITTED);
-                anomalyStatus.add(AnomalyStatus.UNDER_INVESTIGATION);
-                anomalyStatus.add(AnomalyStatus.QUESTION_ANSWERED);
-                anomalyStatus.add(AnomalyStatus.RESOLUTION_SUBMITTED);
-                Page<Anomaly> anomalyData = anomalyRepository.findAllByConsumerStatusAndServiceProviderId(PaginationUtil.getPageable(params), consumerStatus, pagination.getFilter().getServiceProviderID(), anomalyStatus);
+                anomalyStatus = this.setStatusList(pagination.getFilter().getAnomalyStatus());
+                Page<Anomaly> anomalyData = anomalyRepository.findAllByConsumerStatusAndServiceProviderId(PaginationUtil.getPageable(params), consumerStatus, pagination.getFilter().getServiceProviderID(), anomalyStatus,pagination.getFilter().getAnomalyType());
 
                 pageAnomaly = anomalyData
                 .stream()
@@ -2674,5 +2664,55 @@ System.out.println("Get all flagged ");
             });
         }
         anomalyCollection.getParentAnomalyNoteSet().clear();
+    }
+    
+    public List<AnomalyStatus> setStatusList(AnomalyStatus status){
+    	List<AnomalyStatus>  anomalyStatus = new ArrayList<AnomalyStatus>();
+    	if (status != null) {
+			switch (status) {
+			case REPORTED:
+				log.info("in case 1");
+				anomalyStatus.add(AnomalyStatus.REPORTED);
+				break;
+
+			case QUESTION_SUBMITTED:
+				log.info("in case 2");
+				anomalyStatus.add(AnomalyStatus.QUESTION_SUBMITTED);
+				break;
+
+			case UNDER_INVESTIGATION:
+				log.info("in case 3");
+				anomalyStatus.add(AnomalyStatus.UNDER_INVESTIGATION);
+				break;
+
+			case QUESTION_ANSWERED:
+				log.info("in case 4");
+				anomalyStatus.add(AnomalyStatus.QUESTION_ANSWERED);
+				break;
+
+			case RESOLUTION_SUBMITTED:
+				log.info("in case 5");
+				anomalyStatus.add(AnomalyStatus.RESOLUTION_SUBMITTED);
+				break;
+
+			default:
+				// If nothing is matched, you can decide:
+				// 1. Add all, or
+				// 2. Leave empty, or
+				// 3. Log an error
+				log.info("in case default");
+				anomalyStatus.addAll(Arrays.asList(AnomalyStatus.REPORTED, AnomalyStatus.QUESTION_SUBMITTED,
+						AnomalyStatus.UNDER_INVESTIGATION, AnomalyStatus.QUESTION_ANSWERED,
+						AnomalyStatus.RESOLUTION_SUBMITTED));
+				break;
+			}
+		} else {
+			anomalyStatus.add(AnomalyStatus.REPORTED);
+			anomalyStatus.add(AnomalyStatus.QUESTION_SUBMITTED);
+			anomalyStatus.add(AnomalyStatus.UNDER_INVESTIGATION);
+			anomalyStatus.add(AnomalyStatus.QUESTION_ANSWERED);
+			anomalyStatus.add(AnomalyStatus.RESOLUTION_SUBMITTED);
+		}
+    	return anomalyStatus;
     }
 }
