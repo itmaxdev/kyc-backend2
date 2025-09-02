@@ -247,6 +247,57 @@ public interface ConsumerRepository extends JpaRepository<Consumer, Long>
             @Param("providersIsNull") boolean providersIsNull,
             @Param("threshold") int threshold
     );
+    
+    
+	@Query(value = "(SELECT CONCAT('Incomplete Data for ', sp.name) AS name," 
+			+ "       SUM("
+			+ "           CASE WHEN "
+			+ "                   (   NULLIF(TRIM(c.msisdn), '') IS NULL"
+			+ "                    OR NULLIF(TRIM(c.registration_date), '') IS NULL"
+			+ "                    OR NULLIF(TRIM(c.first_name), '') IS NULL"
+			+ "                    OR NULLIF(TRIM(c.middle_name), '') IS NULL"
+			+ "                    OR NULLIF(TRIM(c.last_name), '') IS NULL"
+			+ "                    OR NULLIF(TRIM(c.gender), '') IS NULL"
+			+ "                    OR NULLIF(TRIM(c.birth_date), '') IS NULL"
+			+ "                    OR NULLIF(TRIM(c.birth_place), '') IS NULL"
+			+ "                    OR NULLIF(TRIM(c.address), '') IS NULL"
+			+ "                    OR NULLIF(TRIM(c.alternate_msisdn1), '') IS NULL"
+			+ "                    OR NULLIF(TRIM(c.alternate_msisdn2), '') IS NULL"
+			+ "                    OR NULLIF(TRIM(c.identification_type), '') IS NULL"
+			+ "                    OR NULLIF(TRIM(c.identification_number), '') IS NULL"
+			+ "                   ) THEN 1 ELSE 0 END"
+			+ "       ) AS value" 
+			+ " FROM service_providers sp"
+			+ " INNER JOIN consumers c ON c.service_provider_id = sp.id AND c.is_consistent = 0"
+			+ " WHERE (:providersIsNull = TRUE OR sp.name IN (:providers)) GROUP BY sp.name)"
+			
+			+ " UNION ALL" 
+			+ " (SELECT CONCAT('Duplicate Records for ', sp.name) AS name,"
+			+ " COALESCE(COUNT(d.msisdn), 0) AS value" 
+			+ " FROM service_providers sp"
+			+ " LEFT JOIN consumers c ON c.service_provider_id = sp.id" 
+			+ " LEFT JOIN ("
+			+ " SELECT service_provider_id, msisdn" 
+			+ " FROM consumers"
+			+ " WHERE NULLIF(TRIM(msisdn), '') IS NOT NULL AND is_consistent = 0 GROUP BY service_provider_id, msisdn"
+			+ " HAVING COUNT(*) > 1 ) d ON d.service_provider_id = sp.id AND d.msisdn = c.msisdn"
+			+ " WHERE (:providersIsNull = TRUE OR sp.name IN (:providers))"
+			+ " GROUP BY sp.name )" 
+			
+			+ " UNION ALL"
+			+ " (SELECT CONCAT('Exceeding Threshold for ', sp.name) AS name,"
+			+ " COALESCE(COUNT(d.identification_number), 0) AS value FROM service_providers sp"
+			+ " LEFT JOIN consumers c ON c.service_provider_id = sp.id" 
+			+ " LEFT JOIN ( SELECT service_provider_id, identification_number,identification_type FROM consumers"
+			+ " WHERE NULLIF(TRIM(identification_number), '') IS NOT NULL AND NULLIF(TRIM(identification_type), '') IS NOT NULL AND is_consistent = 0"
+			+ " GROUP BY service_provider_id, identification_number ,identification_type"
+			+ " HAVING COUNT(*) > 1 ) d ON d.service_provider_id = sp.id AND d.identification_number = c.identification_number AND d.identification_type = c.identification_type"
+			+ " WHERE (:providersIsNull = TRUE OR sp.name IN (:providers))"
+			+ " GROUP BY sp.name)", nativeQuery = true)
+    List<DashboardObjectInterface> getAnomalyCountsByAnomalyTypes(
+            @Param("providers") List<String> providers,
+            @Param("providersIsNull") boolean providersIsNull
+    );
 
     // ===== Added Optional-based helpers for upserts by msisdn =====
 
