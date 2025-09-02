@@ -698,10 +698,9 @@ public class ConsumerServiceImpl implements ConsumerService {
                 ? List.of()
                 : serviceProviderRepository.findNamesByIds(serviceProviderIds); // add this query if missing
 
-        return consumerRepository.getMsisdnAnomalyTypesRollup(
+        return consumerRepository.getAnomalyCountsByAnomalyTypes(
                 providerNames,
-                all || providerNames.isEmpty(),
-                threshold
+                all || providerNames.isEmpty()
         );
     }
 
