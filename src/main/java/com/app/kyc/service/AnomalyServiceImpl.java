@@ -252,7 +252,7 @@ public class AnomalyServiceImpl implements AnomalyService
        notificationJobRepository.save(new NotificationJob(anomaly.getId(), request.getStatus()));
    }
 
-   @Override
+   /*@Override
    public AnomalyDetailsResponseDTO getAnomalyByIdWithDetails(Long id)
    {
       Anomaly anomaly=anomalyRepository.findById(id).get();
@@ -315,7 +315,61 @@ public class AnomalyServiceImpl implements AnomalyService
 //      });
 
       return new AnomalyDetailsResponseDTO(anomlyDto, anomalyTracking);
+   }*/
+
+   @Override
+   public AnomalyDetailsResponseDTO getAnomalyByIdWithDetails(Long id) {
+      // Safely fetch anomaly
+      Anomaly anomaly = anomalyRepository.findById(id)
+              .orElseThrow(() -> new RuntimeException("Anomaly not found with id: " + id));
+
+      AnomlyDto anomlyDto;
+      if (anomaly.getStatus().getCode() == 5) {
+         anomlyDto = new AnomlyDto(anomaly, 0);
+      } else {
+         anomlyDto = new AnomlyDto(anomaly);
+      }
+      anomlyDto.setUpdateBy("System");
+
+      // Fetch anomaly tracking
+      List<AnomalyTrackingDto> anomalyTracking = anomalyTrackingRepository.findAllByAnomalyId(id)
+              .stream()
+              .map(c -> new AnomalyTrackingDto(c.getId(), c.getCreatedOn(), c.getStatus(),
+                      c.getNote(), c.getAnomaly(), c.getUpdateBy(), c.getUpdateOn()))
+              .collect(Collectors.toList());
+
+      // Fetch consumers linked to anomaly
+      List<ConsumerDto> consumerDtos = consumerAnomalyRepository.findByAnomaly_Id(id)
+              .stream()
+              .map(ca -> {
+                 ConsumerDto consumerDto = new ConsumerDto(ca.getConsumer());
+                 if (Objects.nonNull(ca.getNotes())) {
+                    consumerDto.setNotes(ca.getNotes()); // Set notes directly
+                 }
+                 return consumerDto;
+              })
+              .collect(Collectors.toList());
+
+      anomlyDto.setConsumers(consumerDtos);
+
+      // Enrich tracking data with consumer notes (if anomaly type = 1)
+      anomalyTracking.forEach(tracking -> {
+         if (tracking.getAnomlyDto().getAnomalyType().getId() == 1) {
+            anomlyDto.getConsumers().forEach(consumer -> {
+               List<ConsumerAnomaly> temp = consumerAnomalyRepository
+                       .findByAnomaly_IdAndConsumer_Id(id, consumer.getId()); // use anomaly id, not tracking id
+               temp.forEach(t -> {
+                  if (Objects.nonNull(t.getNotes())) {
+                     consumer.setNotes(t.getNotes());
+                  }
+               });
+            });
+         }
+      });
+
+      return new AnomalyDetailsResponseDTO(anomlyDto, anomalyTracking);
    }
+
 
    @Override
    public double getAverageResolutionTimeInHours(Long industryId, Date startDate, Date endDate)
