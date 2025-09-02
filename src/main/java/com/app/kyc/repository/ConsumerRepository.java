@@ -69,6 +69,9 @@ public interface ConsumerRepository extends JpaRepository<Consumer, Long>
 
     Consumer findByIdAndConsumerStatus(long id, int consumerStatus);
 
+
+    Optional<Consumer> findByIdAndConsumerStatusIn(Long id, Collection<Integer> statuses);
+
     @Query(value = "select * from consumers where consumer_status = :consumer_status and service_provider_id in (" +
             "select id from service_providers where industry_id = :industryId) " +
             "and created_on > :start and created_on <= :end", nativeQuery = true)

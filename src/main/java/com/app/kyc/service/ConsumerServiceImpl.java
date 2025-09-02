@@ -83,7 +83,7 @@ public class ConsumerServiceImpl implements ConsumerService {
 
     List<Consumer> consumers = new ArrayList<>();
 
-    public ConsumerDto getConsumerById(Long id) {
+    /*public ConsumerDto getConsumerById(Long id) {
         Optional<Consumer> consumer = Optional.ofNullable(consumerRepository.findByIdAndConsumerStatus(id, 0));
         ConsumerDto consumerDto = null;
         if (consumer.isPresent()) {
@@ -91,7 +91,19 @@ public class ConsumerServiceImpl implements ConsumerService {
         }
 
         return consumerDto;
+    }*/
+
+
+    public ConsumerDto getConsumerById(Long id) {
+        Optional<Consumer> consumer = consumerRepository.findByIdAndConsumerStatusIn(id, Arrays.asList(0, 1));
+
+        if (!consumer.isPresent()) {
+            consumer = consumerRepository.findById(id);
+        }
+
+        return consumer.map(c -> new ConsumerDto(c, c.getAnomalies())).orElse(null);
     }
+
 
     /*public Map<String, Object> getAllConsumers(String params) throws JsonMappingException, JsonProcessingException {
         List<ConsumerDto> pageConsumers = null;
