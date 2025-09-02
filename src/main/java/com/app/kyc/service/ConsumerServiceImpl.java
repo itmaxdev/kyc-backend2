@@ -446,7 +446,7 @@ public class ConsumerServiceImpl implements ConsumerService {
     }*/
 
 
-    @Transactional(readOnly = true)
+   /* @Transactional(readOnly = true)
     public Map<String, Object> getAllConsumers(String params)
             throws JsonMappingException, JsonProcessingException {
 
@@ -516,6 +516,84 @@ public class ConsumerServiceImpl implements ConsumerService {
         resp.put("data", dataBucket);              // page of ALL / CONSISTENT / INCONSISTENT based on type
         resp.put("consistentData", consistentData);      // always a consistent page
         resp.put("inconsistentData", inconsistentData);  // always an inconsistent page
+        return resp;
+    }
+*/
+
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getAllConsumers(String params)
+            throws JsonMappingException, JsonProcessingException {
+
+        // Pageable (null-safe) + cap page size
+        final Pageable requested = Optional.ofNullable(PaginationUtil.getPageable(params))
+                .orElse(PageRequest.of(0, 50));
+        final int MAX_PAGE_SIZE = 5000;
+        final Pageable pageable = PageRequest.of(
+                requested.getPageNumber(),
+                Math.min(requested.getPageSize(), MAX_PAGE_SIZE),
+                requested.getSort()
+        );
+
+        // Filters
+        final Pagination pagination = PaginationUtil.getFilterObject(params);
+        final String type = Optional.ofNullable(pagination)
+                .map(Pagination::getFilter).map(f -> f.getType())
+                .map(String::trim).map(String::toUpperCase)
+                .orElse("ALL");
+        final Long spId = Optional.ofNullable(pagination)
+                .map(Pagination::getFilter).map(f -> f.getServiceProviderID())
+                .orElse(null);
+
+        // Statuses we allow
+        final List<Integer> allowedStatuses = Arrays.asList(0, 1);
+
+        // Counters
+        final long allCount, consistentCount, inconsistentCount;
+        if (spId != null) {
+            allCount          = consumerRepository.countByServiceProviderId(spId);
+            consistentCount   = consumerRepository.countByIsConsistentTrueAndServiceProvider_Id(spId);
+            inconsistentCount = consumerRepository.countByIsConsistentFalseAndServiceProvider_Id(spId);
+        } else {
+            allCount          = consumerRepository.count();
+            consistentCount   = consumerRepository.countByIsConsistentTrue();
+            inconsistentCount = consumerRepository.countByIsConsistentFalse();
+        }
+
+        // ===== Fetch THREE independent pages =====
+        // A) ALL
+        final Page<Consumer> allPage = (spId != null)
+                ? consumerRepository.findByServiceProvider_Id(spId, pageable)
+                : consumerRepository.findAll(pageable);
+
+        // B) CONSISTENT
+        final Page<Consumer> consistentPage = (spId != null)
+                ? consumerRepository.findByIsConsistentTrueAndConsumerStatusInAndServiceProvider_Id(pageable, allowedStatuses, spId)
+                : consumerRepository.findByIsConsistentTrueAndConsumerStatusIn(pageable, allowedStatuses);
+
+        // C) INCONSISTENT
+        final Page<Consumer> inconsistentPage = (spId != null)
+                ? consumerRepository.findByIsConsistentFalseAndConsumerStatusInAndServiceProvider_Id(pageable, allowedStatuses, spId)
+                : consumerRepository.findByIsConsistentFalseAndConsumerStatusIn(pageable, allowedStatuses);
+
+        // Map each slice independently (with de-dup just in case)
+        final List<ConsumersHasSubscriptionsResponseDTO> allData          = toDtoPage(dedup(allPage.getContent()));
+        final List<ConsumersHasSubscriptionsResponseDTO> consistentData   = toDtoPage(dedup(consistentPage.getContent()));
+        final List<ConsumersHasSubscriptionsResponseDTO> inconsistentData = toDtoPage(dedup(inconsistentPage.getContent()));
+
+        // "data" shaped by filter.type
+        final List<ConsumersHasSubscriptionsResponseDTO> dataBucket =
+                "CONSISTENT".equals(type)   ? consistentData :
+                        "INCONSISTENT".equals(type) ? inconsistentData :
+                                allData;
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("count", allCount);
+        resp.put("consistentCount", consistentCount);
+        resp.put("inconsistentCount", inconsistentCount);
+        resp.put("data", dataBucket);               // page of ALL / CONSISTENT / INCONSISTENT based on type
+        resp.put("consistentData", consistentData); // always a consistent page
+        resp.put("inconsistentData", inconsistentData); // always an inconsistent page
         return resp;
     }
 

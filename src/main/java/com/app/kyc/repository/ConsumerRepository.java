@@ -313,4 +313,22 @@ public interface ConsumerRepository extends JpaRepository<Consumer, Long>
 
     /** Quick existence check by business key. */
     boolean existsByMsisdn(String msisdn);
+
+    long countByIsConsistentTrueAndServiceProvider_Id(Long serviceProviderId);
+    long countByIsConsistentFalseAndServiceProvider_Id(Long serviceProviderId);
+
+    Page<Consumer> findByIsConsistentTrueAndConsumerStatusIn(
+            Pageable pageable, Collection<Integer> statuses);
+
+    Page<Consumer> findByIsConsistentTrueAndConsumerStatusInAndServiceProvider_Id(
+            Pageable pageable, Collection<Integer> statuses, Long serviceProviderId);
+
+
+    Page<Consumer> findByIsConsistentFalseAndConsumerStatusIn(
+            Pageable pageable, Collection<Integer> statuses);
+
+    Page<Consumer> findByIsConsistentFalseAndConsumerStatusInAndServiceProvider_Id(
+            Pageable pageable, Collection<Integer> statuses, Long serviceProviderId);
+
+
 }
