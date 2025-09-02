@@ -24,6 +24,8 @@ public class AnomlyDto {
 
     private String updateBy;
 
+    private Integer effectedRecords;
+
     private AnomalyStatus status;
     private AnomalyType anomalyType;
     List<ConsumerDto> consumers = new ArrayList<ConsumerDto>();
@@ -158,5 +160,13 @@ public class AnomlyDto {
 
     public void setUpdateBy(String updatedBy) {
         this.updateBy = updatedBy;
+    }
+
+    public Integer getEffectedRecords() {
+        return effectedRecords;
+    }
+
+    public void setEffectedRecords(Integer effectedRecords) {
+        this.effectedRecords = effectedRecords;
     }
 }
