@@ -788,14 +788,33 @@ public class ConsumerServiceImpl implements ConsumerService {
                 ? List.of()
                 : serviceProviderRepository.findNamesByIds(serviceProviderIds); // add this query if missing
 
-        return consumerRepository.getAnomalyCountsByAnomalyTypes(
+        return consumerRepository.getMsisdnAnomalyTypesRollup(
                 providerNames,
-                all || providerNames.isEmpty()
+                all || providerNames.isEmpty(),
+                threshold
         );
     }
+    
+    @Override
+    public List<DashboardObjectInterface> buildAnomalyTypes(List<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd){
+    	 final boolean all =
+                 (serviceProviderIds == null || serviceProviderIds.isEmpty() ||
+                         (serviceProviderIds.size() == 1 && serviceProviderIds.get(0) == 0L));
 
+         final List<String> providerNames = all
+                 ? List.of()
+                 : serviceProviderRepository.findNamesByIds(serviceProviderIds); // add this query if missing
+         
+        
 
-
+         List<DashboardObjectInterface> dashboardObjectInterfaces = consumerRepository.getAnomalyCountsByAnomalyTypes(
+                 providerNames,
+                 all || providerNames.isEmpty(),
+                 createdOnStart,
+                 createdOnEnd
+         );
+         return dashboardObjectInterfaces;
+    }
 
   /*  @Override
     public long getConsumersPerOperator(){
