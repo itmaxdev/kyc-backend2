@@ -253,13 +253,16 @@ public class DashboardServiceImpl implements DashboardService {
         List<DashboardObjectInterface> anomaliesList = new ArrayList<>();
         anomaliesList.add(new DashboardObject("Active Anomalies", (int) activeCount));
 
-         anomalyTypes = consumerService.buildAnomalyTypes(serviceProviderIds, 1000) // pick your threshold
-                .stream()
-                .map(it -> new DashboardObject(it.getName(), it.getValue()))
-                .collect(Collectors.toList());
-
-       
-
+//         anomalyTypes = consumerService.buildAnomalyTypes(serviceProviderIds, 1000) // pick your threshold
+//                .stream()
+//                .map(it -> new DashboardObject(it.getName(), it.getValue()))
+//                .collect(Collectors.toList());
+        
+        //Anomaly count based on anomaly types
+        anomalyTypes = consumerService.buildAnomalyTypes(serviceProviderIds, startDate, endDate)
+              .stream()
+              .map(it -> new DashboardObject(it.getName(), it.getValue()))
+              .collect(Collectors.toList());
 
         //get subscription count grouped by service providers for selected dates
         subscriptions = consumerService.getAndCountDistinctConsumersGroupedByServiceProviderId(serviceProviderIds, startDate, endDate);

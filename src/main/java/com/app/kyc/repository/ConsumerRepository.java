@@ -8,6 +8,7 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -21,8 +22,10 @@ import com.app.kyc.model.DashboardObjectInterface;
 import com.app.kyc.response.FlaggedConsumersListDTO;
 
 @Repository
-public interface ConsumerRepository extends JpaRepository<Consumer, Long>
-{
+public interface ConsumerRepository
+        extends JpaRepository<Consumer, Long>, JpaSpecificationExecutor<Consumer> {
+
+
     @Query(value = "select g.id, g.consumerId, g.name, g.serviceName, g.serviceProviderId, (select name from service_providers where id = g.serviceProviderId) as serviceProviderName,\r\n" +
             " g.flaggedDate, g.anomalyEntityType, g.anomalyStatus, g.note, g.anomalyId, CONCAT(u.first_name, \" \", u.last_name) as reporterName \r\n" +
             "from users as u join ( select (select id from consumers where id = consumer_id) as consumerId, (select CONCAT(first_name, \" \", last_name) \r\n" +
@@ -68,6 +71,9 @@ public interface ConsumerRepository extends JpaRepository<Consumer, Long>
     Page<Consumer> findByServiceProvider_Id(Long serviceProviderId, Pageable pageable);
 
     Consumer findByIdAndConsumerStatus(long id, int consumerStatus);
+
+
+    Optional<Consumer> findByIdAndConsumerStatusIn(Long id, Collection<Integer> statuses);
 
     @Query(value = "select * from consumers where consumer_status = :consumer_status and service_provider_id in (" +
             "select id from service_providers where industry_id = :industryId) " +
@@ -249,55 +255,12 @@ public interface ConsumerRepository extends JpaRepository<Consumer, Long>
     );
     
     
-	@Query(value = "(SELECT CONCAT('Incomplete Data for ', sp.name) AS name," 
-			+ "       SUM("
-			+ "           CASE WHEN "
-			+ "                   (   NULLIF(TRIM(c.msisdn), '') IS NULL"
-			+ "                    OR NULLIF(TRIM(c.registration_date), '') IS NULL"
-			+ "                    OR NULLIF(TRIM(c.first_name), '') IS NULL"
-			+ "                    OR NULLIF(TRIM(c.middle_name), '') IS NULL"
-			+ "                    OR NULLIF(TRIM(c.last_name), '') IS NULL"
-			+ "                    OR NULLIF(TRIM(c.gender), '') IS NULL"
-			+ "                    OR NULLIF(TRIM(c.birth_date), '') IS NULL"
-			+ "                    OR NULLIF(TRIM(c.birth_place), '') IS NULL"
-			+ "                    OR NULLIF(TRIM(c.address), '') IS NULL"
-			+ "                    OR NULLIF(TRIM(c.alternate_msisdn1), '') IS NULL"
-			+ "                    OR NULLIF(TRIM(c.alternate_msisdn2), '') IS NULL"
-			+ "                    OR NULLIF(TRIM(c.identification_type), '') IS NULL"
-			+ "                    OR NULLIF(TRIM(c.identification_number), '') IS NULL"
-			+ "                   ) THEN 1 ELSE 0 END"
-			+ "       ) AS value" 
-			+ " FROM service_providers sp"
-			+ " INNER JOIN consumers c ON c.service_provider_id = sp.id AND c.is_consistent = 0"
-			+ " WHERE (:providersIsNull = TRUE OR sp.name IN (:providers)) GROUP BY sp.name)"
-			
-			+ " UNION ALL" 
-			+ " (SELECT CONCAT('Duplicate Records for ', sp.name) AS name,"
-			+ " COALESCE(COUNT(d.msisdn), 0) AS value" 
-			+ " FROM service_providers sp"
-			+ " LEFT JOIN consumers c ON c.service_provider_id = sp.id" 
-			+ " LEFT JOIN ("
-			+ " SELECT service_provider_id, msisdn" 
-			+ " FROM consumers"
-			+ " WHERE NULLIF(TRIM(msisdn), '') IS NOT NULL AND is_consistent = 0 GROUP BY service_provider_id, msisdn"
-			+ " HAVING COUNT(*) > 1 ) d ON d.service_provider_id = sp.id AND d.msisdn = c.msisdn"
-			+ " WHERE (:providersIsNull = TRUE OR sp.name IN (:providers))"
-			+ " GROUP BY sp.name )" 
-			
-			+ " UNION ALL"
-			+ " (SELECT CONCAT('Exceeding Threshold for ', sp.name) AS name,"
-			+ " COALESCE(COUNT(d.identification_number), 0) AS value FROM service_providers sp"
-			+ " LEFT JOIN consumers c ON c.service_provider_id = sp.id" 
-			+ " LEFT JOIN ( SELECT service_provider_id, identification_number,identification_type FROM consumers"
-			+ " WHERE NULLIF(TRIM(identification_number), '') IS NOT NULL AND NULLIF(TRIM(identification_type), '') IS NOT NULL AND is_consistent = 0"
-			+ " GROUP BY service_provider_id, identification_number ,identification_type"
-			+ " HAVING COUNT(*) > 1 ) d ON d.service_provider_id = sp.id AND d.identification_number = c.identification_number AND d.identification_type = c.identification_type"
-			+ " WHERE (:providersIsNull = TRUE OR sp.name IN (:providers))"
-			+ " GROUP BY sp.name)", nativeQuery = true)
-    List<DashboardObjectInterface> getAnomalyCountsByAnomalyTypes(
-            @Param("providers") List<String> providers,
-            @Param("providersIsNull") boolean providersIsNull
-    );
+	@Query(" SELECT at.name AS name, COUNT(a.id) AS value"
+			+ " FROM Anomaly a JOIN a.anomalyType at"
+			+ " WHERE a.reportedOn > ?3 AND a.reportedOn <= ?4"
+			+ " AND EXISTS (SELECT 1 FROM a.consumers ca WHERE (?2 = TRUE OR ca.serviceProvider.name IN (?1)))"
+			+ " GROUP BY at.name ORDER BY value DESC")
+    List<DashboardObjectInterface> getAnomalyCountsByAnomalyTypes(List<String> providers,boolean providersIsNull,Date createdOnStart, Date createdOnEnd);
 
     // ===== Added Optional-based helpers for upserts by msisdn =====
 
@@ -310,4 +273,38 @@ public interface ConsumerRepository extends JpaRepository<Consumer, Long>
 
     /** Quick existence check by business key. */
     boolean existsByMsisdn(String msisdn);
+
+    long countByIsConsistentTrueAndServiceProvider_Id(Long serviceProviderId);
+    long countByIsConsistentFalseAndServiceProvider_Id(Long serviceProviderId);
+
+    Page<Consumer> findByIsConsistentTrueAndConsumerStatusIn(
+            Pageable pageable, Collection<Integer> statuses);
+
+    Page<Consumer> findByIsConsistentTrueAndConsumerStatusInAndServiceProvider_Id(
+            Pageable pageable, Collection<Integer> statuses, Long serviceProviderId);
+
+
+    Page<Consumer> findByIsConsistentFalseAndConsumerStatusIn(
+            Pageable pageable, Collection<Integer> statuses);
+
+    Page<Consumer> findByIsConsistentFalseAndConsumerStatusInAndServiceProvider_Id(
+            Pageable pageable, Collection<Integer> statuses, Long serviceProviderId);
+
+
+
+    Optional<Consumer> findByFirstNameAndLastNameAndIdentificationNumberAndIdentificationType(
+            String firstName, String lastName, String idNumber, String idType);
+
+    Optional<Consumer> findByMsisdnAndLastNameAndIdentificationNumberAndIdentificationType(
+            String msisdn, String lastName, String idNumber, String idType);
+
+    Optional<Consumer> findByFirstNameAndMsisdnAndIdentificationNumberAndIdentificationType(
+            String firstName, String msisdn, String idNumber, String idType);
+
+    Optional<Consumer> findByMsisdnAndLastNameAndFirstNameAndIdentificationType(
+            String msisdn, String lastName, String firstName, String idType);
+
+    Optional<Consumer> findByFirstNameAndLastNameAndIdentificationNumberAndMsisdn(
+            String firstName, String lastName, String idNumber, String msisdn);
+
 }

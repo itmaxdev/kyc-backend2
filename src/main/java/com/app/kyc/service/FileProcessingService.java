@@ -1,9 +1,11 @@
 package com.app.kyc.service;
 
+import com.app.kyc.config.ConsumerSpecifications;
 import com.app.kyc.entity.Consumer;
 import com.app.kyc.entity.ProcessedFile;
 import com.app.kyc.entity.ServiceProvider;
 import com.app.kyc.entity.User;
+import com.app.kyc.model.ConsumerIdentityKey;
 import com.app.kyc.repository.ConsumerRepository;
 import com.app.kyc.repository.ProcessedFileRepository;
 import com.app.kyc.repository.ServiceProviderRepository;
@@ -12,6 +14,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.task.TaskExecutor;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.lang.Nullable;
@@ -39,6 +43,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -417,7 +422,7 @@ public class FileProcessingService {
 
     /* ================= Ingest (short TX) ================= */
 
-    @Transactional(rollbackFor = Exception.class)
+    /*@Transactional(rollbackFor = Exception.class)
     protected int ingestFileTxVodacom(Path workingCopy, Long spId, char sep, Charset cs) throws Exception {
         final Timestamp nowTs = new Timestamp(System.currentTimeMillis());
         final List<RowData> batch = new ArrayList<>(BATCH_SIZE);
@@ -468,6 +473,108 @@ public class FileProcessingService {
             if (!batch.isEmpty()) {
                 total += executeBatch(batch);
                 batch.clear();
+            }
+        }
+
+        return total;
+    }*/
+
+
+    @Transactional(rollbackFor = Exception.class)
+    protected int ingestFileTxVodacom(Path workingCopy, Long spId, char sep, Charset cs) throws Exception {
+        final Timestamp nowTs = new Timestamp(System.currentTimeMillis());
+        int total = 0;
+
+        try (InputStream in = Files.newInputStream(workingCopy);
+             Reader reader = new InputStreamReader(in, cs);
+             CSVReader csv = new CSVReaderBuilder(reader)
+                     .withCSVParser(new CSVParserBuilder().withSeparator(sep).build())
+                     .build()) {
+
+            String[] row;
+            boolean isHeader = true;
+            List<Consumer> toSave = new ArrayList<>();
+
+            while ((row = csv.readNext()) != null) {
+                stripBomInPlace(row);
+
+                if (isHeader) {
+                    isHeader = false;
+                    log.info("Header column count: {}", row.length);
+                    continue;
+                }
+                if (row.length == 0) continue;
+
+                RowData r = mapRowVodacom(row, spId, nowTs);
+                if (r == null) continue;
+
+                r.msisdn = normalizeMsisdnAllowNull(r.msisdn);
+
+                // 🔹 Use Specification instead of multiple repo methods
+
+
+
+
+                Specification<Consumer> spec = ConsumerSpecifications.matchConsumer(r);
+                List<Consumer> matches = consumerRepository.findAll(spec);
+
+                Consumer existing = matches.isEmpty() ? null : matches.get(0);
+
+                if (existing != null) {
+                    // Update only empty fields
+                    if (isEmpty(existing.getMsisdn()) && notEmpty(r.msisdn)) existing.setMsisdn(r.msisdn);
+                    if (isEmpty(existing.getFirstName()) && notEmpty(r.firstName)) existing.setFirstName(r.firstName);
+                    if (isEmpty(existing.getLastName()) && notEmpty(r.lastName)) existing.setLastName(r.lastName);
+                    if (isEmpty(existing.getIdentificationNumber()) && notEmpty(r.idNumber)) existing.setIdentificationNumber(r.idNumber);
+                    if (isEmpty(existing.getIdentificationType()) && notEmpty(r.idType)) existing.setIdentificationType(r.idType);
+                    if (isEmpty(existing.getGender()) && notEmpty(r.gender)) existing.setGender(r.gender);
+                    if (isEmpty(existing.getBirthPlace()) && notEmpty(r.birthPlace)) existing.setBirthPlace(r.birthPlace);
+                    if (isEmpty(existing.getAddress()) && notEmpty(r.address)) existing.setAddress(r.address);
+                    if (isEmpty(existing.getRegistrationDate()) && notEmpty(r.registrationDateStr)) existing.setRegistrationDate(r.registrationDateStr);
+
+                    if (isEmpty(existing.getBirthDate()) && notEmpty(r.birthDateStr)) existing.setBirthDate(r.birthDateStr);
+                    if (isEmpty(existing.getAlternateMsisdn1()) && notEmpty(r.alt1)) existing.setAlternateMsisdn1(r.alt1);
+                    if (isEmpty(existing.getAlternateMsisdn2()) && notEmpty(r.alt2)) existing.setAlternateMsisdn2(r.alt2);
+                    if (isEmpty(existing.getMiddleName()) && notEmpty(r.middleName)) existing.setMiddleName(r.middleName);
+
+                    toSave.add(existing);
+
+                } else {
+                    // Insert new consumer
+                    Consumer newC = new Consumer();
+                    newC.setFirstName(r.firstName);
+                    newC.setLastName(r.lastName);
+                    newC.setIdentificationNumber(r.idNumber);
+                    newC.setIdentificationType(r.idType);
+                    newC.setMsisdn(r.msisdn);
+                    newC.setGender(r.gender);
+                    newC.setMiddleName(r.middleName);
+                    newC.setBirthPlace(r.birthPlace);
+                    newC.setAlternateMsisdn1(r.alt1);
+                    newC.setAlternateMsisdn2(r.alt2);
+                    newC.setBirthDate(r.birthDateStr);
+                    newC.setAddress(r.address);
+                    newC.setRegistrationDate(r.registrationDateStr);
+
+                    ServiceProvider spRef = new ServiceProvider();
+                    spRef.setId(spId);
+                    newC.setServiceProvider(spRef);
+
+                    newC.setCreatedOn(nowTs.toString()); // better: LocalDateTime
+
+                    toSave.add(newC);
+                }
+
+                if (toSave.size() >= BATCH_SIZE) {
+                    consumerRepository.saveAll(toSave);
+                    total += toSave.size();
+                    toSave.clear();
+                }
+            }
+
+            if (!toSave.isEmpty()) {
+                consumerRepository.saveAll(toSave);
+                total += toSave.size();
             }
         }
 
@@ -905,21 +1012,27 @@ public class FileProcessingService {
 
     private void sleep(long ms) { try { Thread.sleep(ms); } catch (InterruptedException ignored) { Thread.currentThread().interrupt(); } }
 
-    private static final class RowData {
-        String msisdn;
+    public static final class RowData {
+        public String msisdn;
         String registrationDateStr;
-        String firstName;
+        public String firstName;
         String middleName;
-        String lastName;
+        public String lastName;
         String gender;
         String birthDateStr;
         String birthPlace;
         String address;
         String alt1;
         String alt2;
-        String idType;
-        String idNumber;
+        public String idType;
+        public String idNumber;
         String createdOnTs;
         Long serviceProviderId;
     }
+
+
+    private boolean isEmpty(String s) { return s == null || s.trim().isEmpty(); }
+    private boolean notEmpty(String s) { return !isEmpty(s); }
+    private String normalize(String s) { return (s == null ? null : s.trim().toUpperCase()); }
+
 }

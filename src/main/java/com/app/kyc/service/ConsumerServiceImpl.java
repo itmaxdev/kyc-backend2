@@ -83,7 +83,7 @@ public class ConsumerServiceImpl implements ConsumerService {
 
     List<Consumer> consumers = new ArrayList<>();
 
-    public ConsumerDto getConsumerById(Long id) {
+    /*public ConsumerDto getConsumerById(Long id) {
         Optional<Consumer> consumer = Optional.ofNullable(consumerRepository.findByIdAndConsumerStatus(id, 0));
         ConsumerDto consumerDto = null;
         if (consumer.isPresent()) {
@@ -91,7 +91,19 @@ public class ConsumerServiceImpl implements ConsumerService {
         }
 
         return consumerDto;
+    }*/
+
+
+    public ConsumerDto getConsumerById(Long id) {
+        Optional<Consumer> consumer = consumerRepository.findByIdAndConsumerStatusIn(id, Arrays.asList(0, 1));
+
+        if (!consumer.isPresent()) {
+            consumer = consumerRepository.findById(id);
+        }
+
+        return consumer.map(c -> new ConsumerDto(c, c.getAnomalies())).orElse(null);
     }
+
 
     /*public Map<String, Object> getAllConsumers(String params) throws JsonMappingException, JsonProcessingException {
         List<ConsumerDto> pageConsumers = null;
@@ -434,7 +446,7 @@ public class ConsumerServiceImpl implements ConsumerService {
     }*/
 
 
-    @Transactional(readOnly = true)
+   /* @Transactional(readOnly = true)
     public Map<String, Object> getAllConsumers(String params)
             throws JsonMappingException, JsonProcessingException {
 
@@ -504,6 +516,84 @@ public class ConsumerServiceImpl implements ConsumerService {
         resp.put("data", dataBucket);              // page of ALL / CONSISTENT / INCONSISTENT based on type
         resp.put("consistentData", consistentData);      // always a consistent page
         resp.put("inconsistentData", inconsistentData);  // always an inconsistent page
+        return resp;
+    }
+*/
+
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getAllConsumers(String params)
+            throws JsonMappingException, JsonProcessingException {
+
+        // Pageable (null-safe) + cap page size
+        final Pageable requested = Optional.ofNullable(PaginationUtil.getPageable(params))
+                .orElse(PageRequest.of(0, 50));
+        final int MAX_PAGE_SIZE = 5000;
+        final Pageable pageable = PageRequest.of(
+                requested.getPageNumber(),
+                Math.min(requested.getPageSize(), MAX_PAGE_SIZE),
+                requested.getSort()
+        );
+
+        // Filters
+        final Pagination pagination = PaginationUtil.getFilterObject(params);
+        final String type = Optional.ofNullable(pagination)
+                .map(Pagination::getFilter).map(f -> f.getType())
+                .map(String::trim).map(String::toUpperCase)
+                .orElse("ALL");
+        final Long spId = Optional.ofNullable(pagination)
+                .map(Pagination::getFilter).map(f -> f.getServiceProviderID())
+                .orElse(null);
+
+        // Statuses we allow
+        final List<Integer> allowedStatuses = Arrays.asList(0, 1);
+
+        // Counters
+        final long allCount, consistentCount, inconsistentCount;
+        if (spId != null) {
+            allCount          = consumerRepository.countByServiceProviderId(spId);
+            consistentCount   = consumerRepository.countByIsConsistentTrueAndServiceProvider_Id(spId);
+            inconsistentCount = consumerRepository.countByIsConsistentFalseAndServiceProvider_Id(spId);
+        } else {
+            allCount          = consumerRepository.count();
+            consistentCount   = consumerRepository.countByIsConsistentTrue();
+            inconsistentCount = consumerRepository.countByIsConsistentFalse();
+        }
+
+        // ===== Fetch THREE independent pages =====
+        // A) ALL
+        final Page<Consumer> allPage = (spId != null)
+                ? consumerRepository.findByServiceProvider_Id(spId, pageable)
+                : consumerRepository.findAll(pageable);
+
+        // B) CONSISTENT
+        final Page<Consumer> consistentPage = (spId != null)
+                ? consumerRepository.findByIsConsistentTrueAndConsumerStatusInAndServiceProvider_Id(pageable, allowedStatuses, spId)
+                : consumerRepository.findByIsConsistentTrueAndConsumerStatusIn(pageable, allowedStatuses);
+
+        // C) INCONSISTENT
+        final Page<Consumer> inconsistentPage = (spId != null)
+                ? consumerRepository.findByIsConsistentFalseAndConsumerStatusInAndServiceProvider_Id(pageable, allowedStatuses, spId)
+                : consumerRepository.findByIsConsistentFalseAndConsumerStatusIn(pageable, allowedStatuses);
+
+        // Map each slice independently (with de-dup just in case)
+        final List<ConsumersHasSubscriptionsResponseDTO> allData          = toDtoPage(dedup(allPage.getContent()));
+        final List<ConsumersHasSubscriptionsResponseDTO> consistentData   = toDtoPage(dedup(consistentPage.getContent()));
+        final List<ConsumersHasSubscriptionsResponseDTO> inconsistentData = toDtoPage(dedup(inconsistentPage.getContent()));
+
+        // "data" shaped by filter.type
+        final List<ConsumersHasSubscriptionsResponseDTO> dataBucket =
+                "CONSISTENT".equals(type)   ? consistentData :
+                        "INCONSISTENT".equals(type) ? inconsistentData :
+                                allData;
+
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("count", allCount);
+        resp.put("consistentCount", consistentCount);
+        resp.put("inconsistentCount", inconsistentCount);
+        resp.put("data", dataBucket);               // page of ALL / CONSISTENT / INCONSISTENT based on type
+        resp.put("consistentData", consistentData); // always a consistent page
+        resp.put("inconsistentData", inconsistentData); // always an inconsistent page
         return resp;
     }
 
@@ -698,14 +788,33 @@ public class ConsumerServiceImpl implements ConsumerService {
                 ? List.of()
                 : serviceProviderRepository.findNamesByIds(serviceProviderIds); // add this query if missing
 
-        return consumerRepository.getAnomalyCountsByAnomalyTypes(
+        return consumerRepository.getMsisdnAnomalyTypesRollup(
                 providerNames,
-                all || providerNames.isEmpty()
+                all || providerNames.isEmpty(),
+                threshold
         );
     }
+    
+    @Override
+    public List<DashboardObjectInterface> buildAnomalyTypes(List<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd){
+    	 final boolean all =
+                 (serviceProviderIds == null || serviceProviderIds.isEmpty() ||
+                         (serviceProviderIds.size() == 1 && serviceProviderIds.get(0) == 0L));
 
+         final List<String> providerNames = all
+                 ? List.of()
+                 : serviceProviderRepository.findNamesByIds(serviceProviderIds); // add this query if missing
+         
+        
 
-
+         List<DashboardObjectInterface> dashboardObjectInterfaces = consumerRepository.getAnomalyCountsByAnomalyTypes(
+                 providerNames,
+                 all || providerNames.isEmpty(),
+                 createdOnStart,
+                 createdOnEnd
+         );
+         return dashboardObjectInterfaces;
+    }
 
   /*  @Override
     public long getConsumersPerOperator(){
@@ -2108,7 +2217,7 @@ System.out.println("Get all flagged ");
         consumer.setIsConsistent(false);
         consumer = consumerRepository.save(consumer);
 
-        tempAnomaly.setNote("Missing Fields: " + distinctErrors);
+        tempAnomaly.setNote("Missing Mandatory Fields: " + distinctErrors);
         ConsumerAnomaly tempCA = new ConsumerAnomaly();
 
         if (!consumerAnomalies.isEmpty()) {
@@ -2152,10 +2261,10 @@ System.out.println("Get all flagged ");
                     tempCA.setConsumer(consumer);
                     if (!anomaly.getNote().equals(collection.getParentAnomalyNoteSet().toString())) {
 
-                        anomaly.setNote("Missing Fields are: "+collection.getParentAnomalyNoteSet().toString());
+                        anomaly.setNote("Missing Mandatory Fields are: "+collection.getParentAnomalyNoteSet().toString());
                         anomalyRepository.save(anomaly);
                     }
-                    tempCA.setNotes("Missing Fields are: " + distinctErrors);
+                    tempCA.setNotes("Missing Mandatory Fields are: " + distinctErrors);
                     consumerAnomalyRepository.save(tempCA);
                 }
             }
@@ -2171,7 +2280,7 @@ System.out.println("Get all flagged ");
             anomalyTrackingRepository.save(anomalyTracking);
 
             ConsumerAnomaly consumerAnomaly = new ConsumerAnomaly();
-            consumerAnomaly.setNotes("Missing Fields are: " + distinctErrors);
+            consumerAnomaly.setNotes("Missing Mandatory Fields are: " + distinctErrors);
             consumerAnomaly.setAnomaly(savedAnomaly);
             consumerAnomaly.setConsumer(consumer);
 

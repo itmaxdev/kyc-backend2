@@ -77,17 +77,26 @@ public class Consumer {
         return ReflectionToStringBuilder.toString(this, ToStringStyle.SHORT_PREFIX_STYLE);
     }
 
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Consumer consumer = (Consumer) o;
-        return msisdn.equals(consumer.msisdn);
+
+        // If both have DB IDs, compare by ID
+        if (id != null && consumer.id != null) {
+            return Objects.equals(id, consumer.id);
+        }
+
+        // Otherwise compare by msisdn if available
+        return Objects.equals(msisdn, consumer.msisdn);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(msisdn);
+        // Prefer id if available
+        return id != null ? id.hashCode() : Objects.hash(msisdn);
     }
 
 
