@@ -2198,7 +2198,7 @@ System.out.println("Get all flagged ");
         consumer.setIsConsistent(false);
         consumer = consumerRepository.save(consumer);
 
-        tempAnomaly.setNote("Missing Fields: " + distinctErrors);
+        tempAnomaly.setNote("Missing Mandatory Fields: " + distinctErrors);
         ConsumerAnomaly tempCA = new ConsumerAnomaly();
 
         if (!consumerAnomalies.isEmpty()) {
@@ -2242,10 +2242,10 @@ System.out.println("Get all flagged ");
                     tempCA.setConsumer(consumer);
                     if (!anomaly.getNote().equals(collection.getParentAnomalyNoteSet().toString())) {
 
-                        anomaly.setNote("Missing Fields are: "+collection.getParentAnomalyNoteSet().toString());
+                        anomaly.setNote("Missing Mandatory Fields are: "+collection.getParentAnomalyNoteSet().toString());
                         anomalyRepository.save(anomaly);
                     }
-                    tempCA.setNotes("Missing Fields are: " + distinctErrors);
+                    tempCA.setNotes("Missing Mandatory Fields are: " + distinctErrors);
                     consumerAnomalyRepository.save(tempCA);
                 }
             }
@@ -2261,7 +2261,7 @@ System.out.println("Get all flagged ");
             anomalyTrackingRepository.save(anomalyTracking);
 
             ConsumerAnomaly consumerAnomaly = new ConsumerAnomaly();
-            consumerAnomaly.setNotes("Missing Fields are: " + distinctErrors);
+            consumerAnomaly.setNotes("Missing Mandatory Fields are: " + distinctErrors);
             consumerAnomaly.setAnomaly(savedAnomaly);
             consumerAnomaly.setConsumer(consumer);
 

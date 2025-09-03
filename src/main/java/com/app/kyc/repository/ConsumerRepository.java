@@ -8,6 +8,7 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -21,8 +22,10 @@ import com.app.kyc.model.DashboardObjectInterface;
 import com.app.kyc.response.FlaggedConsumersListDTO;
 
 @Repository
-public interface ConsumerRepository extends JpaRepository<Consumer, Long>
-{
+public interface ConsumerRepository
+        extends JpaRepository<Consumer, Long>, JpaSpecificationExecutor<Consumer> {
+
+
     @Query(value = "select g.id, g.consumerId, g.name, g.serviceName, g.serviceProviderId, (select name from service_providers where id = g.serviceProviderId) as serviceProviderName,\r\n" +
             " g.flaggedDate, g.anomalyEntityType, g.anomalyStatus, g.note, g.anomalyId, CONCAT(u.first_name, \" \", u.last_name) as reporterName \r\n" +
             "from users as u join ( select (select id from consumers where id = consumer_id) as consumerId, (select CONCAT(first_name, \" \", last_name) \r\n" +
