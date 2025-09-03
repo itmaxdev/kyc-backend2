@@ -37,40 +37,43 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
 
    Page<Anomaly> findDistinctByConsumers_ServiceProviderId(@Param("serviceProviderId") Long serviceProviderId, org.springframework.data.domain.Pageable pageable);
 
-   @Query(
-           value =
-                   "SELECT COALESCE(AVG(TIMESTAMPDIFF(HOUR, a.reported_on, IFNULL(a.updated_on, NOW()))), 0) " +
-                           "FROM anomalies a " +
-                           "WHERE a.status IN (5, 6) " +
-                           "  AND a.reported_on > :start " +
-                           "  AND a.reported_on <= :end " +
-                           "  AND a.anomaly_type_id IN ( " +
-                           "      SELECT at.id " +
-                           "      FROM anomaly_types at " +
-                           "      WHERE (at.target_entity_type = 2 AND at.entity_id = :industryId) " +
-                           "         OR (at.target_entity_type = 1 AND at.entity_id IN ( " +
-                           "                SELECT st.id FROM service_types st WHERE st.industry_id = :industryId " +
-                           "             )) " +
-                           "  )",
-           nativeQuery = true
-   )
+//   @Query(
+//           value =
+//                   "SELECT COALESCE(AVG(TIMESTAMPDIFF(HOUR, a.reported_on, IFNULL(a.updated_on, NOW()))), 0) " +
+//                           "FROM anomalies a " +
+//                           "WHERE a.status IN (5, 6) " +
+//                           "  AND a.reported_on > :start " +
+//                           "  AND a.reported_on <= :end " +
+//                           "  AND a.anomaly_type_id IN ( " +
+//                           "      SELECT at.id " +
+//                           "      FROM anomaly_types at " +
+//                           "      WHERE (at.target_entity_type = 2 AND at.entity_id = :industryId) " +
+//                           "         OR (at.target_entity_type = 1 AND at.entity_id IN ( " +
+//                           "                SELECT st.id FROM service_types st WHERE st.industry_id = :industryId " +
+//                           "             )) " +
+//                           "  )",
+//           nativeQuery = true
+//   )
+   
+   @Query( value = "SELECT COALESCE(AVG(TIMESTAMPDIFF(HOUR, a.reported_on, IFNULL(a.updated_on, NOW()))), 0) AS HOUR"
+   		+ " FROM anomalies a "
+   		+ " JOIN consumers_anomalies ca ON ca.anomaly_id = a.id "
+   		+ " JOIN consumers c ON c.id = ca.consumer_id"
+   		+ " WHERE a.status IN (5, 6)"
+   		+ " AND a.reported_on > :start"
+   		+ " AND a.reported_on <= :end"
+   		+ " AND c.service_provider_id IN (:serviceProviderIds)", nativeQuery = true)
    double getAverageResolutionTimeInHours(
-           @Param("industryId") Long industryId,
+           @Param("serviceProviderIds") List<Long> serviceProviderIds,
            @Param("start") java.util.Date start,
            @Param("end") java.util.Date end
    );
    
    
    @Query(value ="SELECT"
-		+ " DATE_FORMAT(a.reported_on, '%Y-%m') AS sort,"
    		+ " DATE_FORMAT(a.reported_on, '%b') AS month,"
    		+ " SUM(CASE WHEN a.updated_on IS NOT NULL AND a.status IN (5,6) THEN 1 ELSE 0 END) AS resolved,"
-   		+ " SUM(CASE WHEN a.updated_on IS NULL OR a.status NOT IN (5,6) THEN 1 ELSE 0 END) AS unresolved,"
-   		+ " COALESCE(AVG("
-   		+ "   CASE WHEN a.updated_on IS NOT NULL AND a.status IN (5,6)"
-   		+ "        THEN TIMESTAMPDIFF(HOUR, a.reported_on, a.updated_on)"
-   		+ "    END"
-   		+ " ),0) AS avg_hours"
+   		+ " SUM(CASE WHEN a.updated_on IS NULL OR a.status NOT IN (5,6) THEN 1 ELSE 0 END) AS unresolved"
    		+ " FROM anomalies a"
    		+ " WHERE a.reported_on > :start"
    		+ " AND a.reported_on <= :end"
@@ -78,7 +81,7 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
    		+ " AND a.anomaly_type_id IN ( SELECT at.id FROM anomaly_types at WHERE (at.target_entity_type = 2 AND at.entity_id = :industryId) OR"
    		+ "	(at.target_entity_type = 1 AND at.entity_id IN (SELECT st.id FROM service_types st WHERE st.industry_id = :industryId)))"
    		+ " GROUP BY DATE_FORMAT(a.reported_on, '%Y-%m')"
-   		+ " ORDER BY sort;", nativeQuery = true)
+   		+ " ORDER BY DATE_FORMAT(a.reported_on, '%Y-%m');", nativeQuery = true)
    List<Object[]> getResolutionMetrics( @Param("industryId") Long industryId, @Param("serviceProviderIds") List<Long> serviceProviderIds, @Param("start") java.util.Date start, @Param("end") java.util.Date end);
 
 

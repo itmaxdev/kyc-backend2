@@ -214,18 +214,18 @@ public class DashboardServiceImpl implements DashboardService {
         consumersList.add(new DashboardObject("Total consumers", (int) totalConsumers));
 
 
-        //List<DashboardObjectInterface> resolutionMetricsList = new ArrayList<>();
+        List<DashboardObjectInterface> resolutionMetricsList = new ArrayList<>();
         //TODO:: Validate Logic
         //count Average Resolution Time based for selected dates
-        //double numAverageResolutionTime = anomalyService.getAverageResolutionTimeInHours(selectedIndustry, startDate, endDate);
-        //resolutionMetricsList.add(new DashboardObject("Monthly distribution of resolution time", (int) numAverageResolutionTime));
+        double numAverageResolutionTime = anomalyService.getAverageResolutionTimeInHours(selectedIndustry, serviceProviderIds, startDate, endDate);
+        resolutionMetricsList.add(new DashboardObject("Monthly distribution of resolution time", (int) numAverageResolutionTime));
         
         List<Object[]> results = anomalyService.getResolutionMetrics(selectedIndustry, serviceProviderIds, startDate, endDate);
         List<ResolutionMetricDTO> metrics = new ArrayList<>();
         for (Object[] row : results) {
-            String month = (String) row[1];
-            Long resolved = ((Number) row[2]).longValue();
-            Long unresolved = ((Number) row[3]).longValue();
+            String month = (String) row[0];
+            Long resolved = ((Number) row[1]).longValue();
+            Long unresolved = ((Number) row[2]).longValue();
 
             metrics.add(new ResolutionMetricDTO(month, resolved, unresolved));
         }
@@ -293,7 +293,7 @@ public class DashboardServiceImpl implements DashboardService {
         dashboardResponseDTO.setConsumers(consumersList);
         dashboardResponseDTO.setAnomalies(anomaliesList);
         dashboardResponseDTO.setAnomalyTypes(anomalyTypes);
-        //dashboardResponseDTO.setResolutionMetrics(metrics);
+        dashboardResponseDTO.setResolutionMetrics(resolutionMetricsList);
         dashboardResponseDTO.setAverageResolutionMetrics(metrics);
 
         return dashboardResponseDTO;

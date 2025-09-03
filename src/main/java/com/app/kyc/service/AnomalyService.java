@@ -52,7 +52,7 @@ public interface AnomalyService
 
    int getAverageResolutionTimeInHoursByServiceProviderAndServiceType(Long serviceProviderId, Long serviceTypeId, Date startDate, Date endDate);
 
-   double getAverageResolutionTimeInHours(Long industryId, Date startDate, Date endDate);
+   double getAverageResolutionTimeInHours(Long industryId, List<Long> serviceProviderIds , Date startDate, Date endDate);
 
    int getAnomaliesReportedByServiceProvidersAndDates(List<Long> serviceProviderIds, List<AnomalyStatus> statuses, Date startDate, Date endDate);
 
