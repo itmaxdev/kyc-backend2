@@ -4,6 +4,7 @@ import com.app.kyc.entity.Consumer;
 import com.app.kyc.entity.ProcessedFile;
 import com.app.kyc.entity.ServiceProvider;
 import com.app.kyc.entity.User;
+import com.app.kyc.model.ConsumerIdentityKey;
 import com.app.kyc.repository.ConsumerRepository;
 import com.app.kyc.repository.ProcessedFileRepository;
 import com.app.kyc.repository.ServiceProviderRepository;
@@ -39,6 +40,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -417,7 +419,7 @@ public class FileProcessingService {
 
     /* ================= Ingest (short TX) ================= */
 
-    @Transactional(rollbackFor = Exception.class)
+    /*@Transactional(rollbackFor = Exception.class)
     protected int ingestFileTxVodacom(Path workingCopy, Long spId, char sep, Charset cs) throws Exception {
         final Timestamp nowTs = new Timestamp(System.currentTimeMillis());
         final List<RowData> batch = new ArrayList<>(BATCH_SIZE);
@@ -468,6 +470,182 @@ public class FileProcessingService {
             if (!batch.isEmpty()) {
                 total += executeBatch(batch);
                 batch.clear();
+            }
+        }
+
+        return total;
+    }*/
+
+
+    @Transactional(rollbackFor = Exception.class)
+    protected int ingestFileTxVodacom(Path workingCopy, Long spId, char sep, Charset cs) throws Exception {
+        final Timestamp nowTs = new Timestamp(System.currentTimeMillis());
+        final List<RowData> batch = new ArrayList<>(BATCH_SIZE);
+        int total = 0;
+
+        // 🔹 Preload all existing consumers into memory (opt: scope by spId)
+        List<Consumer> allConsumers = (spId != null)
+                ? consumerRepository.findAllByServiceProvider_Id(spId)
+                : consumerRepository.findAll();
+
+        // Build multiple lookup maps for flexible matching
+        Map<ConsumerIdentityKey, Consumer> mapByNameAndId =
+                allConsumers.stream().collect(Collectors.toMap(
+                        c -> new ConsumerIdentityKey(
+                                normalize(c.getFirstName()),
+                                normalize(c.getLastName()),
+                                normalize(c.getIdentificationNumber()),
+                                normalize(c.getIdentificationType()),
+                                null
+                        ),
+                        c -> c,
+                        (a, b) -> a
+                ));
+
+        Map<ConsumerIdentityKey, Consumer> mapByMsisdnLastName =
+                allConsumers.stream().filter(c -> notEmpty(c.getMsisdn()))
+                        .collect(Collectors.toMap(
+                                c -> new ConsumerIdentityKey(
+                                        null,
+                                        normalize(c.getLastName()),
+                                        normalize(c.getIdentificationNumber()),
+                                        normalize(c.getIdentificationType()),
+                                        normalize(c.getMsisdn())
+                                ),
+                                c -> c,
+                                (a, b) -> a
+                        ));
+
+        Map<ConsumerIdentityKey, Consumer> mapByMsisdnFirstName =
+                allConsumers.stream().filter(c -> notEmpty(c.getMsisdn()))
+                        .collect(Collectors.toMap(
+                                c -> new ConsumerIdentityKey(
+                                        normalize(c.getFirstName()),
+                                        null,
+                                        normalize(c.getIdentificationNumber()),
+                                        normalize(c.getIdentificationType()),
+                                        normalize(c.getMsisdn())
+                                ),
+                                c -> c,
+                                (a, b) -> a
+                        ));
+
+        Map<ConsumerIdentityKey, Consumer> mapByMsisdnIdNumber =
+                allConsumers.stream().filter(c -> notEmpty(c.getMsisdn()))
+                        .collect(Collectors.toMap(
+                                c -> new ConsumerIdentityKey(
+                                        normalize(c.getFirstName()),
+                                        normalize(c.getLastName()),
+                                        null,
+                                        normalize(c.getIdentificationType()),
+                                        normalize(c.getMsisdn())
+                                ),
+                                c -> c,
+                                (a, b) -> a
+                        ));
+
+        Map<ConsumerIdentityKey, Consumer> mapByMsisdnIdType =
+                allConsumers.stream().filter(c -> notEmpty(c.getMsisdn()))
+                        .collect(Collectors.toMap(
+                                c -> new ConsumerIdentityKey(
+                                        normalize(c.getFirstName()),
+                                        normalize(c.getLastName()),
+                                        normalize(c.getIdentificationNumber()),
+                                        null,
+                                        normalize(c.getMsisdn())
+                                ),
+                                c -> c,
+                                (a, b) -> a
+                        ));
+
+        try (InputStream in = Files.newInputStream(workingCopy);
+             Reader reader = new InputStreamReader(in, cs);
+             CSVReader csv = new CSVReaderBuilder(reader)
+                     .withCSVParser(new CSVParserBuilder().withSeparator(sep).build())
+                     .build()) {
+
+            String[] row;
+            boolean isHeader = true;
+            List<Consumer> toSave = new ArrayList<>();
+
+            while ((row = csv.readNext()) != null) {
+                stripBomInPlace(row);
+
+                if (isHeader) { isHeader = false; log.info("Header column count: {}", row.length); continue; }
+                if (row.length == 0) continue;
+
+                RowData r = mapRowVodacom(row, spId, nowTs);
+                if (r == null) continue;
+
+                r.msisdn = normalizeMsisdnAllowNull(r.msisdn);
+
+                // choose key depending on missing field
+                Consumer existing = null;
+
+                if (isEmpty(r.msisdn)) {
+                    existing = mapByNameAndId.get(new ConsumerIdentityKey(
+                            normalize(r.firstName), normalize(r.lastName),
+                            normalize(r.idNumber), normalize(r.idType), null));
+                } else if (isEmpty(r.firstName)) {
+                    existing = mapByMsisdnLastName.get(new ConsumerIdentityKey(
+                            null, normalize(r.lastName),
+                            normalize(r.idNumber), normalize(r.idType),
+                            normalize(r.msisdn)));
+                } else if (isEmpty(r.lastName)) {
+                    existing = mapByMsisdnFirstName.get(new ConsumerIdentityKey(
+                            normalize(r.firstName), null,
+                            normalize(r.idNumber), normalize(r.idType),
+                            normalize(r.msisdn)));
+                } else if (isEmpty(r.idNumber)) {
+                    existing = mapByMsisdnIdNumber.get(new ConsumerIdentityKey(
+                            normalize(r.firstName), normalize(r.lastName),
+                            null, normalize(r.idType),
+                            normalize(r.msisdn)));
+                } else if (isEmpty(r.idType)) {
+                    existing = mapByMsisdnIdType.get(new ConsumerIdentityKey(
+                            normalize(r.firstName), normalize(r.lastName),
+                            normalize(r.idNumber), null,
+                            normalize(r.msisdn)));
+                }
+
+                if (existing != null) {
+                    // update empty fields only
+                    if (isEmpty(existing.getMsisdn()) && notEmpty(r.msisdn)) existing.setMsisdn(r.msisdn);
+                    if (isEmpty(existing.getFirstName()) && notEmpty(r.firstName)) existing.setFirstName(r.firstName);
+                    if (isEmpty(existing.getLastName()) && notEmpty(r.lastName)) existing.setLastName(r.lastName);
+                    if (isEmpty(existing.getIdentificationNumber()) && notEmpty(r.idNumber)) existing.setIdentificationNumber(r.idNumber);
+                    if (isEmpty(existing.getIdentificationType()) && notEmpty(r.idType)) existing.setIdentificationType(r.idType);
+                    // … update other fields if empty
+                    toSave.add(existing);
+                } else {
+                    Consumer newC = new Consumer();
+                    newC.setFirstName(r.firstName);
+                    newC.setLastName(r.lastName);
+                    newC.setIdentificationNumber(r.idNumber);
+                    newC.setIdentificationType(r.idType);
+                    newC.setMsisdn(r.msisdn);
+
+// ServiceProvider fix
+                    ServiceProvider spRef = new ServiceProvider();
+                    spRef.setId(spId);
+                    newC.setServiceProvider(spRef);
+
+// createdOn fix (convert to String since your entity has String)
+                    newC.setCreatedOn(nowTs.toString());
+
+                    consumerRepository.save(newC);
+                }
+
+                if (toSave.size() >= BATCH_SIZE) {
+                    consumerRepository.saveAll(toSave);
+                    total += toSave.size();
+                    toSave.clear();
+                }
+            }
+
+            if (!toSave.isEmpty()) {
+                consumerRepository.saveAll(toSave);
+                total += toSave.size();
             }
         }
 
@@ -922,4 +1100,10 @@ public class FileProcessingService {
         String createdOnTs;
         Long serviceProviderId;
     }
+
+
+    private boolean isEmpty(String s) { return s == null || s.trim().isEmpty(); }
+    private boolean notEmpty(String s) { return !isEmpty(s); }
+    private String normalize(String s) { return (s == null ? null : s.trim().toUpperCase()); }
+
 }

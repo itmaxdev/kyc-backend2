@@ -331,4 +331,20 @@ public interface ConsumerRepository extends JpaRepository<Consumer, Long>
             Pageable pageable, Collection<Integer> statuses, Long serviceProviderId);
 
 
+
+    Optional<Consumer> findByFirstNameAndLastNameAndIdentificationNumberAndIdentificationType(
+            String firstName, String lastName, String idNumber, String idType);
+
+    Optional<Consumer> findByMsisdnAndLastNameAndIdentificationNumberAndIdentificationType(
+            String msisdn, String lastName, String idNumber, String idType);
+
+    Optional<Consumer> findByFirstNameAndMsisdnAndIdentificationNumberAndIdentificationType(
+            String firstName, String msisdn, String idNumber, String idType);
+
+    Optional<Consumer> findByMsisdnAndLastNameAndFirstNameAndIdentificationType(
+            String msisdn, String lastName, String firstName, String idType);
+
+    Optional<Consumer> findByFirstNameAndLastNameAndIdentificationNumberAndMsisdn(
+            String firstName, String lastName, String idNumber, String msisdn);
+
 }
