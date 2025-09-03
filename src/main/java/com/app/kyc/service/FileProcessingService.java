@@ -532,6 +532,11 @@ public class FileProcessingService {
                     if (isEmpty(existing.getAddress()) && notEmpty(r.address)) existing.setAddress(r.address);
                     if (isEmpty(existing.getRegistrationDate()) && notEmpty(r.registrationDateStr)) existing.setRegistrationDate(r.registrationDateStr);
 
+                    if (isEmpty(existing.getBirthDate()) && notEmpty(r.birthDateStr)) existing.setBirthDate(r.birthDateStr);
+                    if (isEmpty(existing.getAlternateMsisdn1()) && notEmpty(r.alt1)) existing.setAlternateMsisdn1(r.alt1);
+                    if (isEmpty(existing.getAlternateMsisdn2()) && notEmpty(r.alt2)) existing.setAlternateMsisdn2(r.alt2);
+                    if (isEmpty(existing.getMiddleName()) && notEmpty(r.middleName)) existing.setMiddleName(r.middleName);
+
                     toSave.add(existing);
 
                 } else {
@@ -543,7 +548,11 @@ public class FileProcessingService {
                     newC.setIdentificationType(r.idType);
                     newC.setMsisdn(r.msisdn);
                     newC.setGender(r.gender);
+                    newC.setMiddleName(r.middleName);
                     newC.setBirthPlace(r.birthPlace);
+                    newC.setAlternateMsisdn1(r.alt1);
+                    newC.setAlternateMsisdn2(r.alt2);
+                    newC.setBirthDate(r.birthDateStr);
                     newC.setAddress(r.address);
                     newC.setRegistrationDate(r.registrationDateStr);
 
