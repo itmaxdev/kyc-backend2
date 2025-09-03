@@ -425,5 +425,10 @@ public class AnomalyServiceImpl implements AnomalyService
       return anomalyRepository.getAverageResolutionTimeInHoursByServiceProviderAndServiceType(serviceProviderId, serviceTypeId, startDate, endDate);
    }
 
+   @Override
+   public List<Object[]> getResolutionMetrics(Long industryId, List<Long> serviceProviderIds, Date startDate, Date endDate)
+   {
+      return anomalyRepository.getResolutionMetrics(industryId, serviceProviderIds ,startDate, endDate);
+   }
    
 }

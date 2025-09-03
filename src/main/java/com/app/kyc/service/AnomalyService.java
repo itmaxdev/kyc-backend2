@@ -65,4 +65,6 @@ public interface AnomalyService
    long countByStatusNotIn(List<AnomalyStatus> list);
 
    List<Object[]> countByAnomalyType();
+   
+   List<Object[]> getResolutionMetrics(Long industryId, List<Long> serviceProviderIds, Date startDate, Date endDate);
 }
