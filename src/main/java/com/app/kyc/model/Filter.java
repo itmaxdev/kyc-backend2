@@ -23,6 +23,9 @@ public class Filter {
     
     @JsonAlias({"anomalyType"})
     private Long anomalyType;
+    
+    @JsonAlias({"resolution"})
+    private String resolution;
 
     public Boolean getConsistent() { return consistent; }
     public void setConsistent(Boolean consistent) { this.consistent = consistent; }
@@ -41,4 +44,7 @@ public class Filter {
 	
 	public Long getAnomalyType() {return anomalyType;}
 	public void setAnomalyType(Long anomalyType) {this.anomalyType = anomalyType;}
+	
+	public String getResolution() {return resolution;}
+	public void setResolution(String resolution) {this.resolution = resolution;}
 }
