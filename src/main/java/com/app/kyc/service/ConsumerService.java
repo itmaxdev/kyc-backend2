@@ -61,9 +61,9 @@ public interface ConsumerService
    
    List<DashboardObjectInterface> getAndCountDistinctConsumersByServiceProviderBetweenDatesGroupByDateMonthYear(Collection<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd, int consumerStatus);
 
-  long getTotalConsumers();
+  long getTotalConsumers(Collection<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd);
 
-   List<Object[]> getConsumersPerOperator();
+   List<Object[]> getConsumersPerOperator(Collection<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd);
 
    List<DashboardObjectInterface> buildAnomalyTypes(List<Long> serviceProviderIds, int i);
    

@@ -204,7 +204,7 @@ public class DashboardServiceImpl implements DashboardService {
         //get consumers count grouped by service providers for selected dates
         //consumers = consumerService.getAndCountConsumersGroupedByServiceProviderId(serviceProviderIds, startDate, endDate);
         List<DashboardObjectInterface> consumersList = new ArrayList<>();
-        long totalConsumers = consumerService.getTotalConsumers();
+        long totalConsumers = consumerService.getTotalConsumers(serviceProviderIds,startDate, endDate);
         //long consumersPerOperator = consumerService.getConsumersPerOperator();
 
         //consumers = new ArrayList<>(Arrays.asList(new DashboardObject("Total consumers", (int) totalConsumers),new DashboardObject("Consumers per operator", (int) consumersPerOperator)));
@@ -220,7 +220,7 @@ public class DashboardServiceImpl implements DashboardService {
         resolutionMetricsList.add(new DashboardObject("Monthly distribution of resolution time", (int) numAverageResolutionTime));
 
         // 2. Consumers per operator
-        List<Object[]> result = consumerService.getConsumersPerOperator();
+        List<Object[]> result = consumerService.getConsumersPerOperator(serviceProviderIds,startDate, endDate);
         for (Object[] row : result) {
             String operator = (String) row[0];
             Long count = ((Number) row[1]).longValue();
