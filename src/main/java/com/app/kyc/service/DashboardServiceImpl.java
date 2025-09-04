@@ -223,11 +223,11 @@ public class DashboardServiceImpl implements DashboardService {
         List<Object[]> results = anomalyService.getResolutionMetrics(selectedIndustry, serviceProviderIds, startDate, endDate);
         List<ResolutionMetricDTO> metrics = new ArrayList<>();
         for (Object[] row : results) {
-            String month = (String) row[0];
+            String label = (String) row[0];
             Long resolved = ((Number) row[1]).longValue();
             Long unresolved = ((Number) row[2]).longValue();
 
-            metrics.add(new ResolutionMetricDTO(month, resolved, unresolved));
+            metrics.add(new ResolutionMetricDTO(label, resolved, unresolved));
         }
         
 

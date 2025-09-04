@@ -1,19 +1,19 @@
 package com.app.kyc.model;
 
 public class ResolutionMetricDTO {
-    private String month;
+    private String label;
     private Long resolved;
     private Long unresolved;
 
     public ResolutionMetricDTO(String month, Long resolved, Long unresolved) {
-        this.month = month;
+        this.label = month;
         this.resolved = resolved;
         this.unresolved = unresolved;
     }
 
     // Getters and setters
-    public String getMonth() { return month; }
-    public void setMonth(String month) { this.month = month; }
+    public String getLabel() { return label; }
+    public void setLabel(String label) { this.label = label; }
 
     public Long getResolved() { return resolved; }
     public void setResolved(Long resolved) { this.resolved = resolved; }
