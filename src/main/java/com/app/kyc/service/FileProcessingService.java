@@ -584,7 +584,6 @@ public class FileProcessingService {
     @Transactional(rollbackFor = Exception.class)
     protected int ingestFileTxAirtel(Path workingCopy, Long spId, char sep, Charset cs) throws Exception {
         final Timestamp nowTs = new Timestamp(System.currentTimeMillis());
-        final List<RowData> batch = new ArrayList<>(BATCH_SIZE);
         int total = 0;
 
         try (InputStream in = Files.newInputStream(workingCopy);
@@ -595,16 +594,22 @@ public class FileProcessingService {
 
             String[] row;
             boolean isHeader = true;
+            List<Consumer> toSave = new ArrayList<>();
 
             while ((row = csv.readNext()) != null) {
                 stripBomInPlace(row);
 
-                if (isHeader) { isHeader = false; log.info("Header column count: {}", row.length); continue; }
+                if (isHeader) {
+                    isHeader = false;
+                    log.info("Header column count: {}", row.length);
+                    continue;
+                }
                 if (row.length == 0) continue;
 
                 RowData r = mapRowAirtel(row, spId, nowTs);
                 if (r == null) continue;
 
+                // Normalize & clip
                 r.msisdn             = normalizeMsisdnAllowNull(r.msisdn);
                 r.firstName          = clip(r.firstName, 100);
                 r.middleName         = clip(r.middleName, 255);
@@ -618,26 +623,76 @@ public class FileProcessingService {
                 r.idNumber           = clip(r.idNumber, 45);
                 r.registrationDateStr= clip(r.registrationDateStr, 50);
 
-                batch.add(r);
-                if (batch.size() >= BATCH_SIZE) {
-                    total += executeBatch(batch);
-                    batch.clear();
+                // 🔹 Use Specification to check existing consumer
+                Specification<Consumer> spec = ConsumerSpecifications.matchConsumer(r);
+                List<Consumer> matches = consumerRepository.findAll(spec);
+                Consumer existing = matches.isEmpty() ? null : matches.get(0);
+
+                if (existing != null) {
+                    // Update empty fields only
+                    if (isEmpty(existing.getMsisdn()) && notEmpty(r.msisdn)) existing.setMsisdn(r.msisdn);
+                    if (isEmpty(existing.getFirstName()) && notEmpty(r.firstName)) existing.setFirstName(r.firstName);
+                    if (isEmpty(existing.getLastName()) && notEmpty(r.lastName)) existing.setLastName(r.lastName);
+                    if (isEmpty(existing.getIdentificationNumber()) && notEmpty(r.idNumber)) existing.setIdentificationNumber(r.idNumber);
+                    if (isEmpty(existing.getIdentificationType()) && notEmpty(r.idType)) existing.setIdentificationType(r.idType);
+                    if (isEmpty(existing.getGender()) && notEmpty(r.gender)) existing.setGender(r.gender);
+                    if (isEmpty(existing.getBirthPlace()) && notEmpty(r.birthPlace)) existing.setBirthPlace(r.birthPlace);
+                    if (isEmpty(existing.getAddress()) && notEmpty(r.address)) existing.setAddress(r.address);
+                    if (isEmpty(existing.getRegistrationDate()) && notEmpty(r.registrationDateStr)) existing.setRegistrationDate(r.registrationDateStr);
+
+                    if (isEmpty(existing.getBirthDate()) && notEmpty(r.birthDateStr)) existing.setBirthDate(r.birthDateStr);
+                    if (isEmpty(existing.getAlternateMsisdn1()) && notEmpty(r.alt1)) existing.setAlternateMsisdn1(r.alt1);
+                    if (isEmpty(existing.getAlternateMsisdn2()) && notEmpty(r.alt2)) existing.setAlternateMsisdn2(r.alt2);
+                    if (isEmpty(existing.getMiddleName()) && notEmpty(r.middleName)) existing.setMiddleName(r.middleName);
+
+                    toSave.add(existing);
+
+                } else {
+                    // Insert new consumer
+                    Consumer newC = new Consumer();
+                    newC.setFirstName(r.firstName);
+                    newC.setLastName(r.lastName);
+                    newC.setIdentificationNumber(r.idNumber);
+                    newC.setIdentificationType(r.idType);
+                    newC.setMsisdn(r.msisdn);
+                    newC.setGender(r.gender);
+                    newC.setBirthPlace(r.birthPlace);
+                    newC.setAddress(r.address);
+                    newC.setRegistrationDate(r.registrationDateStr);
+                    newC.setBirthDate(r.birthDateStr);
+                    newC.setMiddleName(r.middleName);
+                    newC.setAlternateMsisdn2(r.alt2);
+                    newC.setAlternateMsisdn1(r.alt1);
+
+                    ServiceProvider spRef = new ServiceProvider();
+                    spRef.setId(spId);
+                    newC.setServiceProvider(spRef);
+
+                    newC.setCreatedOn(nowTs.toString()); // or LocalDateTime if you update entity
+
+                    toSave.add(newC);
+                }
+
+                if (toSave.size() >= BATCH_SIZE) {
+                    consumerRepository.saveAll(toSave);
+                    total += toSave.size();
+                    toSave.clear();
                 }
             }
 
-            if (!batch.isEmpty()) {
-                total += executeBatch(batch);
-                batch.clear();
+            if (!toSave.isEmpty()) {
+                consumerRepository.saveAll(toSave);
+                total += toSave.size();
             }
         }
 
         return total;
     }
 
+
     @Transactional(rollbackFor = Exception.class)
     protected int ingestFileTxOrange(Path workingCopy, Long spId, char sep, Charset cs) throws Exception {
         final Timestamp nowTs = new Timestamp(System.currentTimeMillis());
-        final List<RowData> batch = new ArrayList<>(BATCH_SIZE);
         int total = 0;
 
         try (InputStream in = Files.newInputStream(workingCopy);
@@ -648,16 +703,22 @@ public class FileProcessingService {
 
             String[] row;
             boolean isHeader = true;
+            List<Consumer> toSave = new ArrayList<>();
 
             while ((row = csv.readNext()) != null) {
                 stripBomInPlace(row);
 
-                if (isHeader) { isHeader = false; log.info("Header column count: {}", row.length); continue; }
+                if (isHeader) {
+                    isHeader = false;
+                    log.info("Header column count: {}", row.length);
+                    continue;
+                }
                 if (row.length == 0) continue;
 
                 RowData r = mapRowOrange(row, spId, nowTs);
                 if (r == null) continue;
 
+                // Normalize & clip
                 r.msisdn             = normalizeMsisdnAllowNull(r.msisdn);
                 r.firstName          = clip(r.firstName, 100);
                 r.middleName         = clip(r.middleName, 255);
@@ -671,26 +732,77 @@ public class FileProcessingService {
                 r.idNumber           = clip(r.idNumber, 45);
                 r.registrationDateStr= clip(r.registrationDateStr, 50);
 
-                batch.add(r);
-                if (batch.size() >= BATCH_SIZE) {
-                    total += executeBatch(batch);
-                    batch.clear();
+                // 🔹 Use Specification for matching
+                Specification<Consumer> spec = ConsumerSpecifications.matchConsumer(r);
+                List<Consumer> matches = consumerRepository.findAll(spec);
+                Consumer existing = matches.isEmpty() ? null : matches.get(0);
+
+                if (existing != null) {
+                    // Update empty fields
+                    if (isEmpty(existing.getMsisdn()) && notEmpty(r.msisdn)) existing.setMsisdn(r.msisdn);
+                    if (isEmpty(existing.getFirstName()) && notEmpty(r.firstName)) existing.setFirstName(r.firstName);
+                    if (isEmpty(existing.getLastName()) && notEmpty(r.lastName)) existing.setLastName(r.lastName);
+                    if (isEmpty(existing.getIdentificationNumber()) && notEmpty(r.idNumber)) existing.setIdentificationNumber(r.idNumber);
+                    if (isEmpty(existing.getIdentificationType()) && notEmpty(r.idType)) existing.setIdentificationType(r.idType);
+                    if (isEmpty(existing.getGender()) && notEmpty(r.gender)) existing.setGender(r.gender);
+                    if (isEmpty(existing.getBirthPlace()) && notEmpty(r.birthPlace)) existing.setBirthPlace(r.birthPlace);
+                    if (isEmpty(existing.getAddress()) && notEmpty(r.address)) existing.setAddress(r.address);
+                    if (isEmpty(existing.getRegistrationDate()) && notEmpty(r.registrationDateStr)) existing.setRegistrationDate(r.registrationDateStr);
+
+
+                    if (isEmpty(existing.getBirthDate()) && notEmpty(r.birthDateStr)) existing.setBirthDate(r.birthDateStr);
+                    if (isEmpty(existing.getAlternateMsisdn1()) && notEmpty(r.alt1)) existing.setAlternateMsisdn1(r.alt1);
+                    if (isEmpty(existing.getAlternateMsisdn2()) && notEmpty(r.alt2)) existing.setAlternateMsisdn2(r.alt2);
+                    if (isEmpty(existing.getMiddleName()) && notEmpty(r.middleName)) existing.setMiddleName(r.middleName);
+
+                    toSave.add(existing);
+
+                } else {
+                    // Insert new consumer
+                    Consumer newC = new Consumer();
+                    newC.setFirstName(r.firstName);
+                    newC.setLastName(r.lastName);
+                    newC.setIdentificationNumber(r.idNumber);
+                    newC.setIdentificationType(r.idType);
+                    newC.setMsisdn(r.msisdn);
+                    newC.setGender(r.gender);
+                    newC.setBirthPlace(r.birthPlace);
+                    newC.setAddress(r.address);
+                    newC.setRegistrationDate(r.registrationDateStr);
+                    newC.setBirthDate(r.birthDateStr);
+                    newC.setMiddleName(r.middleName);
+                    newC.setAlternateMsisdn2(r.alt2);
+                    newC.setAlternateMsisdn1(r.alt1);
+                    ServiceProvider spRef = new ServiceProvider();
+                    spRef.setId(spId);
+                    newC.setServiceProvider(spRef);
+
+                    newC.setCreatedOn(nowTs.toString()); // better: LocalDateTime
+
+                    toSave.add(newC);
+                }
+
+                // Batch flush
+                if (toSave.size() >= BATCH_SIZE) {
+                    consumerRepository.saveAll(toSave);
+                    total += toSave.size();
+                    toSave.clear();
                 }
             }
 
-            if (!batch.isEmpty()) {
-                total += executeBatch(batch);
-                batch.clear();
+            if (!toSave.isEmpty()) {
+                consumerRepository.saveAll(toSave);
+                total += toSave.size();
             }
         }
 
         return total;
     }
 
+
     @Transactional(rollbackFor = Exception.class)
     protected int ingestFileTxAfricell(Path workingCopy, Long spId, char sep, Charset cs) throws Exception {
         final Timestamp nowTs = new Timestamp(System.currentTimeMillis());
-        final List<RowData> batch = new ArrayList<>(BATCH_SIZE);
         int total = 0;
 
         try (InputStream in = Files.newInputStream(workingCopy);
@@ -701,16 +813,22 @@ public class FileProcessingService {
 
             String[] row;
             boolean isHeader = true;
+            List<Consumer> toSave = new ArrayList<>();
 
             while ((row = csv.readNext()) != null) {
                 stripBomInPlace(row);
 
-                if (isHeader) { isHeader = false; log.info("Header column count: {}", row.length); continue; }
+                if (isHeader) {
+                    isHeader = false;
+                    log.info("Header column count: {}", row.length);
+                    continue;
+                }
                 if (row.length == 0) continue;
 
                 RowData r = mapRowAfricell(row, spId, nowTs);
                 if (r == null) continue;
 
+                // 🔹 Normalize & clip
                 r.msisdn             = normalizeMsisdnAllowNull(r.msisdn);
                 r.firstName          = clip(r.firstName, 100);
                 r.middleName         = clip(r.middleName, 255);
@@ -724,21 +842,73 @@ public class FileProcessingService {
                 r.idNumber           = clip(r.idNumber, 45);
                 r.registrationDateStr= clip(r.registrationDateStr, 50);
 
-                batch.add(r);
-                if (batch.size() >= BATCH_SIZE) {
-                    total += executeBatch(batch);
-                    batch.clear();
+                // 🔹 Match existing consumer (by core fields first, fallback to msisdn)
+                Specification<Consumer> spec = ConsumerSpecifications.matchConsumer(r);
+                List<Consumer> matches = consumerRepository.findAll(spec);
+                Consumer existing = matches.isEmpty() ? null : matches.get(0);
+
+                if (existing != null) {
+                    // update empty fields
+                    if (isEmpty(existing.getMsisdn()) && notEmpty(r.msisdn)) existing.setMsisdn(r.msisdn);
+                    if (isEmpty(existing.getFirstName()) && notEmpty(r.firstName)) existing.setFirstName(r.firstName);
+                    if (isEmpty(existing.getLastName()) && notEmpty(r.lastName)) existing.setLastName(r.lastName);
+                    if (isEmpty(existing.getIdentificationNumber()) && notEmpty(r.idNumber)) existing.setIdentificationNumber(r.idNumber);
+                    if (isEmpty(existing.getIdentificationType()) && notEmpty(r.idType)) existing.setIdentificationType(r.idType);
+                    if (isEmpty(existing.getGender()) && notEmpty(r.gender)) existing.setGender(r.gender);
+                    if (isEmpty(existing.getBirthPlace()) && notEmpty(r.birthPlace)) existing.setBirthPlace(r.birthPlace);
+                    if (isEmpty(existing.getAddress()) && notEmpty(r.address)) existing.setAddress(r.address);
+                    if (isEmpty(existing.getRegistrationDate()) && notEmpty(r.registrationDateStr)) existing.setRegistrationDate(r.registrationDateStr);
+
+                    if (isEmpty(existing.getBirthDate()) && notEmpty(r.birthDateStr)) existing.setBirthDate(r.birthDateStr);
+                    if (isEmpty(existing.getAlternateMsisdn1()) && notEmpty(r.alt1)) existing.setAlternateMsisdn1(r.alt1);
+                    if (isEmpty(existing.getAlternateMsisdn2()) && notEmpty(r.alt2)) existing.setAlternateMsisdn2(r.alt2);
+                    if (isEmpty(existing.getMiddleName()) && notEmpty(r.middleName)) existing.setMiddleName(r.middleName);
+
+                    toSave.add(existing);
+
+                } else {
+                    // insert new consumer
+                    Consumer newC = new Consumer();
+                    newC.setFirstName(r.firstName);
+                    newC.setLastName(r.lastName);
+                    newC.setIdentificationNumber(r.idNumber);
+                    newC.setIdentificationType(r.idType);
+                    newC.setMsisdn(r.msisdn);
+                    newC.setGender(r.gender);
+                    newC.setBirthPlace(r.birthPlace);
+                    newC.setAddress(r.address);
+                    newC.setRegistrationDate(r.registrationDateStr);
+
+                    newC.setBirthDate(r.birthDateStr);
+                    newC.setMiddleName(r.middleName);
+                    newC.setAlternateMsisdn2(r.alt2);
+                    newC.setAlternateMsisdn1(r.alt1);
+
+                    ServiceProvider spRef = new ServiceProvider();
+                    spRef.setId(spId);
+                    newC.setServiceProvider(spRef);
+
+                    newC.setCreatedOn(nowTs.toString()); // better: LocalDateTime
+
+                    toSave.add(newC);
+                }
+
+                if (toSave.size() >= BATCH_SIZE) {
+                    consumerRepository.saveAll(toSave);
+                    total += toSave.size();
+                    toSave.clear();
                 }
             }
 
-            if (!batch.isEmpty()) {
-                total += executeBatch(batch);
-                batch.clear();
+            if (!toSave.isEmpty()) {
+                consumerRepository.saveAll(toSave);
+                total += toSave.size();
             }
         }
 
         return total;
     }
+
 
     private int executeBatch(List<RowData> rows) {
         jdbcTemplate.batchUpdate(UPSERT_SQL, new BatchPreparedStatementSetter() {
