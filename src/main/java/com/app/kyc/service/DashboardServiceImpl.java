@@ -217,7 +217,7 @@ public class DashboardServiceImpl implements DashboardService {
         List<DashboardObjectInterface> resolutionMetricsList = new ArrayList<>();
         //TODO:: Validate Logic
         //count Average Resolution Time based for selected dates
-        double numAverageResolutionTime = anomalyService.getAverageResolutionTimeInHours(selectedIndustry, serviceProviderIds, startDate, endDate);
+        double numAverageResolutionTime = anomalyService.getAverageResolutionTimeInHours(selectedIndustry, startDate, endDate);
         resolutionMetricsList.add(new DashboardObject("Monthly distribution of resolution time", (int) numAverageResolutionTime));
         
         List<Object[]> results = anomalyService.getResolutionMetrics(selectedIndustry, serviceProviderIds, startDate, endDate);
