@@ -38,7 +38,7 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
    Page<Anomaly> findDistinctByConsumers_ServiceProviderId(@Param("serviceProviderId") Long serviceProviderId, org.springframework.data.domain.Pageable pageable);
 
    @Query(value = "SELECT " +
-           "    AVG(resolveDay) AS resolveAvgDay " +
+           "    COALESCE(AVG(resolveDay),0) AS resolveAvgDay " +
            "FROM ( " +
            "    SELECT " +
            "        a.id, " +

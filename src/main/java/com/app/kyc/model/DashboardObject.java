@@ -21,7 +21,7 @@ public class DashboardObject implements DashboardObjectInterface
    Long serviceproviderid;
    
    @JsonInclude(JsonInclude.Include.NON_NULL)
-   Double days;
+   double days;
 
    public DashboardObject() {}
 
@@ -41,7 +41,7 @@ public class DashboardObject implements DashboardObjectInterface
       this.values = values;
    }
    
-   public DashboardObject(String name, Double days) {
+   public DashboardObject(String name, double days) {
 	      this.name = name;
 	      this.days = days;
    }
