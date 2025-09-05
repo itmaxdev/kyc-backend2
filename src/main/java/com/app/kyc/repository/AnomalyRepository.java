@@ -82,11 +82,11 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
    @Query(value = "select Distinct a from Anomaly a join ConsumerAnomaly ca on a.id = ca.anomaly.id join Consumer c on ca.consumer.id = c.id where c.consumerStatus in (:consumer_status) and a.status in (:anomalyStatus) and (:anomalyType is null or a.anomalyType.id = :anomalyType)")
    Page<Anomaly> findAllByConsumerStatus(Pageable pageable, @Param("consumer_status") List<Integer> consumer_status, @Param("anomalyStatus") List<AnomalyStatus> anomalyStatus,@Param("anomalyType") Long anomalyType);
 
-   @Query(value = "select Distinct a from Anomaly a join ConsumerAnomaly ca on a.id = ca.anomaly.id join Consumer c on ca.consumer.id = c.id where a.status in (:anomalyStatus) and (:anomalyType is null or a.anomalyType.id = :anomalyType)")
-   Page<Anomaly> findAllByConsumersAll(Pageable pageable, @Param("anomalyStatus") List<AnomalyStatus> anomalyStatus, @Param("anomalyType") Long anomalyType);
+   @Query(value = "select Distinct a from Anomaly a join ConsumerAnomaly ca on a.id = ca.anomaly.id join Consumer c on ca.consumer.id = c.id where a.status in (:anomalyStatus) and (coalesce(:resolutionStatus, null) is null or a.status in (:resolutionStatus))  and (:anomalyType is null or a.anomalyType.id = :anomalyType)")
+   Page<Anomaly> findAllByConsumersAll(Pageable pageable, @Param("anomalyStatus") List<AnomalyStatus> anomalyStatus, @Param("anomalyType") Long anomalyType, @Param("resolutionStatus") List<AnomalyStatus> resolutionStatus);
 
-   @Query(value = "select Distinct a from Anomaly a join ConsumerAnomaly ca on a.id = ca.anomaly.id join Consumer c on ca.consumer.id = c.id where c.consumerStatus in (:consumer_status) and c.serviceProvider.id = :serviceProviderId and a.status in(:anomalyStatus) and (:anomalyType is null or a.anomalyType.id = :anomalyType)")
-   Page<Anomaly> findAllByConsumerStatusAndServiceProviderId(Pageable pageable, @Param("consumer_status") List<Integer> consumer_status, @Param("serviceProviderId") Long serviceProviderId, @Param("anomalyStatus") List<AnomalyStatus> anomalyStatus, @Param("anomalyType") Long anomalyType);
+   @Query(value = "select Distinct a from Anomaly a join ConsumerAnomaly ca on a.id = ca.anomaly.id join Consumer c on ca.consumer.id = c.id where c.consumerStatus in (:consumer_status) and c.serviceProvider.id = :serviceProviderId and (coalesce(:anomalyStatus, null) is null or a.status in (:anomalyStatus)) and (coalesce(:resolutionStatus, null) is null or a.status in (:resolutionStatus)) and (:anomalyType is null or a.anomalyType.id = :anomalyType)")
+   Page<Anomaly> findAllByConsumerStatusAndServiceProviderId(Pageable pageable, @Param("consumer_status") List<Integer> consumer_status, @Param("serviceProviderId") Long serviceProviderId, @Param("anomalyStatus") List<AnomalyStatus> anomalyStatus, @Param("anomalyType") Long anomalyType,@Param("resolutionStatus") List<AnomalyStatus> resolutionStatus);
 
    @Transactional
    void deleteAllByIdIn(List<Long> ids);
