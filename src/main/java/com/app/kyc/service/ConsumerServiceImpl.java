@@ -3165,6 +3165,11 @@ System.out.println("Get all flagged ");
         anomalyCollection.getParentAnomalyNoteSet().clear();
     }
     
+    @Override
+    public List<Object[]> getConsumersbyServiceProvider (Collection<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd){
+       return consumerRepository.getConsumersByServiceProvider(serviceProviderIds, createdOnStart, createdOnEnd);
+    }
+    
     public List<AnomalyStatus> setStatusList(AnomalyStatus status){
     	List<AnomalyStatus>  anomalyStatus = new ArrayList<AnomalyStatus>();
     	if (status != null) {
