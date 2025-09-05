@@ -372,9 +372,9 @@ public class AnomalyServiceImpl implements AnomalyService
 
 
    @Override
-   public double getAverageResolutionTimeInHours(Long industryId, Date startDate, Date endDate)
+   public double getAverageResolutionTimeInHours(Long industryId, List<Long> serviceProviderIds, Date startDate, Date endDate)
    {
-      return anomalyRepository.getAverageResolutionTimeInHours(industryId, startDate, endDate);
+      return anomalyRepository.getAverageResolutionTimeInHours(serviceProviderIds, startDate, endDate);
    }
 
    @Override

@@ -19,6 +19,9 @@ public class DashboardObject implements DashboardObjectInterface
 
    @JsonInclude(JsonInclude.Include.NON_NULL)
    Long serviceproviderid;
+   
+   @JsonInclude(JsonInclude.Include.NON_NULL)
+   Double days;
 
    public DashboardObject() {}
 
@@ -36,6 +39,11 @@ public class DashboardObject implements DashboardObjectInterface
    public DashboardObject(String name, List<DashboardObject> values) {
       this.name = name;
       this.values = values;
+   }
+   
+   public DashboardObject(String name, Double days) {
+	      this.name = name;
+	      this.days = days;
    }
 
    @Override
@@ -69,6 +77,10 @@ public class DashboardObject implements DashboardObjectInterface
    @Override
    public int hashCode() {
       return Objects.hash(name);
+   }
+   
+   public Double getDays() {
+		return days;
    }
 
 }
