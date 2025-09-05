@@ -1108,13 +1108,22 @@ System.out.println("Get all flagged ");
             }
         } else {
             final Long spId = pagination.getFilter().getServiceProviderID();
-
+            List<Long> spIds;
+            
+            if(spId != 0) {
+            	spIds = Arrays.asList(spId);
+            }else {
+            	spIds = serviceProviderRepository.findAll()
+                        .stream()
+                        .map(ServiceProvider::getId)
+                        .toList();
+            }
             if (isResolved) {
                 consumerStatus.add(1);
                 anomalyStatus.add(AnomalyStatus.RESOLVED_SUCCESSFULLY);
 
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus, spId, anomalyStatus, pagination.getFilter().getAnomalyType(),resolutionStatus);
+                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus, spIds, anomalyStatus, pagination.getFilter().getAnomalyType(),resolutionStatus);
 
                 pageAnomaly = anomalyData.stream()
                         .map(a -> new AnomlyDto(a, 0))
@@ -1127,7 +1136,7 @@ System.out.println("Get all flagged ");
                 resolutionStatus.addAll(this.setResolution(pagination.getFilter().getResolution()));
 
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus, spId, anomalyStatus, pagination.getFilter().getAnomalyType(),resolutionStatus);
+                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus, spIds, anomalyStatus, pagination.getFilter().getAnomalyType(),resolutionStatus);
 
                 pageAnomaly = anomalyData.stream()
                         .map(AnomlyDto::new)
