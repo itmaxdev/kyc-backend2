@@ -70,4 +70,6 @@ public interface ConsumerService
    List<DashboardObjectInterface> buildAnomalyTypes(List<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd);
 
     // List<Object[]> getConsumersPerOperatorBreakdown();*/
+   
+   List<Object[]> getConsumersbyServiceProvider(Collection<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd);
 }

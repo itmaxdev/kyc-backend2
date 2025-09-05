@@ -313,5 +313,18 @@ public interface ConsumerRepository
 
     Optional<Consumer> findByFirstNameAndLastNameAndIdentificationNumberAndMsisdn(
             String firstName, String lastName, String idNumber, String msisdn);
+    
+    @Query(value = "SELECT "
+    		+ "    service_provider_id,"
+    		+ "    sp.name as NAME,"
+    		+ "    SUM(CASE WHEN is_consistent = 1 THEN 1 ELSE 0 END) AS consistent_count,"
+    		+ "    SUM(CASE WHEN is_consistent = 0 THEN 1 ELSE 0 END) AS non_consistent_count "
+    		+ "FROM consumers c "
+    		+ "join service_providers sp on c.service_provider_id = sp.id "
+    		+ "where c.service_provider_id IN (?1) "
+    		+ "AND STR_TO_DATE(c.created_on, '%Y-%m-%d') "
+    		+ "BETWEEN STR_TO_DATE(?2, '%Y-%m-%d') AND STR_TO_DATE(?3, '%Y-%m-%d') "
+    		+ "GROUP BY c.service_provider_id ", nativeQuery = true)
+    List<Object[]> getConsumersByServiceProvider(Collection<Long> ids, Date createdOnStart, Date createdOnEnd);
 
 }
