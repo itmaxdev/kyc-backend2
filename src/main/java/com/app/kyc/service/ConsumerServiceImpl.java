@@ -769,13 +769,13 @@ public class ConsumerServiceImpl implements ConsumerService {
     }
 
     @Override
-    public long getTotalConsumers (){
-        return consumerRepository.getTotalConsumers();
+    public long getTotalConsumers (Collection<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd){ 
+        return consumerRepository.getTotalConsumers(serviceProviderIds, createdOnStart, createdOnEnd);
     }
 
     @Override
-    public List<Object[]> getConsumersPerOperator (){
-        return consumerRepository.getConsumersPerOperator();
+    public List<Object[]> getConsumersPerOperator (Collection<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd){
+        return consumerRepository.getConsumersPerOperator(serviceProviderIds, createdOnStart, createdOnEnd);
     }
 
     @Override
