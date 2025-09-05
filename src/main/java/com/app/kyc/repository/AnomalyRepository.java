@@ -37,25 +37,25 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
 
    Page<Anomaly> findDistinctByConsumers_ServiceProviderId(@Param("serviceProviderId") Long serviceProviderId, org.springframework.data.domain.Pageable pageable);
 
-   @Query(
-           value =
-                   "SELECT COALESCE(AVG(TIMESTAMPDIFF(HOUR, a.reported_on, IFNULL(a.updated_on, NOW()))), 0) " +
-                           "FROM anomalies a " +
-                           "WHERE a.status IN (5, 6) " +
-                           "  AND a.reported_on > :start " +
-                           "  AND a.reported_on <= :end " +
-                           "  AND a.anomaly_type_id IN ( " +
-                           "      SELECT at.id " +
-                           "      FROM anomaly_types at " +
-                           "      WHERE (at.target_entity_type = 2 AND at.entity_id = :industryId) " +
-                           "         OR (at.target_entity_type = 1 AND at.entity_id IN ( " +
-                           "                SELECT st.id FROM service_types st WHERE st.industry_id = :industryId " +
-                           "             )) " +
-                           "  )",
+   @Query(value = "SELECT " +
+           "    COALESCE(AVG(resolveDay),0) AS resolveAvgDay " +
+           "FROM ( " +
+           "    SELECT " +
+           "        a.id, " +
+           "        DATEDIFF(a.updated_on, a.reported_on) AS resolveDay " +
+           "    FROM anomalies a " +
+           "    JOIN consumers_anomalies ca ON ca.anomaly_id = a.id " +
+           "    JOIN consumers c ON c.id = ca.consumer_id " +
+           "    WHERE a.status IN (5,6) " +
+           "      AND a.reported_on > :start " +
+           "      AND a.reported_on <= :end " +
+           "      AND c.service_provider_id IN (:serviceProviderIds) " +
+           "    GROUP BY a.id " +
+           ") anomaly",
            nativeQuery = true
    )
    double getAverageResolutionTimeInHours(
-           @Param("industryId") Long industryId,
+           @Param("serviceProviderIds") List<Long> serviceProviderIds,
            @Param("start") java.util.Date start,
            @Param("end") java.util.Date end
    );
