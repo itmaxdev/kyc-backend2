@@ -39,11 +39,12 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
+
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
+import java.util.function.Supplier;
+
 
 @Service
 @RequiredArgsConstructor
@@ -510,60 +511,54 @@ public class FileProcessingService {
 
                 r.msisdn = normalizeMsisdnAllowNull(r.msisdn);
 
-                // 🔹 Use Specification instead of multiple repo methods
-
-
-
-
+                // 🔹 Find existing consumer (based on specifications)
                 Specification<Consumer> spec = ConsumerSpecifications.matchConsumer(r);
                 List<Consumer> matches = consumerRepository.findAll(spec);
+                Consumer consumer = matches.isEmpty() ? null : matches.get(0);
 
-                Consumer existing = matches.isEmpty() ? null : matches.get(0);
-
-                if (existing != null) {
-                    // Update only empty fields
-                    if (isEmpty(existing.getMsisdn()) && notEmpty(r.msisdn)) existing.setMsisdn(r.msisdn);
-                    if (isEmpty(existing.getFirstName()) && notEmpty(r.firstName)) existing.setFirstName(r.firstName);
-                    if (isEmpty(existing.getLastName()) && notEmpty(r.lastName)) existing.setLastName(r.lastName);
-                    if (isEmpty(existing.getIdentificationNumber()) && notEmpty(r.idNumber)) existing.setIdentificationNumber(r.idNumber);
-                    if (isEmpty(existing.getIdentificationType()) && notEmpty(r.idType)) existing.setIdentificationType(r.idType);
-                    if (isEmpty(existing.getGender()) && notEmpty(r.gender)) existing.setGender(r.gender);
-                    if (isEmpty(existing.getBirthPlace()) && notEmpty(r.birthPlace)) existing.setBirthPlace(r.birthPlace);
-                    if (isEmpty(existing.getAddress()) && notEmpty(r.address)) existing.setAddress(r.address);
-                    if (isEmpty(existing.getRegistrationDate()) && notEmpty(r.registrationDateStr)) existing.setRegistrationDate(r.registrationDateStr);
-
-                    if (isEmpty(existing.getBirthDate()) && notEmpty(r.birthDateStr)) existing.setBirthDate(r.birthDateStr);
-                    if (isEmpty(existing.getAlternateMsisdn1()) && notEmpty(r.alt1)) existing.setAlternateMsisdn1(r.alt1);
-                    if (isEmpty(existing.getAlternateMsisdn2()) && notEmpty(r.alt2)) existing.setAlternateMsisdn2(r.alt2);
-                    if (isEmpty(existing.getMiddleName()) && notEmpty(r.middleName)) existing.setMiddleName(r.middleName);
-
-                    toSave.add(existing);
+                if (consumer != null) {
+                    // Update missing fields only
+                    applyIfEmpty(consumer::getMsisdn, consumer::setMsisdn, r.msisdn);
+                    applyIfEmpty(consumer::getFirstName, consumer::setFirstName, r.firstName);
+                    applyIfEmpty(consumer::getLastName, consumer::setLastName, r.lastName);
+                    applyIfEmpty(consumer::getIdentificationNumber, consumer::setIdentificationNumber, r.idNumber);
+                    applyIfEmpty(consumer::getIdentificationType, consumer::setIdentificationType, r.idType);
+                    applyIfEmpty(consumer::getGender, consumer::setGender, r.gender);
+                    applyIfEmpty(consumer::getBirthPlace, consumer::setBirthPlace, r.birthPlace);
+                    applyIfEmpty(consumer::getAddress, consumer::setAddress, r.address);
+                    applyIfEmpty(consumer::getRegistrationDate, consumer::setRegistrationDate, r.registrationDateStr);
+                    applyIfEmpty(consumer::getBirthDate, consumer::setBirthDate, r.birthDateStr);
+                    applyIfEmpty(consumer::getAlternateMsisdn1, consumer::setAlternateMsisdn1, r.alt1);
+                    applyIfEmpty(consumer::getAlternateMsisdn2, consumer::setAlternateMsisdn2, r.alt2);
+                    applyIfEmpty(consumer::getMiddleName, consumer::setMiddleName, r.middleName);
 
                 } else {
-                    // Insert new consumer
-                    Consumer newC = new Consumer();
-                    newC.setFirstName(r.firstName);
-                    newC.setLastName(r.lastName);
-                    newC.setIdentificationNumber(r.idNumber);
-                    newC.setIdentificationType(r.idType);
-                    newC.setMsisdn(r.msisdn);
-                    newC.setGender(r.gender);
-                    newC.setMiddleName(r.middleName);
-                    newC.setBirthPlace(r.birthPlace);
-                    newC.setAlternateMsisdn1(r.alt1);
-                    newC.setAlternateMsisdn2(r.alt2);
-                    newC.setBirthDate(r.birthDateStr);
-                    newC.setAddress(r.address);
-                    newC.setRegistrationDate(r.registrationDateStr);
+                    // Create new consumer
+                    consumer = new Consumer();
+                    consumer.setFirstName(r.firstName);
+                    consumer.setLastName(r.lastName);
+                    consumer.setIdentificationNumber(r.idNumber);
+                    consumer.setIdentificationType(r.idType);
+                    consumer.setMsisdn(r.msisdn);
+                    consumer.setGender(r.gender);
+                    consumer.setMiddleName(r.middleName);
+                    consumer.setBirthPlace(r.birthPlace);
+                    consumer.setAlternateMsisdn1(r.alt1);
+                    consumer.setAlternateMsisdn2(r.alt2);
+                    consumer.setBirthDate(r.birthDateStr);
+                    consumer.setAddress(r.address);
+                    consumer.setRegistrationDate(r.registrationDateStr);
+                    consumer.setCreatedOn(nowTs.toString());
 
                     ServiceProvider spRef = new ServiceProvider();
                     spRef.setId(spId);
-                    newC.setServiceProvider(spRef);
-
-                    newC.setCreatedOn(nowTs.toString()); // better: LocalDateTime
-
-                    toSave.add(newC);
+                    consumer.setServiceProvider(spRef);
                 }
+
+                // 🔹 Mark consistency (duplicate check by MSISDN)
+                updateConsistencyFlag(consumer);
+
+                toSave.add(consumer);
 
                 if (toSave.size() >= BATCH_SIZE) {
                     consumerRepository.saveAll(toSave);
@@ -580,6 +575,27 @@ public class FileProcessingService {
 
         return total;
     }
+
+    /** Utility: update only if current value is empty. */
+
+    private void applyIfEmpty(Supplier<String> getter, java.util.function.Consumer<String> setter, String newValue) {
+        if ((getter.get() == null || getter.get().trim().isEmpty())
+                && newValue != null && !newValue.trim().isEmpty()) {
+            setter.accept(newValue);
+        }
+    }
+
+
+    /** Utility: mark consumer consistent/inconsistent based on MSISDN duplicates. */
+    private void updateConsistencyFlag(Consumer consumer) {
+        if (consumer.getMsisdn() == null) {
+            consumer.setIsConsistent(true); // no MSISDN → default to consistent
+            return;
+        }
+        List<Consumer> sameMsisdn = consumerRepository.findByMsisdn(consumer.getMsisdn());
+        consumer.setIsConsistent(sameMsisdn.size() <= 1);
+    }
+
 
     @Transactional(rollbackFor = Exception.class)
     protected int ingestFileTxAirtel(Path workingCopy, Long spId, char sep, Charset cs) throws Exception {
