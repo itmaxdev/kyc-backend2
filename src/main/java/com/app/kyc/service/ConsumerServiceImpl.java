@@ -769,13 +769,13 @@ public class ConsumerServiceImpl implements ConsumerService {
     }
 
     @Override
-    public long getTotalConsumers (){
-        return consumerRepository.getTotalConsumers();
+    public long getTotalConsumers (Collection<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd){ 
+        return consumerRepository.getTotalConsumers(serviceProviderIds, createdOnStart, createdOnEnd);
     }
 
     @Override
-    public List<Object[]> getConsumersPerOperator (){
-        return consumerRepository.getConsumersPerOperator();
+    public List<Object[]> getConsumersPerOperator (Collection<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd){
+        return consumerRepository.getConsumersPerOperator(serviceProviderIds, createdOnStart, createdOnEnd);
     }
 
     @Override
@@ -1069,6 +1069,7 @@ System.out.println("Get all flagged ");
 
         final List<Integer> consumerStatus = new ArrayList<>();
         final List<AnomalyStatus> anomalyStatus = new ArrayList<>();
+        final List<AnomalyStatus> resolutionStatus = new ArrayList<AnomalyStatus>();
         List<AnomlyDto> pageAnomaly;
         long totalAnomaliesCount;
 
@@ -1080,7 +1081,6 @@ System.out.println("Get all flagged ");
         final boolean isResolved = pagination != null
                 && pagination.getFilter() != null
                 && Boolean.TRUE.equals(pagination.getFilter().getIsResolved());
-
         if (noSpFilter) {
             if (isResolved) {
                 consumerStatus.add(1);
@@ -1096,9 +1096,10 @@ System.out.println("Get all flagged ");
 
             } else {
                 anomalyStatus.addAll(this.setStatusList(pagination.getFilter().getAnomalyStatus()));
+                resolutionStatus.addAll(this.setResolution(pagination.getFilter().getResolution()));
 
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumersAll(pageable, anomalyStatus, pagination.getFilter().getAnomalyType());
+                        anomalyRepository.findAllByConsumersAll(pageable, anomalyStatus, pagination.getFilter().getAnomalyType(),resolutionStatus);
 
                 pageAnomaly = anomalyData.stream()
                         .map(AnomlyDto::new)
@@ -1107,13 +1108,22 @@ System.out.println("Get all flagged ");
             }
         } else {
             final Long spId = pagination.getFilter().getServiceProviderID();
-
+            List<Long> spIds;
+            
+            if(spId != 0) {
+            	spIds = Arrays.asList(spId);
+            }else {
+            	spIds = serviceProviderRepository.findAll()
+                        .stream()
+                        .map(ServiceProvider::getId)
+                        .toList();
+            }
             if (isResolved) {
                 consumerStatus.add(1);
                 anomalyStatus.add(AnomalyStatus.RESOLVED_SUCCESSFULLY);
 
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus, spId, anomalyStatus, pagination.getFilter().getAnomalyType());
+                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus, spIds, anomalyStatus, pagination.getFilter().getAnomalyType(),resolutionStatus);
 
                 pageAnomaly = anomalyData.stream()
                         .map(a -> new AnomlyDto(a, 0))
@@ -1123,9 +1133,10 @@ System.out.println("Get all flagged ");
             } else {
                 consumerStatus.add(0);
                 anomalyStatus.addAll(this.setStatusList(pagination.getFilter().getAnomalyStatus()));
+                resolutionStatus.addAll(this.setResolution(pagination.getFilter().getResolution()));
 
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus, spId, anomalyStatus, pagination.getFilter().getAnomalyType());
+                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus, spIds, anomalyStatus, pagination.getFilter().getAnomalyType(),resolutionStatus);
 
                 pageAnomaly = anomalyData.stream()
                         .map(AnomlyDto::new)
@@ -3163,53 +3174,71 @@ System.out.println("Get all flagged ");
         anomalyCollection.getParentAnomalyNoteSet().clear();
     }
     
+    @Override
+    public List<Object[]> getConsumersbyServiceProvider (Collection<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd){
+       return consumerRepository.getConsumersByServiceProvider(serviceProviderIds, createdOnStart, createdOnEnd);
+    }
+    
     public List<AnomalyStatus> setStatusList(AnomalyStatus status){
     	List<AnomalyStatus>  anomalyStatus = new ArrayList<AnomalyStatus>();
     	if (status != null) {
 			switch (status) {
 			case REPORTED:
-				log.info("in case 1");
 				anomalyStatus.add(AnomalyStatus.REPORTED);
 				break;
 
 			case QUESTION_SUBMITTED:
-				log.info("in case 2");
 				anomalyStatus.add(AnomalyStatus.QUESTION_SUBMITTED);
 				break;
 
 			case UNDER_INVESTIGATION:
-				log.info("in case 3");
 				anomalyStatus.add(AnomalyStatus.UNDER_INVESTIGATION);
 				break;
 
 			case QUESTION_ANSWERED:
-				log.info("in case 4");
 				anomalyStatus.add(AnomalyStatus.QUESTION_ANSWERED);
 				break;
 
 			case RESOLUTION_SUBMITTED:
-				log.info("in case 5");
 				anomalyStatus.add(AnomalyStatus.RESOLUTION_SUBMITTED);
 				break;
 
 			default:
-				// If nothing is matched, you can decide:
-				// 1. Add all, or
-				// 2. Leave empty, or
-				// 3. Log an error
-				log.info("in case default");
 				anomalyStatus.addAll(Arrays.asList(AnomalyStatus.REPORTED, AnomalyStatus.QUESTION_SUBMITTED,
 						AnomalyStatus.UNDER_INVESTIGATION, AnomalyStatus.QUESTION_ANSWERED,
 						AnomalyStatus.RESOLUTION_SUBMITTED));
 				break;
 			}
-		} else {
-			anomalyStatus.add(AnomalyStatus.REPORTED);
-			anomalyStatus.add(AnomalyStatus.QUESTION_SUBMITTED);
-			anomalyStatus.add(AnomalyStatus.UNDER_INVESTIGATION);
-			anomalyStatus.add(AnomalyStatus.QUESTION_ANSWERED);
-			anomalyStatus.add(AnomalyStatus.RESOLUTION_SUBMITTED);
-		}
+		} 
+
+    	return anomalyStatus;
+    }
+    
+    
+    public List<AnomalyStatus> setResolution(String resolution){
+    	//unResolve - {Reported , Inprogress, Question Submitted, Question answered, Resolution submitted}
+        //resolve - {Resolve successfully}
+        //withdraw - {Withdrawn}
+    	List<AnomalyStatus>  anomalyStatus = new ArrayList<AnomalyStatus>();
+    	if (resolution != null) {
+			switch (resolution) {
+			case "resolve":
+				anomalyStatus.add(AnomalyStatus.RESOLVED_SUCCESSFULLY);
+				break;
+
+			case "unResolve":
+				anomalyStatus.addAll(Arrays.asList(AnomalyStatus.REPORTED, 
+						AnomalyStatus.UNDER_INVESTIGATION,
+						AnomalyStatus.QUESTION_SUBMITTED,
+						AnomalyStatus.QUESTION_ANSWERED,
+						AnomalyStatus.RESOLUTION_SUBMITTED));
+				break;
+
+			case "withdrawn":
+				anomalyStatus.add(AnomalyStatus.WITHDRAWN);
+				break;
+			}
+		} 
     	return anomalyStatus;
     }
 }
