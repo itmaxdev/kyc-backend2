@@ -1116,7 +1116,7 @@ System.out.println("Get all flagged ");
             	spIds = serviceProviderRepository.findAll()
                         .stream()
                         .map(ServiceProvider::getId)
-                        .toList();
+                        .collect(Collectors.toList());
             }
             if (isResolved) {
                 consumerStatus.add(1);

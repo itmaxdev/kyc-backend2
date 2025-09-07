@@ -511,16 +511,28 @@ public class FileProcessingService {
 
                 r.msisdn = normalizeMsisdnAllowNull(r.msisdn);
 
-                // 🔹 Find existing consumer (based on specifications)
-                Specification<Consumer> spec = ConsumerSpecifications.matchConsumer(r);
-                List<Consumer> matches = consumerRepository.findAll(spec);
-                Consumer consumer = matches.isEmpty() ? null : matches.get(0);
+                // 🔹 Try to find existing consumer by MSISDN first
+                Consumer consumer = null;
+                if (r.msisdn != null) {
+                    List<Consumer> sameMsisdn = consumerRepository.findByMsisdn(r.msisdn);
+                    if (!sameMsisdn.isEmpty()) {
+                        consumer = sameMsisdn.get(0);
+                    }
+                }
+
+                // 🔹 If no MSISDN match, fallback to specification
+                if (consumer == null) {
+                    Specification<Consumer> spec = ConsumerSpecifications.matchConsumer(r);
+                    List<Consumer> matches = consumerRepository.findAll(spec);
+                    consumer = matches.isEmpty() ? null : matches.get(0);
+                }
 
                 if (consumer != null) {
                     // Update missing fields only
                     applyIfEmpty(consumer::getMsisdn, consumer::setMsisdn, r.msisdn);
                     applyIfEmpty(consumer::getFirstName, consumer::setFirstName, r.firstName);
                     applyIfEmpty(consumer::getLastName, consumer::setLastName, r.lastName);
+                    applyIfEmpty(consumer::getMiddleName, consumer::setMiddleName, r.middleName);
                     applyIfEmpty(consumer::getIdentificationNumber, consumer::setIdentificationNumber, r.idNumber);
                     applyIfEmpty(consumer::getIdentificationType, consumer::setIdentificationType, r.idType);
                     applyIfEmpty(consumer::getGender, consumer::setGender, r.gender);
@@ -530,24 +542,23 @@ public class FileProcessingService {
                     applyIfEmpty(consumer::getBirthDate, consumer::setBirthDate, r.birthDateStr);
                     applyIfEmpty(consumer::getAlternateMsisdn1, consumer::setAlternateMsisdn1, r.alt1);
                     applyIfEmpty(consumer::getAlternateMsisdn2, consumer::setAlternateMsisdn2, r.alt2);
-                    applyIfEmpty(consumer::getMiddleName, consumer::setMiddleName, r.middleName);
 
                 } else {
-                    // Create new consumer
+                    // Insert new consumer
                     consumer = new Consumer();
+                    consumer.setMsisdn(r.msisdn);
                     consumer.setFirstName(r.firstName);
                     consumer.setLastName(r.lastName);
+                    consumer.setMiddleName(r.middleName);
                     consumer.setIdentificationNumber(r.idNumber);
                     consumer.setIdentificationType(r.idType);
-                    consumer.setMsisdn(r.msisdn);
                     consumer.setGender(r.gender);
-                    consumer.setMiddleName(r.middleName);
                     consumer.setBirthPlace(r.birthPlace);
-                    consumer.setAlternateMsisdn1(r.alt1);
-                    consumer.setAlternateMsisdn2(r.alt2);
-                    consumer.setBirthDate(r.birthDateStr);
                     consumer.setAddress(r.address);
                     consumer.setRegistrationDate(r.registrationDateStr);
+                    consumer.setBirthDate(r.birthDateStr);
+                    consumer.setAlternateMsisdn1(r.alt1);
+                    consumer.setAlternateMsisdn2(r.alt2);
                     consumer.setCreatedOn(nowTs.toString());
 
                     ServiceProvider spRef = new ServiceProvider();
@@ -555,7 +566,7 @@ public class FileProcessingService {
                     consumer.setServiceProvider(spRef);
                 }
 
-                // 🔹 Mark consistency (duplicate check by MSISDN)
+                // 🔹 Update consistency flag (duplicates = inconsistent)
                 updateConsistencyFlag(consumer);
 
                 toSave.add(consumer);
@@ -575,6 +586,7 @@ public class FileProcessingService {
 
         return total;
     }
+
 
     /** Utility: update only if current value is empty. */
 
