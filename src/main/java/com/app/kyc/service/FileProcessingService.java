@@ -1,15 +1,15 @@
 package com.app.kyc.service;
-
+import org.apache.commons.codec.digest.DigestUtils;
 import com.app.kyc.config.ConsumerSpecifications;
 import com.app.kyc.entity.Consumer;
 import com.app.kyc.entity.ProcessedFile;
 import com.app.kyc.entity.ServiceProvider;
 import com.app.kyc.entity.User;
-import com.app.kyc.model.ConsumerIdentityKey;
 import com.app.kyc.repository.ConsumerRepository;
 import com.app.kyc.repository.ProcessedFileRepository;
 import com.app.kyc.repository.ServiceProviderRepository;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -510,15 +510,16 @@ public class FileProcessingService {
                 if (r == null) continue;
 
                 r.msisdn = normalizeMsisdnAllowNull(r.msisdn);
+                String signature = r.computeSignature();
 
-                // 🔹 Use specification to match existing record
+// Match using synthetic key
                 Specification<Consumer> spec = ConsumerSpecifications.matchConsumer(r);
                 List<Consumer> matches = consumerRepository.findAll(spec);
 
                 Consumer consumer = matches.isEmpty() ? null : matches.get(0);
 
                 if (consumer != null) {
-                    // ✅ Update only empty fields (keep existing data intact)
+                    // ✅ Update empty fields only
                     applyIfEmpty(consumer::getMsisdn, consumer::setMsisdn, r.msisdn);
                     applyIfEmpty(consumer::getFirstName, consumer::setFirstName, r.firstName);
                     applyIfEmpty(consumer::getLastName, consumer::setLastName, r.lastName);
@@ -534,7 +535,7 @@ public class FileProcessingService {
                     applyIfEmpty(consumer::getAlternateMsisdn2, consumer::setAlternateMsisdn2, r.alt2);
 
                 } else {
-                    // ✅ Create new consumer
+                    // ✅ Create new consumer with signature
                     consumer = new Consumer();
                     consumer.setMsisdn(r.msisdn);
                     consumer.setFirstName(r.firstName);
@@ -550,6 +551,7 @@ public class FileProcessingService {
                     consumer.setAlternateMsisdn1(r.alt1);
                     consumer.setAlternateMsisdn2(r.alt2);
                     consumer.setCreatedOn(nowTs.toString());
+                    consumer.setRowSignature(signature);   // ✅ set synthetic key
 
                     ServiceProvider spRef = new ServiceProvider();
                     spRef.setId(spId);
@@ -1217,11 +1219,34 @@ public class FileProcessingService {
         public String idNumber;
         String createdOnTs;
         Long serviceProviderId;
+
+
+
+
+        public String computeSignature() {
+            String base;
+
+            if (idNumber != null && !idNumber.trim().isEmpty() &&
+                    idType != null && !idType.trim().isEmpty()) {
+                base = idNumber.trim().toUpperCase() + "|" + idType.trim().toUpperCase();
+            } else if (msisdn != null && !msisdn.trim().isEmpty()) {
+                base = msisdn.trim().toUpperCase();
+            } else {
+                base = "NO_KEY"; // placeholder
+            }
+
+            return DigestUtils.sha256Hex(base);
+        }
+
+
+
+
     }
 
 
     private boolean isEmpty(String s) { return s == null || s.trim().isEmpty(); }
     private boolean notEmpty(String s) { return !isEmpty(s); }
     private String normalize(String s) { return (s == null ? null : s.trim().toUpperCase()); }
+
 
 }
