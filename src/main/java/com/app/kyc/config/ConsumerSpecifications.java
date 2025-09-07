@@ -14,47 +14,31 @@ public class ConsumerSpecifications {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
-            // ✅ Strongest match: full identity
-            if (notEmpty(r.firstName) && notEmpty(r.lastName) && notEmpty(r.idNumber) && notEmpty(r.idType)) {
-                predicates.add(cb.equal(root.get("firstName"), r.firstName));
-                predicates.add(cb.equal(root.get("lastName"), r.lastName));
-                predicates.add(cb.equal(root.get("identificationNumber"), r.idNumber));
-                predicates.add(cb.equal(root.get("identificationType"), r.idType));
-                return cb.and(predicates.toArray(new Predicate[0]));
-            }
-
-            // ✅ Next: partial identity (without msisdn)
+            // 1. Try idNumber + idType
             if (notEmpty(r.idNumber) && notEmpty(r.idType)) {
                 predicates.add(cb.equal(root.get("identificationNumber"), r.idNumber));
                 predicates.add(cb.equal(root.get("identificationType"), r.idType));
-
-                if (notEmpty(r.firstName)) {
-                    predicates.add(cb.equal(root.get("firstName"), r.firstName));
-                }
-                if (notEmpty(r.lastName)) {
-                    predicates.add(cb.equal(root.get("lastName"), r.lastName));
-                }
-
                 return cb.and(predicates.toArray(new Predicate[0]));
             }
 
-            // ✅ Fallback: MSISDN only (if no reliable identity exists)
+            // 2. Fallback: msisdn
             if (notEmpty(r.msisdn)) {
                 predicates.add(cb.equal(root.get("msisdn"), r.msisdn));
+                return cb.and(predicates.toArray(new Predicate[0]));
             }
 
-            return cb.and(predicates.toArray(new Predicate[0]));
+            // 3. Nothing matchable
+            return cb.disjunction();
         };
     }
+
 
     private static boolean notEmpty(String s) {
         return s != null && !s.trim().isEmpty();
     }
-
-    private static boolean isEmpty(String s) {
-        return !notEmpty(s);
-    }
 }
+
+
 
 
 

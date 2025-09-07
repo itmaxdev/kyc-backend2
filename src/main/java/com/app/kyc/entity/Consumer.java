@@ -2,18 +2,7 @@ package com.app.kyc.entity;
 
 import java.util.*;
 
-import javax.persistence.CascadeType;
-import javax.persistence.Entity;
-import javax.persistence.FetchType;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
-import javax.persistence.JoinColumn;
-import javax.persistence.JoinTable;
-import javax.persistence.ManyToMany;
-import javax.persistence.ManyToOne;
-import javax.persistence.OneToMany;
-import javax.persistence.Table;
+import javax.persistence.*;
 
 import lombok.Data;
 import lombok.Getter;
@@ -26,7 +15,12 @@ import org.apache.commons.lang3.builder.ToStringStyle;
 @Data
 @Setter
 @Getter
-@Table(name = "consumers")
+
+@Table(
+        name = "consumers",
+        uniqueConstraints = @UniqueConstraint(name = "uq_consumers_signature", columnNames = {"row_signature"})
+)
+
 public class Consumer {
 
     @Id
@@ -53,6 +47,7 @@ public class Consumer {
     private Boolean isConsistent;
     private int consumerStatus;
 
+
     @OneToMany(cascade = {CascadeType.ALL}, mappedBy = "consumer")
     private List<ConsumerService> consumerService;
 
@@ -71,6 +66,8 @@ public class Consumer {
     @ManyToOne
     private ServiceProvider serviceProvider;
 
+    @Column(name = "row_signature", nullable = false, length = 128)
+    private String rowSignature;
 
     @Override
     public String toString() {
