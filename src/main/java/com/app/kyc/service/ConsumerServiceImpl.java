@@ -1082,6 +1082,7 @@ System.out.println("Get all flagged ");
                 && pagination.getFilter() != null
                 && Boolean.TRUE.equals(pagination.getFilter().getIsResolved());
         if (noSpFilter) {
+            System.out.println("Test is Resolved "+isResolved);
             if (isResolved) {
                 consumerStatus.add(1);
                 anomalyStatus.add(AnomalyStatus.RESOLVED_SUCCESSFULLY);
@@ -1095,6 +1096,7 @@ System.out.println("Get all flagged ");
                 totalAnomaliesCount = anomalyData.getTotalElements();
 
             } else {
+                System.out.println("Test is Resolved 1"+isResolved);
                 anomalyStatus.addAll(this.setStatusList(pagination.getFilter().getAnomalyStatus()));
                 resolutionStatus.addAll(this.setResolution(pagination.getFilter().getResolution()));
 
@@ -1107,6 +1109,7 @@ System.out.println("Get all flagged ");
                 totalAnomaliesCount = anomalyData.getTotalElements();
             }
         } else {
+            System.out.println("Test is Resolved 2"+isResolved);
             final Long spId = pagination.getFilter().getServiceProviderID();
             List<Long> spIds;
             
@@ -1119,6 +1122,7 @@ System.out.println("Get all flagged ");
                         .collect(Collectors.toList());
             }
             if (isResolved) {
+                System.out.println("Test is Resolved 3"+isResolved);
                 consumerStatus.add(1);
                 anomalyStatus.add(AnomalyStatus.RESOLVED_SUCCESSFULLY);
 
@@ -1131,13 +1135,12 @@ System.out.println("Get all flagged ");
                 totalAnomaliesCount = anomalyData.getTotalElements();
 
             } else {
+                System.out.println("Test is Resolved 4 "+isResolved);
                 consumerStatus.add(0);
                 anomalyStatus.addAll(this.setStatusList(pagination.getFilter().getAnomalyStatus()));
                 resolutionStatus.addAll(this.setResolution(pagination.getFilter().getResolution()));
-
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus, spIds, anomalyStatus, pagination.getFilter().getAnomalyType(),resolutionStatus);
-
+                        anomalyRepository.findAllByConsumerStatusAndServiceProviderIdOnly(pageable, spIds);
                 pageAnomaly = anomalyData.stream()
                         .map(AnomlyDto::new)
                         .collect(Collectors.toList());
@@ -1153,7 +1156,7 @@ System.out.println("Get all flagged ");
         }
 
         // --------- HYDRATE CONSUMERS VIA ConsumerAnomaly ---------
-
+        System.out.println("Test is Resolved 5"+isResolved);
         // 1) Collect anomaly ids from the page
         List<Long> anomalyIds = pageAnomaly.stream()
                 .map(AnomlyDto::getId)

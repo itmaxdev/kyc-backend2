@@ -88,6 +88,15 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
    @Query(value = "select Distinct a from Anomaly a join ConsumerAnomaly ca on a.id = ca.anomaly.id join Consumer c on ca.consumer.id = c.id where c.consumerStatus in (:consumer_status) and c.serviceProvider.id IN (:serviceProviderId) and (coalesce(:anomalyStatus, null) is null or a.status in (:anomalyStatus)) and (coalesce(:resolutionStatus, null) is null or a.status in (:resolutionStatus)) and (:anomalyType is null or a.anomalyType.id = :anomalyType)")
    Page<Anomaly> findAllByConsumerStatusAndServiceProviderId(Pageable pageable, @Param("consumer_status") List<Integer> consumer_status, @Param("serviceProviderId") List<Long> serviceProviderId, @Param("anomalyStatus") List<AnomalyStatus> anomalyStatus, @Param("anomalyType") Long anomalyType,@Param("resolutionStatus") List<AnomalyStatus> resolutionStatus);
 
+   @Query("SELECT DISTINCT a " +
+           "FROM Anomaly a " +
+           "JOIN ConsumerAnomaly ca ON a.id = ca.anomaly.id " +
+           "JOIN Consumer c ON ca.consumer.id = c.id " +
+           "WHERE c.serviceProvider.id IN (:serviceProviderId)")
+   Page<Anomaly> findAllByConsumerStatusAndServiceProviderIdOnly(
+           Pageable pageable,
+           @Param("serviceProviderId") List<Long> serviceProviderId);
+
    @Transactional
    void deleteAllByIdIn(List<Long> ids);
 
