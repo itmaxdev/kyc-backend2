@@ -511,24 +511,14 @@ public class FileProcessingService {
 
                 r.msisdn = normalizeMsisdnAllowNull(r.msisdn);
 
-                // 🔹 Try to find existing consumer by MSISDN first
-                Consumer consumer = null;
-                if (r.msisdn != null) {
-                    List<Consumer> sameMsisdn = consumerRepository.findByMsisdn(r.msisdn);
-                    if (!sameMsisdn.isEmpty()) {
-                        consumer = sameMsisdn.get(0);
-                    }
-                }
+                // 🔹 Use specification to match existing record
+                Specification<Consumer> spec = ConsumerSpecifications.matchConsumer(r);
+                List<Consumer> matches = consumerRepository.findAll(spec);
 
-                // 🔹 If no MSISDN match, fallback to specification
-                if (consumer == null) {
-                    Specification<Consumer> spec = ConsumerSpecifications.matchConsumer(r);
-                    List<Consumer> matches = consumerRepository.findAll(spec);
-                    consumer = matches.isEmpty() ? null : matches.get(0);
-                }
+                Consumer consumer = matches.isEmpty() ? null : matches.get(0);
 
                 if (consumer != null) {
-                    // Update missing fields only
+                    // ✅ Update only empty fields (keep existing data intact)
                     applyIfEmpty(consumer::getMsisdn, consumer::setMsisdn, r.msisdn);
                     applyIfEmpty(consumer::getFirstName, consumer::setFirstName, r.firstName);
                     applyIfEmpty(consumer::getLastName, consumer::setLastName, r.lastName);
@@ -544,7 +534,7 @@ public class FileProcessingService {
                     applyIfEmpty(consumer::getAlternateMsisdn2, consumer::setAlternateMsisdn2, r.alt2);
 
                 } else {
-                    // Insert new consumer
+                    // ✅ Create new consumer
                     consumer = new Consumer();
                     consumer.setMsisdn(r.msisdn);
                     consumer.setFirstName(r.firstName);
@@ -566,7 +556,7 @@ public class FileProcessingService {
                     consumer.setServiceProvider(spRef);
                 }
 
-                // 🔹 Update consistency flag (duplicates = inconsistent)
+                // 🔹 Always re-check consistency (duplicate detection on MSISDN)
                 updateConsistencyFlag(consumer);
 
                 toSave.add(consumer);
@@ -586,6 +576,7 @@ public class FileProcessingService {
 
         return total;
     }
+
 
 
     /** Utility: update only if current value is empty. */
