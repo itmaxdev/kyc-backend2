@@ -87,7 +87,7 @@ public class DashboardServiceImpl implements DashboardService {
         List<DashboardObjectInterface> consumers = new ArrayList<>();
         List<DashboardObjectInterface> anomalies = new ArrayList<>();
         List<DashboardObjectInterface> anomalyTypes = new ArrayList<>();
-
+        List<DashboardObjectInterface> consumerByConsistency;
 
         List<DashboardObjectInterface>
                 subscriptions;
@@ -205,7 +205,7 @@ public class DashboardServiceImpl implements DashboardService {
         //get consumers count grouped by service providers for selected dates
         //consumers = consumerService.getAndCountConsumersGroupedByServiceProviderId(serviceProviderIds, startDate, endDate);
         List<DashboardObjectInterface> consumersList = new ArrayList<>();
-        long totalConsumers = consumerService.getTotalConsumers();
+        long totalConsumers = consumerService.getTotalConsumers(serviceProviderIds,startDate, endDate);
         //long consumersPerOperator = consumerService.getConsumersPerOperator();
 
         //consumers = new ArrayList<>(Arrays.asList(new DashboardObject("Total consumers", (int) totalConsumers),new DashboardObject("Consumers per operator", (int) consumersPerOperator)));
@@ -217,8 +217,8 @@ public class DashboardServiceImpl implements DashboardService {
         List<DashboardObjectInterface> resolutionMetricsList = new ArrayList<>();
         //TODO:: Validate Logic
         //count Average Resolution Time based for selected dates
-        double numAverageResolutionTime = anomalyService.getAverageResolutionTimeInHours(selectedIndustry, startDate, endDate);
-        resolutionMetricsList.add(new DashboardObject("Monthly distribution of resolution time", (int) numAverageResolutionTime));
+        double numAverageResolutionTime = anomalyService.getAverageResolutionTimeInHours(selectedIndustry, serviceProviderIds, startDate, endDate);
+        resolutionMetricsList.add(new DashboardObject("Monthly distribution of resolution time", (int)numAverageResolutionTime));
         
         List<Object[]> results = anomalyService.getResolutionMetrics(selectedIndustry, serviceProviderIds, startDate, endDate);
         List<ResolutionMetricDTO> metrics = new ArrayList<>();
@@ -232,7 +232,7 @@ public class DashboardServiceImpl implements DashboardService {
         
 
         // 2. Consumers per operator
-        List<Object[]> result = consumerService.getConsumersPerOperator();
+        List<Object[]> result = consumerService.getConsumersPerOperator(serviceProviderIds,startDate, endDate);
         for (Object[] row : result) {
             String operator = (String) row[0];
             Long count = ((Number) row[1]).longValue();
@@ -273,6 +273,32 @@ public class DashboardServiceImpl implements DashboardService {
 
         //get colors of service providers
         serviceProviderColors = getColorsOfServiceProviders(serviceProviderIds);
+        
+        //Initialization of DashboardObjects consumers
+        DashboardObjectInterface 
+        	consistentDashboardObject = new DashboardObject("Consistent", new ArrayList<>()), 
+        	nonConsistentDashboardObject = new DashboardObject("NonConsistent", new ArrayList<>());
+        
+      //merge all anomalies grouped by thier respective statuses
+        consumerByConsistency = Arrays.asList(
+        		consistentDashboardObject,
+        		nonConsistentDashboardObject
+        );
+        
+        // 2. Consumers per operator
+        List<Object[]> consumersCount = consumerService.getConsumersbyServiceProvider(serviceProviderIds,startDate, endDate);
+        //Populate anomalies by count for Reported, Resolved, Pending and Withdrawn
+		for (Object[] row : consumersCount) {
+			String operator = (String) row[1];
+			int consistentcount = ((Number) row[2]).intValue();
+			int nonConsistentcount = ((Number) row[3]).intValue();
+			if(consistentcount > 0) {
+				consistentDashboardObject.getValues().add(new DashboardObject(operator, consistentcount));
+			}else if(nonConsistentcount > 0) {
+				nonConsistentDashboardObject.getValues().add(new DashboardObject(operator, nonConsistentcount));
+			}
+		}
+        
         DashboardResponseDTO dashboardResponseDTO = new DashboardResponseDTO();
 
         dashboardResponseDTO.setListIndustry(listIndustry);
@@ -297,7 +323,8 @@ public class DashboardServiceImpl implements DashboardService {
         dashboardResponseDTO.setAnomalies(anomaliesList);
         dashboardResponseDTO.setAnomalyTypes(anomalyTypes);
         dashboardResponseDTO.setResolutionMetrics(resolutionMetricsList);
-        dashboardResponseDTO.setAverageResolutionMetrics(metrics);
+		dashboardResponseDTO.setAverageResolutionMetrics(metrics);
+		dashboardResponseDTO.setConsumersByConsistency(consumerByConsistency);
 
         return dashboardResponseDTO;
     }

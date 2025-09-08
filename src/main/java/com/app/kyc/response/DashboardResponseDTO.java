@@ -39,6 +39,6 @@ public class DashboardResponseDTO {
    private List<DashboardObjectInterface> anomalies;
    private List<DashboardObjectInterface> anomalyTypes;
    private List<DashboardObjectInterface> resolutionMetrics;
-   private List<ResolutionMetricDTO> averageResolutionMetrics;
-
+private List<ResolutionMetricDTO> averageResolutionMetrics;
+private List<DashboardObjectInterface> consumersByConsistency;
 }

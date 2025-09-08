@@ -19,7 +19,7 @@ public class DashboardObject implements DashboardObjectInterface
 
    @JsonInclude(JsonInclude.Include.NON_NULL)
    Long serviceproviderid;
-
+   
    public DashboardObject() {}
 
    public DashboardObject(String name, Integer value) {
@@ -37,7 +37,7 @@ public class DashboardObject implements DashboardObjectInterface
       this.name = name;
       this.values = values;
    }
-
+   
    @Override
    public String getName() {
       return this.name;
@@ -70,5 +70,4 @@ public class DashboardObject implements DashboardObjectInterface
    public int hashCode() {
       return Objects.hash(name);
    }
-
 }

@@ -201,14 +201,21 @@ public interface ConsumerRepository
             "where c.serviceProvider.id in ?1 and c.registrationDate between ?2 and ?3 and c.consumerStatus = ?4 group by name order by name")
     List<DashboardObjectInterface> countDistinctByServiceProvider_IdInAndCreatedOnBetweenGroupByYearMonthDate(Collection<Long> ids, Date createdOnStart, Date createdOnEnd, int consumerStatus);
 
-    @Query(value = "SELECT COUNT(*) FROM consumers", nativeQuery = true)
-    long getTotalConsumers();
+    @Query(value = "SELECT COUNT(*) FROM consumers c where c.service_provider_id IN (?1)"
+    		+ "AND STR_TO_DATE(c.created_on, '%Y-%m-%d') "
+    		+ "BETWEEN STR_TO_DATE(?2, '%Y-%m-%d') "
+    		+ "AND STR_TO_DATE(?3, '%Y-%m-%d')", nativeQuery = true)
+    long getTotalConsumers(Collection<Long> ids, Date createdOnStart, Date createdOnEnd);
 
     @Query(value = "SELECT sp.name AS operatorName, COUNT(c.id) AS total " +
             "FROM consumers c " +
             "JOIN service_providers sp ON c.service_provider_id = sp.id " +
+            "where c.service_provider_id IN (?1) " +
+            "AND STR_TO_DATE(c.created_on, '%Y-%m-%d') " +
+    		"BETWEEN STR_TO_DATE(?2, '%Y-%m-%d') " +
+    		"AND STR_TO_DATE(?3, '%Y-%m-%d') " +
             "GROUP BY sp.name ", nativeQuery = true)
-    List<Object[]> getConsumersPerOperator();
+    List<Object[]> getConsumersPerOperator(Collection<Long> ids, Date createdOnStart, Date createdOnEnd);
 
     @Query(
             value =
@@ -306,5 +313,18 @@ public interface ConsumerRepository
 
     Optional<Consumer> findByFirstNameAndLastNameAndIdentificationNumberAndMsisdn(
             String firstName, String lastName, String idNumber, String msisdn);
+    
+    @Query(value = "SELECT "
+    		+ "    service_provider_id,"
+    		+ "    sp.name as NAME,"
+    		+ "    SUM(CASE WHEN is_consistent = 1 THEN 1 ELSE 0 END) AS consistent_count,"
+    		+ "    SUM(CASE WHEN is_consistent = 0 THEN 1 ELSE 0 END) AS non_consistent_count "
+    		+ "FROM consumers c "
+    		+ "join service_providers sp on c.service_provider_id = sp.id "
+    		+ "where c.service_provider_id IN (?1) "
+    		+ "AND STR_TO_DATE(c.created_on, '%Y-%m-%d') "
+    		+ "BETWEEN STR_TO_DATE(?2, '%Y-%m-%d') AND STR_TO_DATE(?3, '%Y-%m-%d') "
+    		+ "GROUP BY c.service_provider_id ", nativeQuery = true)
+    List<Object[]> getConsumersByServiceProvider(Collection<Long> ids, Date createdOnStart, Date createdOnEnd);
 
 }
