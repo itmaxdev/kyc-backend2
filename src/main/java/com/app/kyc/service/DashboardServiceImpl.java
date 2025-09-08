@@ -5,6 +5,7 @@ import com.app.kyc.model.AnomalyStatus;
 import com.app.kyc.model.DashboardAnomalyStatusInterface;
 import com.app.kyc.model.DashboardObject;
 import com.app.kyc.model.DashboardObjectInterface;
+import com.app.kyc.model.ResolutionMetricDTO;
 import com.app.kyc.request.DashboardRequestDTO;
 import com.app.kyc.response.DashboardResponseDTO;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -218,6 +219,17 @@ public class DashboardServiceImpl implements DashboardService {
         //count Average Resolution Time based for selected dates
         double numAverageResolutionTime = anomalyService.getAverageResolutionTimeInHours(selectedIndustry, serviceProviderIds, startDate, endDate);
         resolutionMetricsList.add(new DashboardObject("Monthly distribution of resolution time", (int)numAverageResolutionTime));
+        
+        List<Object[]> results = anomalyService.getResolutionMetrics(selectedIndustry, serviceProviderIds, startDate, endDate);
+        List<ResolutionMetricDTO> metrics = new ArrayList<>();
+        for (Object[] row : results) {
+            String label = (String) row[0];
+            Long resolved = ((Number) row[1]).longValue();
+            Long unresolved = ((Number) row[2]).longValue();
+
+            metrics.add(new ResolutionMetricDTO(label, resolved, unresolved));
+        }
+        
 
         // 2. Consumers per operator
         List<Object[]> result = consumerService.getConsumersPerOperator(serviceProviderIds,startDate, endDate);
@@ -311,7 +323,8 @@ public class DashboardServiceImpl implements DashboardService {
         dashboardResponseDTO.setAnomalies(anomaliesList);
         dashboardResponseDTO.setAnomalyTypes(anomalyTypes);
         dashboardResponseDTO.setResolutionMetrics(resolutionMetricsList);
-        dashboardResponseDTO.setConsumersByConsistency(consumerByConsistency);
+		dashboardResponseDTO.setResolveVsUnResolveResolutionMetrics(metrics);
+		dashboardResponseDTO.setConsumersByConsistency(consumerByConsistency);
 
         return dashboardResponseDTO;
     }

@@ -1,6 +1,7 @@
 package com.app.kyc.response;
 
 import com.app.kyc.model.DashboardObjectInterface;
+import com.app.kyc.model.ResolutionMetricDTO;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.*;
 
@@ -38,5 +39,6 @@ public class DashboardResponseDTO {
    private List<DashboardObjectInterface> anomalies;
    private List<DashboardObjectInterface> anomalyTypes;
    private List<DashboardObjectInterface> resolutionMetrics;
+   private List<ResolutionMetricDTO> resolveVsUnResolveResolutionMetrics;
    private List<DashboardObjectInterface> consumersByConsistency;
 }

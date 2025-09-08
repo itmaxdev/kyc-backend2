@@ -1,24 +1,35 @@
 package com.app.kyc.service;
 
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import com.app.kyc.entity.*;
-import com.app.kyc.model.*;
-import com.app.kyc.repository.ConsumerAnomalyRepository;
-import com.app.kyc.response.AnomalyHasSubscriptionsResponseDTO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.stereotype.Service;
 
+import com.app.kyc.entity.Anomaly;
+import com.app.kyc.entity.AnomalyTracking;
+import com.app.kyc.entity.Consumer;
+import com.app.kyc.entity.ConsumerAnomaly;
+import com.app.kyc.entity.NotificationJob;
+import com.app.kyc.entity.User;
+import com.app.kyc.model.AnomalyStatus;
+import com.app.kyc.model.AnomalyTrackingDto;
+import com.app.kyc.model.AnomlyDto;
+import com.app.kyc.model.ConsumerDto;
+import com.app.kyc.model.DashboardObjectInterface;
+import com.app.kyc.model.NotificationType;
 // import com.app.kyc.entity.ConsumerService;
 import com.app.kyc.repository.AnomalyRepository;
 import com.app.kyc.repository.AnomalyTrackingRepository;
+import com.app.kyc.repository.ConsumerAnomalyRepository;
 import com.app.kyc.repository.ConsumerRepository;
 import com.app.kyc.repository.NotificationJobRepository;
 import com.app.kyc.request.UpdateAnomalyStatusRequest;
 import com.app.kyc.response.AnomalyDetailsResponseDTO;
+import com.app.kyc.response.AnomalyHasSubscriptionsResponseDTO;
 import com.app.kyc.util.PaginationUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
@@ -425,5 +436,22 @@ public class AnomalyServiceImpl implements AnomalyService
       return anomalyRepository.getAverageResolutionTimeInHoursByServiceProviderAndServiceType(serviceProviderId, serviceTypeId, startDate, endDate);
    }
 
+   @Override
+   public List<Object[]> getResolutionMetrics(Long industryId, List<Long> serviceProviderIds, Date startDate, Date endDate)
+   {
+	  String groupBy = decideGroupBy(startDate,endDate);
+      return anomalyRepository.getResolutionMetrics(serviceProviderIds ,startDate, endDate,groupBy);
+   }
    
+	private String decideGroupBy(Date start, Date end) {
+		long diffInMillies = end.getTime() - start.getTime();
+		long days = TimeUnit.DAYS.convert(diffInMillies, TimeUnit.MILLISECONDS) + 1;
+		if (days <= 31) {
+			return "DAY"; // short ranges → daily
+		} else if (days <= 365) {
+			return "MONTH"; // medium ranges → monthly
+		} else {
+			return "QUARTER"; // long ranges → quarterly
+		}
+	}
 }
