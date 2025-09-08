@@ -59,6 +59,52 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
            @Param("start") java.util.Date start,
            @Param("end") java.util.Date end
    );
+  
+   @Query(value = "WITH RECURSIVE period_series AS ( "
+	        + "    SELECT "
+	        + "        CASE "
+	        + "            WHEN :groupBy = 'DAY' THEN DATE(:start) "
+	        + "            WHEN :groupBy = 'MONTH' THEN DATE_FORMAT(:start, '%Y-%m-01') "
+	        + "            WHEN :groupBy = 'QUARTER' THEN MAKEDATE(YEAR(:start), 1) + INTERVAL QUARTER(:start)-1 QUARTER "
+	        + "        END AS period "
+	        + "    UNION ALL "
+	        + "    SELECT "
+	        + "        CASE "
+	        + "            WHEN :groupBy = 'DAY' THEN DATE_ADD(period, INTERVAL 1 DAY) "
+	        + "            WHEN :groupBy = 'MONTH' THEN DATE_ADD(period, INTERVAL 1 MONTH) "
+	        + "            WHEN :groupBy = 'QUARTER' THEN DATE_ADD(period, INTERVAL 3 MONTH) "
+	        + "        END "
+	        + "    FROM period_series "
+	        + "    WHERE "
+	        + "        ( :groupBy = 'DAY' AND period < DATE(:end) ) "
+	        + "        OR ( :groupBy = 'MONTH' AND period < DATE_FORMAT(:end, '%Y-%m-01') ) "
+	        + "        OR ( :groupBy = 'QUARTER' AND period < MAKEDATE(YEAR(:end), 1) + INTERVAL QUARTER(:end)-1 QUARTER ) "
+	        + ") "
+	        + "SELECT "
+	        + "    CASE "
+	        + "        WHEN :groupBy = 'DAY' THEN DATE_FORMAT(ps.period, '%W') "
+	        + "        WHEN :groupBy = 'MONTH' THEN DATE_FORMAT(ps.period, '%b') "
+	        + "        WHEN :groupBy = 'QUARTER' THEN CONCAT(YEAR(ps.period), '-Q', QUARTER(ps.period)) "
+	        + "    END AS period, "
+	        + "    COALESCE(SUM(CASE WHEN a.updated_on IS NOT NULL AND a.status IN (5,6) THEN 1 END), 0) AS resolved, "
+	        + "    COALESCE(SUM(CASE WHEN a.updated_on IS NULL OR a.status NOT IN (5,6) THEN 1 END), 0) AS unresolved "
+	        + "FROM period_series ps "
+	        + "LEFT JOIN anomalies a "
+	        + " ON ( "
+	        + "     (:groupBy = 'DAY' AND DATE(a.reported_on) = ps.period) "
+	        + "     OR (:groupBy = 'MONTH' AND DATE_FORMAT(a.reported_on, '%Y-%m') = DATE_FORMAT(ps.period, '%Y-%m')) "
+	        + "     OR (:groupBy = 'QUARTER' AND YEAR(a.reported_on) = YEAR(ps.period) AND QUARTER(a.reported_on) = QUARTER(ps.period)) "
+	        + "   ) "
+	        + "   AND a.id IN ( "
+	        + "       SELECT ca.anomaly_id "
+	        + "       FROM consumers_anomalies ca "
+	        + "       WHERE ca.consumer_id IN ( "
+	        + "           SELECT c.id FROM consumers c WHERE c.service_provider_id IN (:serviceProviderIds) "
+	        + "       ) "
+	        + "   ) "
+	        + "GROUP BY period ",
+	       nativeQuery = true)
+   List<Object[]> getResolutionMetrics( @Param("serviceProviderIds") List<Long> serviceProviderIds, @Param("start") Date start, @Param("end") Date end, @Param("groupBy") String groupBy);
 
 
    @Query(value = "select COALESCE(avg(difference),0) from (" + "select *, TIMESTAMPDIFF(HOUR, reported_on, updated_on) " + "as difference from anomalies where (status = 5 or status = 6) " + "and reported_on > :start and reported_on <= :end and consumers_services_id in " + "(select id from consumers_services where service_id in" + " (select id from services where service_provider_id = :serviceProviderId))) as a", nativeQuery = true)

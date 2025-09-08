@@ -510,55 +510,13 @@ public class FileProcessingService {
                 if (r == null) continue;
 
                 r.msisdn = normalizeMsisdnAllowNull(r.msisdn);
-                String signature = r.computeSignature();
 
-// Match using synthetic key
-                Specification<Consumer> spec = ConsumerSpecifications.matchConsumer(r);
-                List<Consumer> matches = consumerRepository.findAll(spec);
+                // 🔹 Deduplication-aware match
+                Consumer consumer = findOrMergeConsumer(r);
+                mergeConsumerFields(consumer, r, nowTs, spId);
 
-                Consumer consumer = matches.isEmpty() ? null : matches.get(0);
 
-                if (consumer != null) {
-                    // ✅ Update empty fields only
-                    applyIfEmpty(consumer::getMsisdn, consumer::setMsisdn, r.msisdn);
-                    applyIfEmpty(consumer::getFirstName, consumer::setFirstName, r.firstName);
-                    applyIfEmpty(consumer::getLastName, consumer::setLastName, r.lastName);
-                    applyIfEmpty(consumer::getMiddleName, consumer::setMiddleName, r.middleName);
-                    applyIfEmpty(consumer::getIdentificationNumber, consumer::setIdentificationNumber, r.idNumber);
-                    applyIfEmpty(consumer::getIdentificationType, consumer::setIdentificationType, r.idType);
-                    applyIfEmpty(consumer::getGender, consumer::setGender, r.gender);
-                    applyIfEmpty(consumer::getBirthPlace, consumer::setBirthPlace, r.birthPlace);
-                    applyIfEmpty(consumer::getAddress, consumer::setAddress, r.address);
-                    applyIfEmpty(consumer::getRegistrationDate, consumer::setRegistrationDate, r.registrationDateStr);
-                    applyIfEmpty(consumer::getBirthDate, consumer::setBirthDate, r.birthDateStr);
-                    applyIfEmpty(consumer::getAlternateMsisdn1, consumer::setAlternateMsisdn1, r.alt1);
-                    applyIfEmpty(consumer::getAlternateMsisdn2, consumer::setAlternateMsisdn2, r.alt2);
-
-                } else {
-                    // ✅ Create new consumer with signature
-                    consumer = new Consumer();
-                    consumer.setMsisdn(r.msisdn);
-                    consumer.setFirstName(r.firstName);
-                    consumer.setLastName(r.lastName);
-                    consumer.setMiddleName(r.middleName);
-                    consumer.setIdentificationNumber(r.idNumber);
-                    consumer.setIdentificationType(r.idType);
-                    consumer.setGender(r.gender);
-                    consumer.setBirthPlace(r.birthPlace);
-                    consumer.setAddress(r.address);
-                    consumer.setRegistrationDate(r.registrationDateStr);
-                    consumer.setBirthDate(r.birthDateStr);
-                    consumer.setAlternateMsisdn1(r.alt1);
-                    consumer.setAlternateMsisdn2(r.alt2);
-                    consumer.setCreatedOn(nowTs.toString());
-                    consumer.setRowSignature(signature);   // ✅ set synthetic key
-
-                    ServiceProvider spRef = new ServiceProvider();
-                    spRef.setId(spId);
-                    consumer.setServiceProvider(spRef);
-                }
-
-                // 🔹 Always re-check consistency (duplicate detection on MSISDN)
+                // 🔹 Re-check consistency
                 updateConsistencyFlag(consumer);
 
                 toSave.add(consumer);
@@ -578,6 +536,86 @@ public class FileProcessingService {
 
         return total;
     }
+
+
+
+    private Consumer findOrMergeConsumer(FileProcessingService.RowData r) {
+        // 1. Strongest: ID match (always trust ID for uniqueness)
+        if (notEmpty(r.idNumber) && notEmpty(r.idType)) {
+            List<Consumer> idMatches = consumerRepository.findAll((root, query, cb) -> cb.and(
+                    cb.equal(root.get("identificationNumber"), r.idNumber),
+                    cb.equal(root.get("identificationType"), r.idType)
+            ));
+            if (!idMatches.isEmpty()) {
+                return idMatches.get(0); // Update existing consumer
+            }
+        }
+
+        // 2. Weak fallback: Name + DOB (only if ID is missing)
+        if (notEmpty(r.firstName) && notEmpty(r.lastName) && notEmpty(r.birthDateStr)) {
+            List<Consumer> personMatches = consumerRepository.findAll((root, query, cb) -> cb.and(
+                    cb.equal(root.get("firstName"), r.firstName),
+                    cb.equal(root.get("lastName"), r.lastName),
+                    cb.equal(root.get("birthDate"), r.birthDateStr)
+            ));
+            if (!personMatches.isEmpty()) {
+                return personMatches.get(0);
+            }
+        }
+
+        // 3. Nothing found → new consumer
+        return new Consumer();
+    }
+
+
+
+    private void mergeConsumerFields(Consumer consumer, FileProcessingService.RowData r, Timestamp nowTs, Long spId) {
+        // 🔹 Handle MSISDN updates carefully
+        if (notEmpty(r.msisdn)) {
+            if (consumer.getMsisdn() != null && !consumer.getMsisdn().equals(r.msisdn)) {
+                // Preserve old MSISDN if different
+                if (consumer.getAlternateMsisdn1() == null) {
+                    consumer.setAlternateMsisdn1(consumer.getMsisdn());
+                } else if (consumer.getAlternateMsisdn2() == null
+                        && !consumer.getAlternateMsisdn1().equals(r.msisdn)) {
+                    consumer.setAlternateMsisdn2(consumer.getMsisdn());
+                }
+                // Replace with new MSISDN
+                consumer.setMsisdn(r.msisdn);
+            } else if (consumer.getMsisdn() == null) {
+                consumer.setMsisdn(r.msisdn);
+            }
+        }
+
+        // 🔹 Apply other fields only if empty
+        applyIfEmpty(consumer::getFirstName, consumer::setFirstName, r.firstName);
+        applyIfEmpty(consumer::getLastName, consumer::setLastName, r.lastName);
+        applyIfEmpty(consumer::getMiddleName, consumer::setMiddleName, r.middleName);
+        applyIfEmpty(consumer::getIdentificationNumber, consumer::setIdentificationNumber, r.idNumber);
+        applyIfEmpty(consumer::getIdentificationType, consumer::setIdentificationType, r.idType);
+        applyIfEmpty(consumer::getGender, consumer::setGender, r.gender);
+        applyIfEmpty(consumer::getBirthPlace, consumer::setBirthPlace, r.birthPlace);
+        applyIfEmpty(consumer::getAddress, consumer::setAddress, r.address);
+        applyIfEmpty(consumer::getRegistrationDate, consumer::setRegistrationDate, r.registrationDateStr);
+        applyIfEmpty(consumer::getBirthDate, consumer::setBirthDate, r.birthDateStr);
+
+        // Fill alt MSISDNs from input if present
+        applyIfEmpty(consumer::getAlternateMsisdn1, consumer::setAlternateMsisdn1, r.alt1);
+        applyIfEmpty(consumer::getAlternateMsisdn2, consumer::setAlternateMsisdn2, r.alt2);
+
+        // 🔹 New record bootstrap
+        if (consumer.getId() == null) {
+            consumer.setCreatedOn(nowTs.toString());
+            ServiceProvider spRef = new ServiceProvider();
+            spRef.setId(spId);
+            consumer.setServiceProvider(spRef);
+        }
+
+        //  Always recompute rowSignature
+        consumer.setRowSignature(computeSignature(r));
+    }
+
+
 
 
 
@@ -1223,26 +1261,29 @@ public class FileProcessingService {
 
 
 
-        public String computeSignature() {
-            String base;
-
-            if (idNumber != null && !idNumber.trim().isEmpty() &&
-                    idType != null && !idType.trim().isEmpty()) {
-                base = idNumber.trim().toUpperCase() + "|" + idType.trim().toUpperCase();
-            } else if (msisdn != null && !msisdn.trim().isEmpty()) {
-                base = msisdn.trim().toUpperCase();
-            } else {
-                base = "NO_KEY"; // placeholder
-            }
-
-            return DigestUtils.sha256Hex(base);
-        }
 
 
 
 
     }
 
+    private String computeSignature(FileProcessingService.RowData r) {
+        String base;
+
+        if (notEmpty(r.idNumber) && notEmpty(r.idType)) {
+            base = r.idNumber.trim().toUpperCase() + "|" + r.idType.trim().toUpperCase();
+        } else if (notEmpty(r.msisdn)) {
+            base = r.msisdn.trim().toUpperCase();
+        } else if (notEmpty(r.firstName) && notEmpty(r.lastName) && notEmpty(r.birthDateStr)) {
+            base = r.firstName.trim().toUpperCase() + "|" +
+                    r.lastName.trim().toUpperCase() + "|" +
+                    r.birthDateStr.trim().toUpperCase();
+        } else {
+            base = "NO_KEY";
+        }
+
+        return DigestUtils.sha256Hex(base);
+    }
 
     private boolean isEmpty(String s) { return s == null || s.trim().isEmpty(); }
     private boolean notEmpty(String s) { return !isEmpty(s); }
