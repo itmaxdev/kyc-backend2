@@ -69,6 +69,7 @@ public class Consumer {
     @Column(name = "row_signature", nullable = false, length = 128)
     private String rowSignature;
 
+
     @Override
     public String toString() {
         return ReflectionToStringBuilder.toString(this, ToStringStyle.SHORT_PREFIX_STYLE);
