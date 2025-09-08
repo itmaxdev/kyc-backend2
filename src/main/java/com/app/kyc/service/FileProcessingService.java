@@ -1268,21 +1268,22 @@ public class FileProcessingService {
     }
 
     private String computeSignature(FileProcessingService.RowData r) {
-        String base;
+        StringBuilder base = new StringBuilder();
 
-        if (notEmpty(r.idNumber) && notEmpty(r.idType)) {
-            base = r.idNumber.trim().toUpperCase() + "|" + r.idType.trim().toUpperCase();
-        } else if (notEmpty(r.msisdn)) {
-            base = r.msisdn.trim().toUpperCase();
-        } else if (notEmpty(r.firstName) && notEmpty(r.lastName) && notEmpty(r.birthDateStr)) {
-            base = r.firstName.trim().toUpperCase() + "|" +
-                    r.lastName.trim().toUpperCase() + "|" +
-                    r.birthDateStr.trim().toUpperCase();
-        } else {
-            base = "NO_KEY";
-        }
+        // Always include all discriminating fields
+        base.append(safe(r.idNumber)).append("|")
+                .append(safe(r.idType)).append("|")
+                .append(safe(r.msisdn)).append("|")
+                .append(safe(r.firstName)).append("|")
+                .append(safe(r.lastName)).append("|")
+                .append(safe(r.birthDateStr)).append("|")
+                .append(safe(String.valueOf(r.serviceProviderId))); // include ServiceProvider for extra salt
 
-        return DigestUtils.sha256Hex(base);
+        return DigestUtils.sha256Hex(base.toString());
+    }
+
+    private String safe(String s) {
+        return (s == null ? "" : s.trim().toUpperCase());
     }
 
     private boolean isEmpty(String s) { return s == null || s.trim().isEmpty(); }
