@@ -82,8 +82,8 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
 	        + ") "
 	        + "SELECT "
 	        + "    CASE "
-	        + "        WHEN :groupBy = 'DAY' THEN DATE_FORMAT(ps.period, '%Y-%m-%d') "
-	        + "        WHEN :groupBy = 'MONTH' THEN DATE_FORMAT(ps.period, '%Y-%m') "
+	        + "        WHEN :groupBy = 'DAY' THEN DATE_FORMAT(ps.period, '%W') "
+	        + "        WHEN :groupBy = 'MONTH' THEN DATE_FORMAT(ps.period, '%b') "
 	        + "        WHEN :groupBy = 'QUARTER' THEN CONCAT(YEAR(ps.period), '-Q', QUARTER(ps.period)) "
 	        + "    END AS period, "
 	        + "    COALESCE(SUM(CASE WHEN a.updated_on IS NOT NULL AND a.status IN (5,6) THEN 1 END), 0) AS resolved, "
@@ -102,8 +102,7 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
 	        + "           SELECT c.id FROM consumers c WHERE c.service_provider_id IN (:serviceProviderIds) "
 	        + "       ) "
 	        + "   ) "
-	        + "GROUP BY period "
-	        + "ORDER BY period ",
+	        + "GROUP BY period ",
 	       nativeQuery = true)
    List<Object[]> getResolutionMetrics( @Param("serviceProviderIds") List<Long> serviceProviderIds, @Param("start") Date start, @Param("end") Date end, @Param("groupBy") String groupBy);
 

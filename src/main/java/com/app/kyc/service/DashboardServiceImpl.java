@@ -323,7 +323,7 @@ public class DashboardServiceImpl implements DashboardService {
         dashboardResponseDTO.setAnomalies(anomaliesList);
         dashboardResponseDTO.setAnomalyTypes(anomalyTypes);
         dashboardResponseDTO.setResolutionMetrics(resolutionMetricsList);
-		dashboardResponseDTO.setAverageResolutionMetrics(metrics);
+		dashboardResponseDTO.setResolveVsUnResolveResolutionMetrics(metrics);
 		dashboardResponseDTO.setConsumersByConsistency(consumerByConsistency);
 
         return dashboardResponseDTO;
