@@ -486,6 +486,10 @@ public class FileProcessingService {
         final Timestamp nowTs = new Timestamp(System.currentTimeMillis());
         int total = 0;
 
+        // 🔹 Collect active and soft-deleted consumers
+        List<Consumer> toSave = new ArrayList<>();
+        List<Consumer> duplicatesToSoftDelete = new ArrayList<>();
+
         try (InputStream in = Files.newInputStream(workingCopy);
              Reader reader = new InputStreamReader(in, cs);
              CSVReader csv = new CSVReaderBuilder(reader)
@@ -494,7 +498,6 @@ public class FileProcessingService {
 
             String[] row;
             boolean isHeader = true;
-            List<Consumer> toSave = new ArrayList<>();
 
             while ((row = csv.readNext()) != null) {
                 stripBomInPlace(row);
@@ -512,9 +515,8 @@ public class FileProcessingService {
                 r.msisdn = normalizeMsisdnAllowNull(r.msisdn);
 
                 // 🔹 Deduplication-aware match
-                Consumer consumer = findOrMergeConsumer(r);
+                Consumer consumer = findOrMergeConsumer(r, duplicatesToSoftDelete);
                 mergeConsumerFields(consumer, r, nowTs, spId);
-
 
                 // 🔹 Re-check consistency
                 updateConsistencyFlag(consumer);
@@ -522,6 +524,11 @@ public class FileProcessingService {
                 toSave.add(consumer);
 
                 if (toSave.size() >= BATCH_SIZE) {
+                    // Include soft-deletes in this batch
+                    if (!duplicatesToSoftDelete.isEmpty()) {
+                        toSave.addAll(duplicatesToSoftDelete);
+                        duplicatesToSoftDelete.clear();
+                    }
                     consumerRepository.saveAll(toSave);
                     total += toSave.size();
                     toSave.clear();
@@ -529,6 +536,10 @@ public class FileProcessingService {
             }
 
             if (!toSave.isEmpty()) {
+                if (!duplicatesToSoftDelete.isEmpty()) {
+                    toSave.addAll(duplicatesToSoftDelete);
+                    duplicatesToSoftDelete.clear();
+                }
                 consumerRepository.saveAll(toSave);
                 total += toSave.size();
             }
@@ -539,33 +550,90 @@ public class FileProcessingService {
 
 
 
-    private Consumer findOrMergeConsumer(FileProcessingService.RowData r) {
-        // 1. Strongest: ID match (always trust ID for uniqueness)
-        if (notEmpty(r.idNumber) && notEmpty(r.idType)) {
-            List<Consumer> idMatches = consumerRepository.findAll((root, query, cb) -> cb.and(
+
+    private Consumer findOrMergeConsumer(FileProcessingService.RowData r, List<Consumer> duplicatesToSoftDelete) {
+        // 1. Strongest: match by ID + ID Type + MSISDN (exact consumer)
+        if (notEmpty(r.idNumber) && notEmpty(r.idType) && notEmpty(r.msisdn)) {
+            List<Consumer> exactMatches = consumerRepository.findAll((root, query, cb) -> cb.and(
                     cb.equal(root.get("identificationNumber"), r.idNumber),
-                    cb.equal(root.get("identificationType"), r.idType)
+                    cb.equal(root.get("identificationType"), r.idType),
+                    cb.equal(root.get("msisdn"), r.msisdn)
             ));
-            if (!idMatches.isEmpty()) {
-                return idMatches.get(0); // Update existing consumer
+            if (!exactMatches.isEmpty()) {
+                return exactMatches.get(0); // already exists with this MSISDN
             }
         }
 
-        // 2. Weak fallback: Name + DOB (only if ID is missing)
-        if (notEmpty(r.firstName) && notEmpty(r.lastName) && notEmpty(r.birthDateStr)) {
-            List<Consumer> personMatches = consumerRepository.findAll((root, query, cb) -> cb.and(
+        // 2. Upgrade case: same person but old row has no IDs (match by name + DOB + MSISDN)
+        if (notEmpty(r.idNumber) && notEmpty(r.idType) && notEmpty(r.msisdn)) {
+            List<Consumer> noIdMatches = consumerRepository.findAll((root, query, cb) -> cb.and(
                     cb.equal(root.get("firstName"), r.firstName),
                     cb.equal(root.get("lastName"), r.lastName),
-                    cb.equal(root.get("birthDate"), r.birthDateStr)
+                    cb.equal(root.get("birthDate"), r.birthDateStr),
+                    cb.equal(root.get("msisdn"), r.msisdn),
+                    cb.or(cb.isNull(root.get("identificationNumber")), cb.equal(root.get("identificationNumber"), "")),
+                    cb.or(cb.isNull(root.get("identificationType")), cb.equal(root.get("identificationType"), ""))
             ));
-            if (!personMatches.isEmpty()) {
-                return personMatches.get(0);
+
+            if (!noIdMatches.isEmpty()) {
+                Consumer primary = noIdMatches.get(0);
+
+                if (noIdMatches.size() > 1) {
+                    log.warn("⚠️ Found {} duplicate no-ID consumers for {} {} (msisdn={}), merging into id={}",
+                            noIdMatches.size(), r.firstName, r.lastName, r.msisdn, primary.getId());
+
+                    for (int i = 1; i < noIdMatches.size(); i++) {
+                        Consumer dup = noIdMatches.get(i);
+
+                        // 🔹 Absorb non-empty fields from duplicate into primary
+                        applyIfEmpty(primary::getFirstName, primary::setFirstName, dup.getFirstName());
+                        applyIfEmpty(primary::getLastName, primary::setLastName, dup.getLastName());
+                        applyIfEmpty(primary::getMiddleName, primary::setMiddleName, dup.getMiddleName());
+                        applyIfEmpty(primary::getGender, primary::setGender, dup.getGender());
+                        applyIfEmpty(primary::getBirthPlace, primary::setBirthPlace, dup.getBirthPlace());
+                        applyIfEmpty(primary::getAddress, primary::setAddress, dup.getAddress());
+                        applyIfEmpty(primary::getRegistrationDate, primary::setRegistrationDate, dup.getRegistrationDate());
+                        applyIfEmpty(primary::getBirthDate, primary::setBirthDate, dup.getBirthDate());
+                        applyIfEmpty(primary::getNationality, primary::setNationality, dup.getNationality());
+
+                        // 🔹 Merge MSISDNs as alternates if needed
+                        if (dup.getMsisdn() != null && !dup.getMsisdn().equals(primary.getMsisdn())) {
+                            if (primary.getAlternateMsisdn1() == null) {
+                                primary.setAlternateMsisdn1(dup.getMsisdn());
+                            } else if (primary.getAlternateMsisdn2() == null
+                                    && !primary.getAlternateMsisdn1().equals(dup.getMsisdn())) {
+                                primary.setAlternateMsisdn2(dup.getMsisdn());
+                            }
+                        }
+
+                        // 🔹 Soft delete the duplicate
+                        dup.setConsumerStatus(0);
+                        duplicatesToSoftDelete.add(dup);
+                        log.info("🗑️ Soft-deleted consumer id={} (merged into id={})", dup.getId(), primary.getId());
+                    }
+                }
+
+                log.info("🔄 Upgrading consumer id={} from no-ID to ID: {}/{}",
+                        primary.getId(), r.idNumber, r.idType);
+
+                // Always overwrite ID fields
+                primary.setIdentificationNumber(r.idNumber);
+                primary.setIdentificationType(r.idType);
+
+                return primary;
             }
         }
 
-        // 3. Nothing found → new consumer
+        // 3. No match → new consumer (new MSISDN for this person)
         return new Consumer();
     }
+
+
+
+
+
+
+
 
 
 
@@ -580,26 +648,46 @@ public class FileProcessingService {
                         && !consumer.getAlternateMsisdn1().equals(r.msisdn)) {
                     consumer.setAlternateMsisdn2(consumer.getMsisdn());
                 }
-                // Replace with new MSISDN
-                consumer.setMsisdn(r.msisdn);
+                log.info("📱 Updating MSISDN for consumer id={} → {}", consumer.getId(), r.msisdn);
+                consumer.setMsisdn(r.msisdn); // Replace with new
             } else if (consumer.getMsisdn() == null) {
+                log.info("📱 Setting MSISDN for consumer id={} → {}", consumer.getId(), r.msisdn);
                 consumer.setMsisdn(r.msisdn);
             }
         }
 
-        // 🔹 Apply other fields only if empty
+        // 🔹 Always overwrite ID fields (upgrade path)
+        if (notEmpty(r.idNumber)) {
+            if (consumer.getIdentificationNumber() == null || consumer.getIdentificationNumber().isBlank()) {
+                log.info("✅ Setting identificationNumber for consumer id={} → {}", consumer.getId(), r.idNumber);
+            } else if (!consumer.getIdentificationNumber().equals(r.idNumber)) {
+                log.info("🔄 Updating identificationNumber for consumer id={} from {} → {}",
+                        consumer.getId(), consumer.getIdentificationNumber(), r.idNumber);
+            }
+            consumer.setIdentificationNumber(r.idNumber);
+        }
+
+        if (notEmpty(r.idType)) {
+            if (consumer.getIdentificationType() == null || consumer.getIdentificationType().isBlank()) {
+                log.info("✅ Setting identificationType for consumer id={} → {}", consumer.getId(), r.idType);
+            } else if (!consumer.getIdentificationType().equals(r.idType)) {
+                log.info("🔄 Updating identificationType for consumer id={} from {} → {}",
+                        consumer.getId(), consumer.getIdentificationType(), r.idType);
+            }
+            consumer.setIdentificationType(r.idType);
+        }
+
+        // 🔹 Apply other fields only if empty (don’t overwrite existing good data)
         applyIfEmpty(consumer::getFirstName, consumer::setFirstName, r.firstName);
         applyIfEmpty(consumer::getLastName, consumer::setLastName, r.lastName);
         applyIfEmpty(consumer::getMiddleName, consumer::setMiddleName, r.middleName);
-        applyIfEmpty(consumer::getIdentificationNumber, consumer::setIdentificationNumber, r.idNumber);
-        applyIfEmpty(consumer::getIdentificationType, consumer::setIdentificationType, r.idType);
         applyIfEmpty(consumer::getGender, consumer::setGender, r.gender);
         applyIfEmpty(consumer::getBirthPlace, consumer::setBirthPlace, r.birthPlace);
         applyIfEmpty(consumer::getAddress, consumer::setAddress, r.address);
         applyIfEmpty(consumer::getRegistrationDate, consumer::setRegistrationDate, r.registrationDateStr);
         applyIfEmpty(consumer::getBirthDate, consumer::setBirthDate, r.birthDateStr);
 
-        // Fill alt MSISDNs from input if present
+        // 🔹 Fill alternate MSISDNs if present
         applyIfEmpty(consumer::getAlternateMsisdn1, consumer::setAlternateMsisdn1, r.alt1);
         applyIfEmpty(consumer::getAlternateMsisdn2, consumer::setAlternateMsisdn2, r.alt2);
 
@@ -609,11 +697,14 @@ public class FileProcessingService {
             ServiceProvider spRef = new ServiceProvider();
             spRef.setId(spId);
             consumer.setServiceProvider(spRef);
+            log.info("🆕 Bootstrapping new consumer for serviceProvider={} createdOn={}", spId, nowTs);
         }
 
-        //  Always recompute rowSignature
+        // 🔹 Always recompute rowSignature
         consumer.setRowSignature(computeSignature(r));
     }
+
+
 
 
 
@@ -1270,17 +1361,25 @@ public class FileProcessingService {
     private String computeSignature(FileProcessingService.RowData r) {
         StringBuilder base = new StringBuilder();
 
-        // Always include all discriminating fields
-        base.append(safe(r.idNumber)).append("|")
-                .append(safe(r.idType)).append("|")
-                .append(safe(r.msisdn)).append("|")
-                .append(safe(r.firstName)).append("|")
-                .append(safe(r.lastName)).append("|")
-                .append(safe(r.birthDateStr)).append("|")
-                .append(safe(String.valueOf(r.serviceProviderId))); // include ServiceProvider for extra salt
+        // Core identifiers
+        base.append(safe(r.msisdn, "NO_MSISDN")).append("|")
+                .append(safe(r.firstName, "NO_FNAME")).append("|")
+                .append(safe(r.lastName, "NO_LNAME")).append("|")
+                .append(safe(r.birthDateStr, "NO_DOB")).append("|")
+                .append(safe(String.valueOf(r.serviceProviderId), "NO_SP"));
+
+        // Always append IDs (with placeholders if null)
+        base.append("|").append(safe(r.idNumber, "NO_ID"));
+        base.append("|").append(safe(r.idType, "NO_TYPE"));
 
         return DigestUtils.sha256Hex(base.toString());
     }
+
+    private String safe(String value, String placeholder) {
+        return (value == null || value.trim().isEmpty()) ? placeholder : value.trim();
+    }
+
+
 
     private String safe(String s) {
         return (s == null ? "" : s.trim().toUpperCase());
