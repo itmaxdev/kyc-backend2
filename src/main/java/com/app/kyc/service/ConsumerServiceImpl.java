@@ -2367,12 +2367,15 @@ System.out.println("Get all flagged ");
     }
 
     private Consumer resolvedAndSoftDeleteConsumers(Consumer consumer, Boolean flag,User user) {
+       System.out.println("resolvedAndSoftDeleteConsumers values are: ");
         // duplicate records
         AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Duplicate Records");
-
+        List<Long> consumerIds = new ArrayList<Long>();
         //previously inserted consumer
-        List<Long> consumerIds = consumerRepository.findConsumerIdsByMsisdnAndConsumerStatus(consumer.getMsisdn(), 0);
-
+        List<Long> consumerIds1 = consumerRepository.findConsumerIdsByMsisdnAndConsumerStatus(consumer.getMsisdn(), 0);
+        consumerIds.addAll(consumerIds1);
+        List<Long> consumerIds2 = consumerRepository.findConsumerIdsByMsisdnAndConsumerStatus(consumer.getMsisdn(), 1);
+        consumerIds.addAll(consumerIds2);
         Anomaly tempAnomaly = new Anomaly();
 
         //previously tagged anomalies
