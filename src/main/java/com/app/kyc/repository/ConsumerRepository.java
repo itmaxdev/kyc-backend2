@@ -171,6 +171,13 @@ public interface ConsumerRepository
 
     List<Consumer> findByIdentificationTypeAndIdentificationNumberAndServiceProviderAndConsumerStatus(String identificationType, String identificationNumber, ServiceProvider serviceProvider, int consumerStatus);
 
+    // Repository method
+    List<Consumer> findByIdentificationTypeAndIdentificationNumberAndServiceProviderAndConsumerStatusIn(
+            String identificationType,
+            String identificationNumber,
+            ServiceProvider serviceProvider,
+            Collection<Integer> statuses);
+
     List<Consumer> findAllByServiceProvider_Id(Long id);
 
     @Transactional

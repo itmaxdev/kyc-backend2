@@ -2710,9 +2710,22 @@ System.out.println("Get all flagged ");
     private Consumer resolvedAndDeleteExceedingConsumers(Consumer consumer, Boolean flag,User user) {
         // Exceeding records
         AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Exceeding Threshold");
-
+/*
+        List<Consumer> duplicateConsumers = new ArrayList<Consumer>();
         //previously inserted consumer
-        List<Consumer> duplicateConsumers = consumerRepository.findByIdentificationTypeAndIdentificationNumberAndServiceProviderAndConsumerStatus(consumer.getIdentificationType(), consumer.getIdentificationNumber(), consumer.getServiceProvider(), 0);
+        List<Consumer> duplicateConsumers1 = consumerRepository.findByIdentificationTypeAndIdentificationNumberAndServiceProviderAndConsumerStatus(consumer.getIdentificationType(), consumer.getIdentificationNumber(), consumer.getServiceProvider(), 0);
+        duplicateConsumers.addAll(duplicateConsumers1);
+        List<Consumer> duplicateConsumers2 = consumerRepository.findByIdentificationTypeAndIdentificationNumberAndServiceProviderAndConsumerStatus(consumer.getIdentificationType(), consumer.getIdentificationNumber(), consumer.getServiceProvider(), 0);
+        duplicateConsumers.addAll(duplicateConsumers2);*/
+
+        List<Consumer> duplicateConsumers = consumerRepository
+                .findByIdentificationTypeAndIdentificationNumberAndServiceProviderAndConsumerStatusIn(
+                        consumer.getIdentificationType(),
+                        consumer.getIdentificationNumber(),
+                        consumer.getServiceProvider(),
+                        Arrays.asList(0, 1)
+                );
+
         List<Long> consumerIds = duplicateConsumers.stream().map(Consumer::getId).collect(Collectors.toList());
 
         Anomaly tempAnomaly = new Anomaly();
