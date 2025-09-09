@@ -552,7 +552,7 @@ public class FileProcessingService {
 
 
     private Consumer findOrMergeConsumer(FileProcessingService.RowData r, List<Consumer> duplicatesToSoftDelete) {
-        // 1. Strongest: match by ID + ID Type + MSISDN (exact consumer)
+        // 1. Exact match: ID + ID Type + MSISDN
         if (notEmpty(r.idNumber) && notEmpty(r.idType) && notEmpty(r.msisdn)) {
             List<Consumer> exactMatches = consumerRepository.findAll((root, query, cb) -> cb.and(
                     cb.equal(root.get("identificationNumber"), r.idNumber),
@@ -560,43 +560,37 @@ public class FileProcessingService {
                     cb.equal(root.get("msisdn"), r.msisdn)
             ));
             if (!exactMatches.isEmpty()) {
-                return exactMatches.get(0); // already exists with this MSISDN
+                return exactMatches.get(0);
             }
         }
 
-        // 2. Upgrade case: same person but old row has no IDs (match by name + DOB + MSISDN)
-        if (notEmpty(r.idNumber) && notEmpty(r.idType) && notEmpty(r.msisdn)) {
-            List<Consumer> noIdMatches = consumerRepository.findAll((root, query, cb) -> cb.and(
+        // 2. Upgrade case: same person (name + DOB + MSISDN), even if ID changed
+        if (notEmpty(r.firstName) && notEmpty(r.lastName) && notEmpty(r.birthDateStr) && notEmpty(r.msisdn)) {
+            List<Consumer> personMatches = consumerRepository.findAll((root, query, cb) -> cb.and(
                     cb.equal(root.get("firstName"), r.firstName),
                     cb.equal(root.get("lastName"), r.lastName),
                     cb.equal(root.get("birthDate"), r.birthDateStr),
-                    cb.equal(root.get("msisdn"), r.msisdn),
-                    cb.or(cb.isNull(root.get("identificationNumber")), cb.equal(root.get("identificationNumber"), "")),
-                    cb.or(cb.isNull(root.get("identificationType")), cb.equal(root.get("identificationType"), ""))
+                    cb.equal(root.get("msisdn"), r.msisdn)
             ));
 
-            if (!noIdMatches.isEmpty()) {
-                Consumer primary = noIdMatches.get(0);
+            if (!personMatches.isEmpty()) {
+                Consumer primary = personMatches.get(0);
 
-                if (noIdMatches.size() > 1) {
-                    log.warn("⚠️ Found {} duplicate no-ID consumers for {} {} (msisdn={}), merging into id={}",
-                            noIdMatches.size(), r.firstName, r.lastName, r.msisdn, primary.getId());
+                if (personMatches.size() > 1) {
+                    log.warn("⚠️ Found {} duplicate person matches for {} {} (msisdn={}), merging into id={}",
+                            personMatches.size(), r.firstName, r.lastName, r.msisdn, primary.getId());
 
-                    for (int i = 1; i < noIdMatches.size(); i++) {
-                        Consumer dup = noIdMatches.get(i);
+                    for (int i = 1; i < personMatches.size(); i++) {
+                        Consumer dup = personMatches.get(i);
 
-                        // 🔹 Absorb non-empty fields from duplicate into primary
-                        applyIfEmpty(primary::getFirstName, primary::setFirstName, dup.getFirstName());
-                        applyIfEmpty(primary::getLastName, primary::setLastName, dup.getLastName());
-                        applyIfEmpty(primary::getMiddleName, primary::setMiddleName, dup.getMiddleName());
-                        applyIfEmpty(primary::getGender, primary::setGender, dup.getGender());
-                        applyIfEmpty(primary::getBirthPlace, primary::setBirthPlace, dup.getBirthPlace());
+                        // Enrich primary with missing fields from duplicate
                         applyIfEmpty(primary::getAddress, primary::setAddress, dup.getAddress());
-                        applyIfEmpty(primary::getRegistrationDate, primary::setRegistrationDate, dup.getRegistrationDate());
-                        applyIfEmpty(primary::getBirthDate, primary::setBirthDate, dup.getBirthDate());
+                        applyIfEmpty(primary::getBirthPlace, primary::setBirthPlace, dup.getBirthPlace());
+                        applyIfEmpty(primary::getGender, primary::setGender, dup.getGender());
                         applyIfEmpty(primary::getNationality, primary::setNationality, dup.getNationality());
+                        applyIfEmpty(primary::getRegistrationDate, primary::setRegistrationDate, dup.getRegistrationDate());
 
-                        // 🔹 Merge MSISDNs as alternates if needed
+                        // Merge MSISDNs
                         if (dup.getMsisdn() != null && !dup.getMsisdn().equals(primary.getMsisdn())) {
                             if (primary.getAlternateMsisdn1() == null) {
                                 primary.setAlternateMsisdn1(dup.getMsisdn());
@@ -606,17 +600,18 @@ public class FileProcessingService {
                             }
                         }
 
-                        // 🔹 Soft delete the duplicate
+                        // Soft delete duplicate
                         dup.setConsumerStatus(0);
                         duplicatesToSoftDelete.add(dup);
                         log.info("🗑️ Soft-deleted consumer id={} (merged into id={})", dup.getId(), primary.getId());
                     }
                 }
 
-                log.info("🔄 Upgrading consumer id={} from no-ID to ID: {}/{}",
-                        primary.getId(), r.idNumber, r.idType);
+                // 🔄 Overwrite ID fields (upgrade with new ID)
+                log.info("🔄 Updating consumer id={} with new ID {}/{} (was {}/{})",
+                        primary.getId(), r.idNumber, r.idType,
+                        primary.getIdentificationNumber(), primary.getIdentificationType());
 
-                // Always overwrite ID fields
                 primary.setIdentificationNumber(r.idNumber);
                 primary.setIdentificationType(r.idType);
 
@@ -624,9 +619,10 @@ public class FileProcessingService {
             }
         }
 
-        // 3. No match → new consumer (new MSISDN for this person)
+        // 3. No match → new consumer
         return new Consumer();
     }
+
 
 
 
