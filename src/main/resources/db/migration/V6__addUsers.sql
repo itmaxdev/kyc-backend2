@@ -1,8 +1,8 @@
 INSERT INTO `users` (`email`, `password`, `first_name`, `last_name`, `phone`, `code`, `code_expiry`, `status`, `government_id`, `last_login`, `deleted`, `created_on`, `department`, `industry_id`, `role_id`, `created_by`, `service_provider_id`) VALUES
-    ('africell@test.com', '$2a$10$QymjTcaGlJIOhVogNKBM2.Q7YnzYqebdG2pY3qT8vjbYx.sW3piKW', 'Africell', 'User', '111', NULL, NULL, 1, 'e', NULL, 0, '2025-08-20 20:00:00', 'test dep', 19, 4, 1, 28);
+    ('africell@test.com', '$2a$10$QymjTcaGlJIOhVogNKBM2.Q7YnzYqebdG2pY3qT8vjbYx.sW3piKW', 'Africell', '', '111', NULL, NULL, 1, 'e', NULL, 0, '2025-08-20 20:00:00', 'test dep', 19, 4, 1, 28);
 INSERT INTO `users` (`email`, `password`, `first_name`, `last_name`, `phone`, `code`, `code_expiry`, `status`, `government_id`, `last_login`, `deleted`, `created_on`, `department`, `industry_id`, `role_id`, `created_by`, `service_provider_id`) VALUES
-    ('orange@test.com', '$2a$10$QymjTcaGlJIOhVogNKBM2.Q7YnzYqebdG2pY3qT8vjbYx.sW3piKW', 'Orange', 'User', '111', NULL, NULL, 1, 'e', NULL, 0, '2025-08-20 20:00:00', 'test dep', 19, 4, 1, 20);
+    ('orange@test.com', '$2a$10$QymjTcaGlJIOhVogNKBM2.Q7YnzYqebdG2pY3qT8vjbYx.sW3piKW', 'Orange', '', '111', NULL, NULL, 1, 'e', NULL, 0, '2025-08-20 20:00:00', 'test dep', 19, 4, 1, 20);
 INSERT INTO `users` (`email`, `password`, `first_name`, `last_name`, `phone`, `code`, `code_expiry`, `status`, `government_id`, `last_login`, `deleted`, `created_on`, `department`, `industry_id`, `role_id`, `created_by`, `service_provider_id`) VALUES
-    ('vodacom@test.com', '$2a$10$QymjTcaGlJIOhVogNKBM2.Q7YnzYqebdG2pY3qT8vjbYx.sW3piKW', 'Vodacom', 'User', '111', NULL, NULL, 1, 'e', NULL, 0, '2025-08-20 20:00:00', 'test dep', 19, 4, 1, 24);
+    ('vodacom@test.com', '$2a$10$QymjTcaGlJIOhVogNKBM2.Q7YnzYqebdG2pY3qT8vjbYx.sW3piKW', 'Vodacom', '', '111', NULL, NULL, 1, 'e', NULL, 0, '2025-08-20 20:00:00', 'test dep', 19, 4, 1, 24);
 INSERT INTO `users` (`email`, `password`, `first_name`, `last_name`, `phone`, `code`, `code_expiry`, `status`, `government_id`, `last_login`, `deleted`, `created_on`, `department`, `industry_id`, `role_id`, `created_by`, `service_provider_id`) VALUES
-    ('airtel@test.com', '$2a$10$QymjTcaGlJIOhVogNKBM2.Q7YnzYqebdG2pY3qT8vjbYx.sW3piKW', 'Airtel', 'User', '111', NULL, NULL, 1, 'e', NULL, 0, '2025-08-20 20:00:00', 'test dep', 19, 4, 1, 27);
+    ('airtel@test.com', '$2a$10$QymjTcaGlJIOhVogNKBM2.Q7YnzYqebdG2pY3qT8vjbYx.sW3piKW', 'Airtel', '', '111', NULL, NULL, 1, 'e', NULL, 0, '2025-08-20 20:00:00', 'test dep', 19, 4, 1, 27);
