@@ -343,7 +343,7 @@ public class AnomalyServiceImpl implements AnomalyService
       anomlyDto.setUpdateBy("System");
 
       // Fetch anomaly tracking
-      List<AnomalyTrackingDto> anomalyTracking = anomalyTrackingRepository.findAllByAnomalyId(id)
+      List<AnomalyTrackingDto> anomalyTracking = anomalyTrackingRepository.findAllByAnomalyIdOrderByCreatedOnDesc(id)
               .stream()
               .map(c -> new AnomalyTrackingDto(c.getId(), c.getCreatedOn(), c.getStatus(),
                       c.getNote(), c.getAnomaly(), c.getUpdateBy(), c.getUpdateOn()))
