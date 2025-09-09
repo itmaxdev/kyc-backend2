@@ -732,6 +732,10 @@ public class FileProcessingService {
         final Timestamp nowTs = new Timestamp(System.currentTimeMillis());
         int total = 0;
 
+        // 🔹 Collect active and soft-deleted consumers
+        List<Consumer> toSave = new ArrayList<>();
+        List<Consumer> duplicatesToSoftDelete = new ArrayList<>();
+
         try (InputStream in = Files.newInputStream(workingCopy);
              Reader reader = new InputStreamReader(in, cs);
              CSVReader csv = new CSVReaderBuilder(reader)
@@ -740,7 +744,6 @@ public class FileProcessingService {
 
             String[] row;
             boolean isHeader = true;
-            List<Consumer> toSave = new ArrayList<>();
 
             while ((row = csv.readNext()) != null) {
                 stripBomInPlace(row);
@@ -755,7 +758,7 @@ public class FileProcessingService {
                 RowData r = mapRowAirtel(row, spId, nowTs);
                 if (r == null) continue;
 
-                // Normalize & clip
+                // 🔹 Normalize & clip
                 r.msisdn             = normalizeMsisdnAllowNull(r.msisdn);
                 r.firstName          = clip(r.firstName, 100);
                 r.middleName         = clip(r.middleName, 255);
@@ -769,57 +772,22 @@ public class FileProcessingService {
                 r.idNumber           = clip(r.idNumber, 45);
                 r.registrationDateStr= clip(r.registrationDateStr, 50);
 
-                // 🔹 Use Specification to check existing consumer
-                Specification<Consumer> spec = ConsumerSpecifications.matchConsumer(r);
-                List<Consumer> matches = consumerRepository.findAll(spec);
-                Consumer existing = matches.isEmpty() ? null : matches.get(0);
+                // 🔹 Deduplication-aware match (same as Vodacom)
+                Consumer consumer = findOrMergeConsumer(r, duplicatesToSoftDelete);
 
-                if (existing != null) {
-                    // Update empty fields only
-                    if (isEmpty(existing.getMsisdn()) && notEmpty(r.msisdn)) existing.setMsisdn(r.msisdn);
-                    if (isEmpty(existing.getFirstName()) && notEmpty(r.firstName)) existing.setFirstName(r.firstName);
-                    if (isEmpty(existing.getLastName()) && notEmpty(r.lastName)) existing.setLastName(r.lastName);
-                    if (isEmpty(existing.getIdentificationNumber()) && notEmpty(r.idNumber)) existing.setIdentificationNumber(r.idNumber);
-                    if (isEmpty(existing.getIdentificationType()) && notEmpty(r.idType)) existing.setIdentificationType(r.idType);
-                    if (isEmpty(existing.getGender()) && notEmpty(r.gender)) existing.setGender(r.gender);
-                    if (isEmpty(existing.getBirthPlace()) && notEmpty(r.birthPlace)) existing.setBirthPlace(r.birthPlace);
-                    if (isEmpty(existing.getAddress()) && notEmpty(r.address)) existing.setAddress(r.address);
-                    if (isEmpty(existing.getRegistrationDate()) && notEmpty(r.registrationDateStr)) existing.setRegistrationDate(r.registrationDateStr);
+                // 🔹 Merge fields
+                mergeConsumerFields(consumer, r, nowTs, spId);
 
-                    if (isEmpty(existing.getBirthDate()) && notEmpty(r.birthDateStr)) existing.setBirthDate(r.birthDateStr);
-                    if (isEmpty(existing.getAlternateMsisdn1()) && notEmpty(r.alt1)) existing.setAlternateMsisdn1(r.alt1);
-                    if (isEmpty(existing.getAlternateMsisdn2()) && notEmpty(r.alt2)) existing.setAlternateMsisdn2(r.alt2);
-                    if (isEmpty(existing.getMiddleName()) && notEmpty(r.middleName)) existing.setMiddleName(r.middleName);
+                // 🔹 Re-check consistency
+                updateConsistencyFlag(consumer);
 
-                    toSave.add(existing);
-
-                } else {
-                    // Insert new consumer
-                    Consumer newC = new Consumer();
-                    newC.setFirstName(r.firstName);
-                    newC.setLastName(r.lastName);
-                    newC.setIdentificationNumber(r.idNumber);
-                    newC.setIdentificationType(r.idType);
-                    newC.setMsisdn(r.msisdn);
-                    newC.setGender(r.gender);
-                    newC.setBirthPlace(r.birthPlace);
-                    newC.setAddress(r.address);
-                    newC.setRegistrationDate(r.registrationDateStr);
-                    newC.setBirthDate(r.birthDateStr);
-                    newC.setMiddleName(r.middleName);
-                    newC.setAlternateMsisdn2(r.alt2);
-                    newC.setAlternateMsisdn1(r.alt1);
-
-                    ServiceProvider spRef = new ServiceProvider();
-                    spRef.setId(spId);
-                    newC.setServiceProvider(spRef);
-
-                    newC.setCreatedOn(nowTs.toString()); // or LocalDateTime if you update entity
-
-                    toSave.add(newC);
-                }
+                toSave.add(consumer);
 
                 if (toSave.size() >= BATCH_SIZE) {
+                    if (!duplicatesToSoftDelete.isEmpty()) {
+                        toSave.addAll(duplicatesToSoftDelete);
+                        duplicatesToSoftDelete.clear();
+                    }
                     consumerRepository.saveAll(toSave);
                     total += toSave.size();
                     toSave.clear();
@@ -827,6 +795,10 @@ public class FileProcessingService {
             }
 
             if (!toSave.isEmpty()) {
+                if (!duplicatesToSoftDelete.isEmpty()) {
+                    toSave.addAll(duplicatesToSoftDelete);
+                    duplicatesToSoftDelete.clear();
+                }
                 consumerRepository.saveAll(toSave);
                 total += toSave.size();
             }
@@ -834,6 +806,7 @@ public class FileProcessingService {
 
         return total;
     }
+
 
 
     @Transactional(rollbackFor = Exception.class)
