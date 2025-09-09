@@ -61,7 +61,7 @@ public class ConsumerDto {
         this.middleName=consumer.getMiddleName();
         this.alternateMsisdn1=consumer.getAlternateMsisdn1();
         this.alternateMsisdn2=consumer.getAlternateMsisdn2();
-
+        this.isConsistent = consumer.getIsConsistent();
         
         
         if(anomlies!=null&& anomlies.size()>0){
@@ -92,6 +92,7 @@ public class ConsumerDto {
         this.middleName=consumer.getMiddleName();
         this.alternateMsisdn1=consumer.getAlternateMsisdn1();
         this.alternateMsisdn2=consumer.getAlternateMsisdn2();
+        this.isConsistent = consumer.getIsConsistent();
 
     }
 
