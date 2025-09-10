@@ -470,9 +470,9 @@ public class AnomalyServiceImpl implements AnomalyService
 	private String decideGroupBy(Date start, Date end) {
 		long diffInMillies = end.getTime() - start.getTime();
 		long days = TimeUnit.DAYS.convert(diffInMillies, TimeUnit.MILLISECONDS) + 1;
-		if (days <= 31) {
+		if (days < 30) {
 			return "DAY"; // short ranges → daily
-		} else if (days <= 365) {
+		} else if (days < 365) {
 			return "MONTH"; // medium ranges → monthly
 		} else {
 			return "QUARTER"; // long ranges → quarterly

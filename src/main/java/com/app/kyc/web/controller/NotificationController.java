@@ -82,4 +82,31 @@ public class NotificationController
          return ResponseEntity.ok(e.getMessage());
       }
    }
+   
+   
+   @PutMapping("/markAllAsReadNotificationRead/{id}")
+   public ResponseEntity<?> markAllAsReadNotification(HttpServletRequest request, @PathVariable("id") Long id) throws SQLException
+   {
+      //log.info("markAllAsReadNotification");
+      try
+      {
+         List<String> roles = new ArrayList<String>();
+         roles.add("Compliance Admin");
+         roles.add("KYC Admin");
+         roles.add("SP Admin");
+         roles.add("SP User");
+         if(securityHelper.hasRole(request, roles))
+         {
+            notificationService.markAllAsReadByUserId(id);
+            return ResponseEntity.ok("Anomaly markAsRead successfully");
+         }
+         else
+            return ResponseEntity.ok("Not authorized");
+      }
+      catch(Exception e)
+      {
+         //log.info(e.getMessage());
+         return ResponseEntity.ok(e.getMessage());
+      }
+   }
 }
