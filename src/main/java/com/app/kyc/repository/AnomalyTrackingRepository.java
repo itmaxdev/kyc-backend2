@@ -13,6 +13,6 @@ public interface AnomalyTrackingRepository extends JpaRepository<AnomalyTracking
 
    List<AnomalyTracking> findAllByAnomalyId(Long id);
    // Get all tracking records for an anomaly, latest first
-   List<AnomalyTracking> findAllByAnomalyIdOrderByCreatedOnDesc(Long anomalyId);
+   List<AnomalyTracking> findAllByAnomalyIdOrderByCreatedOnAsc(Long anomalyId);
 
 }

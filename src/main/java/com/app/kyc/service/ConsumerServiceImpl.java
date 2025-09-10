@@ -2668,7 +2668,7 @@ System.out.println("Get all flagged ");
 
             anomalyTrackingRepository.save(
                     new AnomalyTracking(anomaly, now, AnomalyStatus.REPORTED, "",
-                            "System for Anomaly", anomaly.getUpdatedOn())
+                            "System", anomaly.getUpdatedOn())
             );
         } else {
             anomaly = anomalyRepository.findByIdAndAnomalyType_Id(existingAnomalyIds, type.getId());
@@ -3016,7 +3016,7 @@ System.out.println("Get all flagged ");
 
             anomalyTrackingRepository.save(
                     new AnomalyTracking(anomaly, now, AnomalyStatus.REPORTED, "",
-                            "System for Anomaly", anomaly.getUpdatedOn())
+                            "System", anomaly.getUpdatedOn())
             );
         } else {
             anomaly = anomalyRepository.findByIdAndAnomalyType_Id(existing, type.getId());
