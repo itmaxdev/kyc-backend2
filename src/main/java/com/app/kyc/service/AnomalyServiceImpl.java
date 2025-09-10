@@ -340,7 +340,7 @@ public class AnomalyServiceImpl implements AnomalyService
       } else {
          anomlyDto = new AnomlyDto(anomaly);
       }
-      anomlyDto.setUpdateBy("System");
+      //anomlyDto.setUpdateBy("System");
 
       // Fetch anomaly tracking
 //      List<AnomalyTrackingDto> anomalyTracking = anomalyTrackingRepository.findAllByAnomalyIdOrderByCreatedOnAsc(id)

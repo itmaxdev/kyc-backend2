@@ -2664,11 +2664,13 @@ System.out.println("Get all flagged ");
             anomaly.setReportedBy(user);
             anomaly.setUpdatedOn(now);
             anomaly.setAnomalyType(type);
+            anomaly.setUpdatedOn(new Date());
+            anomaly.setUpdateBy(anomaly.getReportedBy().getFirstName() + " " + anomaly.getReportedBy().getLastName());
             anomaly = anomalyRepository.save(anomaly);
 
             anomalyTrackingRepository.save(
                     new AnomalyTracking(anomaly, now, AnomalyStatus.REPORTED, "",
-                            "System", anomaly.getUpdatedOn())
+                    		user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn())
             );
         } else {
             anomaly = anomalyRepository.findByIdAndAnomalyType_Id(existingAnomalyIds, type.getId());
@@ -3012,11 +3014,13 @@ System.out.println("Get all flagged ");
             anomaly.setReportedBy(user);
             anomaly.setUpdatedOn(now);
             anomaly.setAnomalyType(type);
+            anomaly.setUpdatedOn(new Date());
+            anomaly.setUpdateBy(anomaly.getReportedBy().getFirstName() + " " + anomaly.getReportedBy().getLastName());
             anomaly = anomalyRepository.save(anomaly);
 
             anomalyTrackingRepository.save(
                     new AnomalyTracking(anomaly, now, AnomalyStatus.REPORTED, "",
-                            "System", anomaly.getUpdatedOn())
+                    		user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn())
             );
         } else {
             anomaly = anomalyRepository.findByIdAndAnomalyType_Id(existing, type.getId());
