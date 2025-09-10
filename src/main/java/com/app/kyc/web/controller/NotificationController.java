@@ -84,7 +84,7 @@ public class NotificationController
    }
    
    
-   @PutMapping("/markNotificationRead/{id}")
+   @PutMapping("/markAllAsReadNotificationRead/{id}")
    public ResponseEntity<?> markAllAsReadNotification(HttpServletRequest request, @PathVariable("id") Long id) throws SQLException
    {
       //log.info("markAllAsReadNotification");
