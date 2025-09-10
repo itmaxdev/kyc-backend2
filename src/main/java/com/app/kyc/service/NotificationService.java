@@ -16,5 +16,7 @@ public interface NotificationService
    public void addNotification(String message, User userI, NotificationType notificationType, Long clickableId);
 
    public void markNotificationRead(Long id);
+   
+   public void markAllAsReadByUserId(Long id);
 
 }
