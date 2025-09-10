@@ -343,11 +343,35 @@ public class AnomalyServiceImpl implements AnomalyService
       anomlyDto.setUpdateBy("System");
 
       // Fetch anomaly tracking
-      List<AnomalyTrackingDto> anomalyTracking = anomalyTrackingRepository.findAllByAnomalyIdOrderByCreatedOnDesc(id)
-              .stream()
-              .map(c -> new AnomalyTrackingDto(c.getId(), c.getCreatedOn(), c.getStatus(),
-                      c.getNote(), c.getAnomaly(), c.getUpdateBy(), c.getUpdateOn()))
-              .collect(Collectors.toList());
+//      List<AnomalyTrackingDto> anomalyTracking = anomalyTrackingRepository.findAllByAnomalyIdOrderByCreatedOnAsc(id)
+//              .stream()
+//              .map(c -> new AnomalyTrackingDto(c.getId(), c.getCreatedOn(), c.getStatus(),
+//                      c.getNote(), c.getAnomaly(), c.getUpdateBy(), c.getUpdateOn()))
+//              .collect(Collectors.toList());
+      
+		List<AnomalyTrackingDto> anomalyTracking = anomalyTrackingRepository.findAllByAnomalyIdOrderByCreatedOnAsc(id)
+				.stream().map(c -> {
+					String finalNote;
+
+					if (c.getNote() != null && !c.getNote().isBlank()) {
+						// case 1: note is already present → keep as is
+						finalNote = c.getNote();
+					} else {
+						if (AnomalyStatus.REPORTED == c.getStatus()) {
+							// case 1: anomaly Reported but note is blank
+							finalNote = "Anomaly flagged by " + c.getUpdateBy();
+						} else if (AnomalyStatus.RESOLVED_SUCCESSFULLY == c.getStatus()) {
+							// case 2: anomaly resolved but note is blank
+							finalNote = "Anomaly Resolved by " + c.getUpdateBy();
+						} else {
+							// case 4: fallback
+							finalNote = "";
+						}
+					}
+
+					return new AnomalyTrackingDto(c.getId(), c.getCreatedOn(), c.getStatus(), finalNote, c.getAnomaly(),
+							c.getUpdateBy(), c.getUpdateOn());
+				}).collect(Collectors.toList());
 
       // Fetch consumers linked to anomaly
       List<ConsumerDto> consumerDtos = consumerAnomalyRepository.findByAnomaly_Id(id)
