@@ -45,6 +45,11 @@ public interface ConsumerRepository
 
     Optional<Consumer> findByVodacomTransactionId(String vodacomTransactionId);
 
+    Optional<Consumer> findByAirtelTransactionId(String airtelTransactionId);
+
+
+
+
     @Query("select count(c) from Consumer c")
     long countAllUnsafe(); // optional
 

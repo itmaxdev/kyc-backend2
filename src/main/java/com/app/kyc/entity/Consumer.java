@@ -11,21 +11,21 @@ import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 
 
+
+
 @Entity
 @Data
 @Setter
 @Getter
-
 @Table(
-        name = "consumers",
-        uniqueConstraints = @UniqueConstraint(name = "uq_consumers_signature", columnNames = {"row_signature"})
+        name = "consumers"
 )
-
 public class Consumer {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
     private String msisdn;
     private String registrationDate;
     private String firstName;
@@ -46,11 +46,13 @@ public class Consumer {
     private String subscriberType;
     private Boolean isConsistent;
     private int consumerStatus;
+
     @Column(name = "vodacom_transaction_id", unique = true, nullable = true, length = 200)
     private String vodacomTransactionId;
 
-
-
+    // 🔹 Not unique anymore
+    @Column(name = "airtel_transaction_id", nullable = true, length = 200)
+    private String airtelTransactionId;
 
     @OneToMany(cascade = {CascadeType.ALL}, mappedBy = "consumer")
     private List<ConsumerService> consumerService;
@@ -59,19 +61,20 @@ public class Consumer {
             CascadeType.PERSIST,
             CascadeType.MERGE
     })
-    @JoinTable(name = "consumers_services", joinColumns = @JoinColumn(name = "consumer_id"), inverseJoinColumns = @JoinColumn(name = "service_id"))
+    @JoinTable(name = "consumers_services",
+            joinColumns = @JoinColumn(name = "consumer_id"),
+            inverseJoinColumns = @JoinColumn(name = "service_id"))
     private List<Service> services;
 
     @ManyToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    @JoinTable(name = "consumers_anomalies", joinColumns = @JoinColumn(name = "consumer_id"), inverseJoinColumns = @JoinColumn(name = "anomaly_id"))
+    @JoinTable(name = "consumers_anomalies",
+            joinColumns = @JoinColumn(name = "consumer_id"),
+            inverseJoinColumns = @JoinColumn(name = "anomaly_id"))
     List<Anomaly> anomalies = new ArrayList<>();
-
 
     @ManyToOne
     private ServiceProvider serviceProvider;
 
-    @Column(name = "row_signature", nullable = false, length = 128)
-    private String rowSignature;
 
 
     @Override
@@ -84,13 +87,11 @@ public class Consumer {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Consumer consumer = (Consumer) o;
-        return msisdn.equals(consumer.msisdn);
+        return msisdn != null && msisdn.equals(consumer.msisdn);
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(msisdn);
     }
-
-
 }
