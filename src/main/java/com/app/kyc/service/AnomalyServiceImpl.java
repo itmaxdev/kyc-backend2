@@ -349,7 +349,7 @@ public class AnomalyServiceImpl implements AnomalyService
 //                      c.getNote(), c.getAnomaly(), c.getUpdateBy(), c.getUpdateOn()))
 //              .collect(Collectors.toList());
       
-		List<AnomalyTrackingDto> anomalyTracking = anomalyTrackingRepository.findAllByAnomalyIdOrderByCreatedOnAsc(id)
+		List<AnomalyTrackingDto> anomalyTracking = anomalyTrackingRepository.findAllByAnomalyIdOrderByCreatedOnDesc(id)
 				.stream().map(c -> {
 					String finalNote;
 
