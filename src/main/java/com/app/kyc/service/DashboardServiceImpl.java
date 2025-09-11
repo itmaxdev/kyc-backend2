@@ -294,7 +294,8 @@ public class DashboardServiceImpl implements DashboardService {
 			int nonConsistentcount = ((Number) row[3]).intValue();
 			if(consistentcount > 0) {
 				consistentDashboardObject.getValues().add(new DashboardObject(operator, consistentcount));
-			}else if(nonConsistentcount > 0) {
+			}
+			if(nonConsistentcount > 0) {
 				nonConsistentDashboardObject.getValues().add(new DashboardObject(operator, nonConsistentcount));
 			}
 		}
