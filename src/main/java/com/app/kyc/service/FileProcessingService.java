@@ -551,220 +551,6 @@ public class FileProcessingService {
 
 
 
-    private Consumer findOrMergeConsumer(RowData r, List<Consumer> duplicatesToSoftDelete) {
-        // 1. Strongest match: Vodacom transaction ID (if provided)
-        if (notEmpty(r.vodacomTransactionId)) {
-            Optional<Consumer> existing = consumerRepository.findByVodacomTransactionId(r.vodacomTransactionId.trim());
-            if (existing.isPresent()) {
-                Consumer consumer = existing.get();
-                log.info("✅ Found existing consumer by vodacomTransactionId={} → id={}",
-                        r.vodacomTransactionId, consumer.getId());
-                return consumer; // 🔄 Always update existing instead of insert
-            } else {
-                log.info("🆕 New consumer for vodacomTransactionId={}", r.vodacomTransactionId);
-                Consumer consumer = new Consumer();
-                consumer.setVodacomTransactionId(r.vodacomTransactionId.trim());
-                return consumer;
-            }
-        }
-
-        // 2. Exact match: ID + ID Type + MSISDN (for non-Vodacom / Airtel cases)
-        if (notEmpty(r.idNumber) && notEmpty(r.idType) && notEmpty(r.msisdn)) {
-            List<Consumer> exactMatches = consumerRepository.findAll((root, query, cb) -> cb.and(
-                    cb.equal(root.get("identificationNumber"), r.idNumber),
-                    cb.equal(root.get("identificationType"), r.idType),
-                    cb.equal(root.get("msisdn"), r.msisdn)
-            ));
-            if (!exactMatches.isEmpty()) {
-                return exactMatches.get(0);
-            }
-        }
-
-        // 3. Upgrade case: same person (Name + DOB + MSISDN), even if ID changed
-        if (notEmpty(r.firstName) && notEmpty(r.lastName) && notEmpty(r.birthDateStr) && notEmpty(r.msisdn)) {
-            List<Consumer> personMatches = consumerRepository.findAll((root, query, cb) -> cb.and(
-                    cb.equal(root.get("firstName"), r.firstName),
-                    cb.equal(root.get("lastName"), r.lastName),
-                    cb.equal(root.get("birthDate"), r.birthDateStr),
-                    cb.equal(root.get("msisdn"), r.msisdn)
-            ));
-
-            if (!personMatches.isEmpty()) {
-                Consumer primary = personMatches.get(0);
-
-                if (personMatches.size() > 1) {
-                    log.warn("⚠️ Found {} duplicate person matches for {} {} (msisdn={}), merging into id={}",
-                            personMatches.size(), r.firstName, r.lastName, r.msisdn, primary.getId());
-
-                    for (int i = 1; i < personMatches.size(); i++) {
-                        Consumer dup = personMatches.get(i);
-                        mergeDuplicates(primary, dup, duplicatesToSoftDelete);
-                    }
-                }
-
-                return primary;
-            }
-        }
-
-        // 4. No match → new consumer (Airtel or others with no trxId)
-        return new Consumer();
-    }
-
-
-
-
-
-
-
-    private void mergeDuplicates(Consumer primary, Consumer dup, List<Consumer> duplicatesToSoftDelete) {
-        // Merge missing fields
-        applyIfEmpty(primary::getFirstName, primary::setFirstName, dup.getFirstName());
-        applyIfEmpty(primary::getLastName, primary::setLastName, dup.getLastName());
-        applyIfEmpty(primary::getAddress, primary::setAddress, dup.getAddress());
-        applyIfEmpty(primary::getBirthPlace, primary::setBirthPlace, dup.getBirthPlace());
-        applyIfEmpty(primary::getGender, primary::setGender, dup.getGender());
-        applyIfEmpty(primary::getNationality, primary::setNationality, dup.getNationality());
-        applyIfEmpty(primary::getRegistrationDate, primary::setRegistrationDate, dup.getRegistrationDate());
-
-        // Merge MSISDNs
-        if (dup.getMsisdn() != null && !dup.getMsisdn().equals(primary.getMsisdn())) {
-            if (primary.getAlternateMsisdn1() == null) {
-                primary.setAlternateMsisdn1(dup.getMsisdn());
-            } else if (primary.getAlternateMsisdn2() == null &&
-                    !primary.getAlternateMsisdn1().equals(dup.getMsisdn())) {
-                primary.setAlternateMsisdn2(dup.getMsisdn());
-            }
-        }
-
-        // Soft delete duplicate
-        dup.setConsumerStatus(0);
-        duplicatesToSoftDelete.add(dup);
-
-        log.info("Soft-deleted duplicate consumer id={} merged into id={}", dup.getId(), primary.getId());
-    }
-
-
-
-
-
-    private void mergeConsumerFields(Consumer consumer, FileProcessingService.RowData r, Timestamp nowTs, Long spId) {
-        // 🔹 Handle MSISDN updates carefully
-        // ✅ Handle MSISDN updates using Vodacom transaction id as anchor
-        // ✅ Handle MSISDN updates anchored on vodacomTransactionId
-        if (notEmpty(r.vodacomTransactionId)) {
-            // Consumer already tied to trxId → update MSISDN safely
-            if (notEmpty(r.msisdn)) {
-                if (consumer.getMsisdn() == null) {
-                    log.info("📱 Setting MSISDN for consumer id={} (trxId={}) → {}",
-                            consumer.getId(), r.vodacomTransactionId, r.msisdn);
-                    consumer.setMsisdn(r.msisdn);
-                } else if (!consumer.getMsisdn().equals(r.msisdn)) {
-                    // Preserve old value
-                    if (consumer.getAlternateMsisdn1() == null) {
-                        consumer.setAlternateMsisdn1(consumer.getMsisdn());
-                    } else if (consumer.getAlternateMsisdn2() == null &&
-                            !consumer.getAlternateMsisdn1().equals(r.msisdn)) {
-                        consumer.setAlternateMsisdn2(consumer.getMsisdn());
-                    }
-
-                    log.info("📱 Updating MSISDN for consumer id={} (trxId={}) → {}",
-                            consumer.getId(), r.vodacomTransactionId, r.msisdn);
-                    consumer.setMsisdn(r.msisdn);
-                }
-            }
-        } else {
-            // 🔹 Fallback for Airtel or older data (no trxId)
-            if (notEmpty(r.msisdn)) {
-                if (consumer.getMsisdn() == null) {
-                    consumer.setMsisdn(r.msisdn);
-                    log.info("📱 Set MSISDN (no trxId) for consumer id={} → {}",
-                            consumer.getId(), r.msisdn);
-                } else if (!consumer.getMsisdn().equals(r.msisdn)) {
-                    log.debug("⚠️ Skipping MSISDN change without trxId ({} → {}) for consumer id={}",
-                            consumer.getMsisdn(), r.msisdn, consumer.getId());
-                }
-            }
-        }
-
-
-
-        // 🔹 Always overwrite ID fields (upgrade path)
-        if (notEmpty(r.idNumber)) {
-            if (consumer.getIdentificationNumber() == null || consumer.getIdentificationNumber().isBlank()) {
-                log.info("✅ Setting identificationNumber for consumer id={} → {}", consumer.getId(), r.idNumber);
-            } else if (!consumer.getIdentificationNumber().equals(r.idNumber)) {
-                log.info("🔄 Updating identificationNumber for consumer id={} from {} → {}",
-                        consumer.getId(), consumer.getIdentificationNumber(), r.idNumber);
-            }
-            consumer.setIdentificationNumber(r.idNumber);
-        }
-
-        if (notEmpty(r.idType)) {
-            if (consumer.getIdentificationType() == null || consumer.getIdentificationType().isBlank()) {
-                log.info("✅ Setting identificationType for consumer id={} → {}", consumer.getId(), r.idType);
-            } else if (!consumer.getIdentificationType().equals(r.idType)) {
-                log.info("🔄 Updating identificationType for consumer id={} from {} → {}",
-                        consumer.getId(), consumer.getIdentificationType(), r.idType);
-            }
-            consumer.setIdentificationType(r.idType);
-        }
-
-        if (notEmpty(r.vodacomTransactionId)) {
-            consumer.setVodacomTransactionId(r.vodacomTransactionId);
-        }
-        // 🔹 Apply other fields only if empty (don’t overwrite existing good data)
-        applyIfEmpty(consumer::getFirstName, consumer::setFirstName, r.firstName);
-        applyIfEmpty(consumer::getLastName, consumer::setLastName, r.lastName);
-        applyIfEmpty(consumer::getMiddleName, consumer::setMiddleName, r.middleName);
-        applyIfEmpty(consumer::getGender, consumer::setGender, r.gender);
-        applyIfEmpty(consumer::getBirthPlace, consumer::setBirthPlace, r.birthPlace);
-        applyIfEmpty(consumer::getAddress, consumer::setAddress, r.address);
-        applyIfEmpty(consumer::getRegistrationDate, consumer::setRegistrationDate, r.registrationDateStr);
-        applyIfEmpty(consumer::getBirthDate, consumer::setBirthDate, r.birthDateStr);
-
-
-        // 🔹 Fill alternate MSISDNs if present
-        applyIfEmpty(consumer::getAlternateMsisdn1, consumer::setAlternateMsisdn1, r.alt1);
-        applyIfEmpty(consumer::getAlternateMsisdn2, consumer::setAlternateMsisdn2, r.alt2);
-
-        // 🔹 New record bootstrap
-        if (consumer.getId() == null) {
-            consumer.setCreatedOn(nowTs.toString());
-            ServiceProvider spRef = new ServiceProvider();
-            spRef.setId(spId);
-            consumer.setServiceProvider(spRef);
-            log.info("🆕 Bootstrapping new consumer for serviceProvider={} createdOn={}", spId, nowTs);
-        }
-
-        // 🔹 Always recompute rowSignature
-        consumer.setRowSignature(computeSignature(r));
-    }
-
-
-
-
-
-
-
-    /** Utility: update only if current value is empty. */
-
-    private void applyIfEmpty(Supplier<String> getter, java.util.function.Consumer<String> setter, String newValue) {
-        if ((getter.get() == null || getter.get().trim().isEmpty())
-                && newValue != null && !newValue.trim().isEmpty()) {
-            setter.accept(newValue);
-        }
-    }
-
-
-    /** Utility: mark consumer consistent/inconsistent based on MSISDN duplicates. */
-    private void updateConsistencyFlag(Consumer consumer) {
-        if (consumer.getMsisdn() == null) {
-            consumer.setIsConsistent(true); // no MSISDN → default to consistent
-            return;
-        }
-        List<Consumer> sameMsisdn = consumerRepository.findByMsisdn(consumer.getMsisdn());
-        consumer.setIsConsistent(sameMsisdn.size() <= 1);
-    }
 
 
     @Transactional(rollbackFor = Exception.class)
@@ -811,6 +597,7 @@ public class FileProcessingService {
                 r.idType             = clip(r.idType, 45);
                 r.idNumber           = clip(r.idNumber, 45);
                 r.registrationDateStr= clip(r.registrationDateStr, 50);
+                r.vodacomTransactionId = clip(r.vodacomTransactionId,200);
 
                 // 🔹 Deduplication-aware match (same as Vodacom)
                 Consumer consumer = findOrMergeConsumer(r, duplicatesToSoftDelete);
@@ -1069,6 +856,244 @@ public class FileProcessingService {
     }
 
 
+    private Consumer findOrMergeConsumer(RowData r, List<Consumer> duplicatesToSoftDelete) {
+
+        // 1. Strongest match: Vodacom transaction ID
+        if (notEmpty(r.vodacomTransactionId)) {
+            Optional<Consumer> existing = consumerRepository.findByVodacomTransactionId(r.vodacomTransactionId.trim());
+            if (existing.isPresent()) {
+                Consumer consumer = existing.get();
+                System.out.println("Found existing consumer by vodacomTransactionId=" + r.vodacomTransactionId +
+                        " → id=" + consumer.getId());
+                return consumer; // always update existing instead of insert
+            } else {
+                System.out.println("New consumer for vodacomTransactionId=" + r.vodacomTransactionId);
+                Consumer consumer = new Consumer();
+                consumer.setVodacomTransactionId(r.vodacomTransactionId.trim());
+                return consumer;
+            }
+        }
+
+        // 2. Strongest match: Airtel transaction ID
+        if (notEmpty(r.airtelTransactionId)) {
+            Optional<Consumer> existing = consumerRepository.findByAirtelTransactionId(r.airtelTransactionId.trim());
+            if (existing.isPresent()) {
+                Consumer consumer = existing.get();
+                System.out.println("Found existing consumer by airtelTransactionId=" + r.airtelTransactionId +
+                        " → id=" + consumer.getId());
+                return consumer;
+            } else {
+                System.out.println("New consumer for airtelTransactionId=" + r.airtelTransactionId);
+                Consumer consumer = new Consumer();
+                consumer.setAirtelTransactionId(r.airtelTransactionId.trim());
+                return consumer;
+            }
+        }
+
+        // 3. Exact match fallback: ID + ID Type + MSISDN
+        if (notEmpty(r.idNumber) && notEmpty(r.idType) && notEmpty(r.msisdn)) {
+            List<Consumer> exactMatches = consumerRepository.findAll((root, query, cb) -> cb.and(
+                    cb.equal(root.get("identificationNumber"), r.idNumber),
+                    cb.equal(root.get("identificationType"), r.idType),
+                    cb.equal(root.get("msisdn"), r.msisdn)
+            ));
+            if (!exactMatches.isEmpty()) {
+                return exactMatches.get(0);
+            }
+        }
+
+        // 4. Person match: same person (Name + DOB + MSISDN)
+        if (notEmpty(r.firstName) && notEmpty(r.lastName) && notEmpty(r.birthDateStr) && notEmpty(r.msisdn)) {
+            List<Consumer> personMatches = consumerRepository.findAll((root, query, cb) -> cb.and(
+                    cb.equal(root.get("firstName"), r.firstName),
+                    cb.equal(root.get("lastName"), r.lastName),
+                    cb.equal(root.get("birthDate"), r.birthDateStr),
+                    cb.equal(root.get("msisdn"), r.msisdn)
+            ));
+
+            if (!personMatches.isEmpty()) {
+                Consumer primary = personMatches.get(0);
+
+                if (personMatches.size() > 1) {
+                    System.out.println("Merging " + personMatches.size() + " duplicate person matches into id=" + primary.getId());
+                    for (int i = 1; i < personMatches.size(); i++) {
+                        Consumer dup = personMatches.get(i);
+                        mergeDuplicates(primary, dup, duplicatesToSoftDelete);
+                    }
+                }
+
+                return primary;
+            }
+        }
+
+        // 5. No match → new consumer
+        return new Consumer();
+    }
+
+
+
+
+
+
+
+
+
+
+    private void mergeDuplicates(Consumer primary, Consumer dup, List<Consumer> duplicatesToSoftDelete) {
+        // Merge missing fields
+        applyIfEmpty(primary::getFirstName, primary::setFirstName, dup.getFirstName());
+        applyIfEmpty(primary::getLastName, primary::setLastName, dup.getLastName());
+        applyIfEmpty(primary::getAddress, primary::setAddress, dup.getAddress());
+        applyIfEmpty(primary::getBirthPlace, primary::setBirthPlace, dup.getBirthPlace());
+        applyIfEmpty(primary::getGender, primary::setGender, dup.getGender());
+        applyIfEmpty(primary::getNationality, primary::setNationality, dup.getNationality());
+        applyIfEmpty(primary::getRegistrationDate, primary::setRegistrationDate, dup.getRegistrationDate());
+
+        // Merge MSISDNs
+        if (dup.getMsisdn() != null && !dup.getMsisdn().equals(primary.getMsisdn())) {
+            if (primary.getAlternateMsisdn1() == null) {
+                primary.setAlternateMsisdn1(dup.getMsisdn());
+            } else if (primary.getAlternateMsisdn2() == null &&
+                    !primary.getAlternateMsisdn1().equals(dup.getMsisdn())) {
+                primary.setAlternateMsisdn2(dup.getMsisdn());
+            }
+        }
+
+        // Soft delete duplicate
+        dup.setConsumerStatus(0);
+        duplicatesToSoftDelete.add(dup);
+
+        log.info("Soft-deleted duplicate consumer id={} merged into id={}", dup.getId(), primary.getId());
+    }
+
+
+
+
+
+
+
+
+    private void mergeConsumerFields(Consumer consumer, FileProcessingService.RowData r, Timestamp nowTs, Long spId) {
+        // Handle MSISDN updates anchored on transaction IDs
+        if (notEmpty(r.vodacomTransactionId) || notEmpty(r.airtelTransactionId)) {
+            if (notEmpty(r.msisdn)) {
+                if (consumer.getMsisdn() == null) {
+                    System.out.println("Setting MSISDN for consumer id=" + consumer.getId() + " → " + r.msisdn);
+                    consumer.setMsisdn(r.msisdn);
+                } else if (!consumer.getMsisdn().equals(r.msisdn)) {
+                    // Preserve old MSISDNs
+                    if (consumer.getAlternateMsisdn1() == null) {
+                        consumer.setAlternateMsisdn1(consumer.getMsisdn());
+                    } else if (consumer.getAlternateMsisdn2() == null &&
+                            !consumer.getAlternateMsisdn1().equals(r.msisdn)) {
+                        consumer.setAlternateMsisdn2(consumer.getMsisdn());
+                    }
+                    System.out.println("Updating MSISDN for consumer id=" + consumer.getId() + " → " + r.msisdn);
+                    consumer.setMsisdn(r.msisdn);
+                }
+            }
+        } else {
+            // Fallback when no transactionId
+            if (notEmpty(r.msisdn)) {
+                if (consumer.getMsisdn() == null) {
+                    consumer.setMsisdn(r.msisdn);
+                    System.out.println("Set MSISDN (no trxId) for consumer id=" + consumer.getId() + " → " + r.msisdn);
+                } else if (!consumer.getMsisdn().equals(r.msisdn)) {
+                    System.out.println("Skipping MSISDN change without trxId (" + consumer.getMsisdn() +
+                            " → " + r.msisdn + ") for consumer id=" + consumer.getId());
+                }
+            }
+        }
+
+        // Always overwrite ID fields
+        if (notEmpty(r.idNumber)) {
+            if (consumer.getIdentificationNumber() == null || consumer.getIdentificationNumber().isBlank()) {
+                System.out.println("Setting identificationNumber for consumer id=" + consumer.getId() + " → " + r.idNumber);
+            } else if (!consumer.getIdentificationNumber().equals(r.idNumber)) {
+                System.out.println("Updating identificationNumber for consumer id=" + consumer.getId() +
+                        " from " + consumer.getIdentificationNumber() + " → " + r.idNumber);
+            }
+            consumer.setIdentificationNumber(r.idNumber);
+        }
+
+        if (notEmpty(r.idType)) {
+            if (consumer.getIdentificationType() == null || consumer.getIdentificationType().isBlank()) {
+                System.out.println("Setting identificationType for consumer id=" + consumer.getId() + " → " + r.idType);
+            } else if (!consumer.getIdentificationType().equals(r.idType)) {
+                System.out.println("Updating identificationType for consumer id=" + consumer.getId() +
+                        " from " + consumer.getIdentificationType() + " → " + r.idType);
+            }
+            consumer.setIdentificationType(r.idType);
+        }
+
+        if (notEmpty(r.vodacomTransactionId)) {
+            if (consumer.getVodacomTransactionId() == null ||
+                    !consumer.getVodacomTransactionId().equals(r.vodacomTransactionId)) {
+                consumer.setVodacomTransactionId(r.vodacomTransactionId.trim());
+                System.out.println("Updated Vodacom TRX_ID → " + r.vodacomTransactionId);
+            }
+        }
+
+        if (notEmpty(r.airtelTransactionId)) {
+            if (consumer.getAirtelTransactionId() == null ||
+                    !consumer.getAirtelTransactionId().equals(r.airtelTransactionId)) {
+                consumer.setAirtelTransactionId(r.airtelTransactionId.trim());
+                System.out.println("Updated Airtel TRX_ID → " + r.airtelTransactionId);
+            }
+        }
+
+        // Apply other fields only if empty (don’t overwrite existing good data)
+        applyIfEmpty(consumer::getFirstName, consumer::setFirstName, r.firstName);
+        applyIfEmpty(consumer::getLastName, consumer::setLastName, r.lastName);
+        applyIfEmpty(consumer::getMiddleName, consumer::setMiddleName, r.middleName);
+        applyIfEmpty(consumer::getGender, consumer::setGender, r.gender);
+        applyIfEmpty(consumer::getBirthPlace, consumer::setBirthPlace, r.birthPlace);
+        applyIfEmpty(consumer::getAddress, consumer::setAddress, r.address);
+        applyIfEmpty(consumer::getRegistrationDate, consumer::setRegistrationDate, r.registrationDateStr);
+        applyIfEmpty(consumer::getBirthDate, consumer::setBirthDate, r.birthDateStr);
+
+        // Fill alternate MSISDNs if present
+        applyIfEmpty(consumer::getAlternateMsisdn1, consumer::setAlternateMsisdn1, r.alt1);
+        applyIfEmpty(consumer::getAlternateMsisdn2, consumer::setAlternateMsisdn2, r.alt2);
+
+        // Bootstrap new consumer
+        if (consumer.getId() == null) {
+            consumer.setCreatedOn(nowTs.toString());
+            ServiceProvider spRef = new ServiceProvider();
+            spRef.setId(spId);
+            consumer.setServiceProvider(spRef);
+            System.out.println("Bootstrapping new consumer for serviceProvider=" + spId + " createdOn=" + nowTs);
+        }
+    }
+
+
+
+
+
+
+
+    /** Utility: update only if current value is empty. */
+
+    private void applyIfEmpty(Supplier<String> getter, java.util.function.Consumer<String> setter, String newValue) {
+        if ((getter.get() == null || getter.get().trim().isEmpty())
+                && newValue != null && !newValue.trim().isEmpty()) {
+            setter.accept(newValue);
+        }
+    }
+
+
+    /** Utility: mark consumer consistent/inconsistent based on MSISDN duplicates. */
+    private void updateConsistencyFlag(Consumer consumer) {
+        if (consumer.getMsisdn() == null) {
+            consumer.setIsConsistent(true); // no MSISDN → default to consistent
+            return;
+        }
+        List<Consumer> sameMsisdn = consumerRepository.findByMsisdn(consumer.getMsisdn());
+        consumer.setIsConsistent(sameMsisdn.size() <= 1);
+    }
+
+
+
     private int executeBatch(List<RowData> rows) {
         jdbcTemplate.batchUpdate(UPSERT_SQL, new BatchPreparedStatementSetter() {
             @Override public void setValues(PreparedStatement ps, int i) throws SQLException {
@@ -1287,6 +1312,7 @@ public class FileProcessingService {
         r.registrationDateStr = idx(f, 19);;
         r.createdOnTs         =  idx(f, 19);
         r.serviceProviderId   = spId;
+        r.airtelTransactionId=  idx(f, 0);
         System.out.println("registrationDateStr is "+r.registrationDateStr);
         return r;
     }
@@ -1344,22 +1370,24 @@ public class FileProcessingService {
 
     public static final class RowData {
         public String msisdn;
-        String registrationDateStr;
+        public String registrationDateStr;
         public String firstName;
-        String middleName;
+        public String middleName;
         public String lastName;
-        String gender;
-        String birthDateStr;
-        String birthPlace;
-        String address;
-        String alt1;
-        String alt2;
+        public String gender;
+        public String birthDateStr;
+        public String birthPlace;
+        public String address;
+        public String alt1;
+        public String alt2;
         public String idType;
         public String idNumber;
-        String createdOnTs;
-        Long serviceProviderId;
-        String vodacomTransactionId;
+        public String createdOnTs;
+        public Long serviceProviderId;
 
+        // transaction IDs (provider-specific)
+        public String vodacomTransactionId;
+        public String airtelTransactionId;
 
 
 
