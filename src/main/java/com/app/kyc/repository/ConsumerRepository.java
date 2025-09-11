@@ -189,7 +189,7 @@ public interface ConsumerRepository
     @Query(value="select count(distinct(concat(c.identification_type,c.identification_number))) sum from consumers c where c.service_provider_id in :ids and c.registration_date between :createdOnStart and :createdOnEnd and is_consistent = :isConsistent and c.consumer_status = :consumerStatus",nativeQuery = true)
     long countConsumersByServiceProvider_IdInAndRegistrationDateBetweenAndIsConsistentAndConsumerStatus(Collection<Long> ids, Date createdOnStart, Date createdOnEnd, Boolean isConsistent, int consumerStatus);
 
-    @Query(value="select count(concat(c.identification_type,c.identification_number)) sum from consumers c where c.service_provider_id in :ids and c.created_on between :createdOnStart and :createdOnEnd and is_consistent = :isConsistent",nativeQuery = true)
+    @Query(value="select count(concat(c.id)) sum from consumers c where c.service_provider_id in :ids and c.created_on between :createdOnStart and :createdOnEnd and is_consistent = :isConsistent",nativeQuery = true)
     long countConsumersByServiceProvider_IdInAndCreatedonDateBetweenAndIsConsistent(Collection<Long> ids, Date createdOnStart, Date createdOnEnd, Boolean isConsistent);
     
     @Query(value="select count(*) sum from consumers c where c.service_provider_id in :ids and c.registration_date between :createdOnStart and :createdOnEnd and c.consumer_status = :consumerStatus",nativeQuery = true)
