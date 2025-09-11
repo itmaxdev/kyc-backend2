@@ -14,12 +14,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.task.TaskExecutor;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.lang.Nullable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.opencsv.CSVReader;
@@ -597,9 +599,9 @@ public class FileProcessingService {
                 r.idType             = clip(r.idType, 45);
                 r.idNumber           = clip(r.idNumber, 45);
                 r.registrationDateStr= clip(r.registrationDateStr, 50);
-                r.vodacomTransactionId = clip(r.vodacomTransactionId,200);
+                r.airtelTransactionId= clip(r.airtelTransactionId, 200);
 
-                // 🔹 Deduplication-aware match (same as Vodacom)
+                // 🔹 Deduplication-aware match
                 Consumer consumer = findOrMergeConsumer(r, duplicatesToSoftDelete);
 
                 // 🔹 Merge fields
@@ -610,30 +612,55 @@ public class FileProcessingService {
 
                 toSave.add(consumer);
 
-                if (toSave.size() >= BATCH_SIZE) {
-                    if (!duplicatesToSoftDelete.isEmpty()) {
-                        toSave.addAll(duplicatesToSoftDelete);
-                        duplicatesToSoftDelete.clear();
-                    }
-                    consumerRepository.saveAll(toSave);
-                    total += toSave.size();
-                    toSave.clear();
+                if (toSave.size() >= 50) { // smaller batch
+                    total += flushBatch(toSave, duplicatesToSoftDelete);
                 }
             }
 
             if (!toSave.isEmpty()) {
-                if (!duplicatesToSoftDelete.isEmpty()) {
-                    toSave.addAll(duplicatesToSoftDelete);
-                    duplicatesToSoftDelete.clear();
-                }
-                consumerRepository.saveAll(toSave);
-                total += toSave.size();
+                total += flushBatch(toSave, duplicatesToSoftDelete);
             }
         }
 
         return total;
     }
 
+
+    private int flushBatch(List<Consumer> toSave, List<Consumer> duplicatesToSoftDelete) throws InterruptedException {
+        if (!duplicatesToSoftDelete.isEmpty()) {
+            // Do soft deletes in separate transaction
+            for (Consumer dup : duplicatesToSoftDelete) {
+                softDeleteConsumer(dup);
+            }
+            duplicatesToSoftDelete.clear();
+        }
+
+        if (toSave.isEmpty()) return 0;
+
+        int retries = 3;
+        while (true) {
+            try {
+                consumerRepository.saveAll(toSave);
+                int size = toSave.size();
+                toSave.clear();
+                return size;
+            } catch (PessimisticLockingFailureException e) {
+                if (--retries > 0) {
+                    log.warn("Lock wait timeout on batch save, retrying… attempts left={}", retries);
+                    Thread.sleep(500L);
+                } else {
+                    log.error("Batch save failed permanently after retries", e);
+                    throw e;
+                }
+            }
+        }
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void softDeleteConsumer(Consumer dup) {
+        dup.setConsumerStatus(0);
+        consumerRepository.save(dup);
+    }
 
 
     @Transactional(rollbackFor = Exception.class)
