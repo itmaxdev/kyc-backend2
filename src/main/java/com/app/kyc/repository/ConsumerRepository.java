@@ -43,6 +43,8 @@ public interface ConsumerRepository
                                                   @Param("type") String type,
                                                   @Param("number") String number);
 
+    Optional<Consumer> findByVodacomTransactionId(String vodacomTransactionId);
+
     @Query("select count(c) from Consumer c")
     long countAllUnsafe(); // optional
 

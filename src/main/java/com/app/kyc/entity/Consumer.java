@@ -46,6 +46,10 @@ public class Consumer {
     private String subscriberType;
     private Boolean isConsistent;
     private int consumerStatus;
+    @Column(name = "vodacom_transaction_id", unique = true, nullable = true, length = 200)
+    private String vodacomTransactionId;
+
+
 
 
     @OneToMany(cascade = {CascadeType.ALL}, mappedBy = "consumer")

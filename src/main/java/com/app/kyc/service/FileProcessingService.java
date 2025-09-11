@@ -551,8 +551,24 @@ public class FileProcessingService {
 
 
 
-    private Consumer findOrMergeConsumer(FileProcessingService.RowData r, List<Consumer> duplicatesToSoftDelete) {
-        // 1. Exact match: ID + ID Type + MSISDN
+    private Consumer findOrMergeConsumer(RowData r, List<Consumer> duplicatesToSoftDelete) {
+        // 1. Strongest match: Vodacom transaction ID (if provided)
+        if (notEmpty(r.vodacomTransactionId)) {
+            Optional<Consumer> existing = consumerRepository.findByVodacomTransactionId(r.vodacomTransactionId.trim());
+            if (existing.isPresent()) {
+                Consumer consumer = existing.get();
+                log.info("✅ Found existing consumer by vodacomTransactionId={} → id={}",
+                        r.vodacomTransactionId, consumer.getId());
+                return consumer; // 🔄 Always update existing instead of insert
+            } else {
+                log.info("🆕 New consumer for vodacomTransactionId={}", r.vodacomTransactionId);
+                Consumer consumer = new Consumer();
+                consumer.setVodacomTransactionId(r.vodacomTransactionId.trim());
+                return consumer;
+            }
+        }
+
+        // 2. Exact match: ID + ID Type + MSISDN (for non-Vodacom / Airtel cases)
         if (notEmpty(r.idNumber) && notEmpty(r.idType) && notEmpty(r.msisdn)) {
             List<Consumer> exactMatches = consumerRepository.findAll((root, query, cb) -> cb.and(
                     cb.equal(root.get("identificationNumber"), r.idNumber),
@@ -564,7 +580,7 @@ public class FileProcessingService {
             }
         }
 
-        // 2. Upgrade case: same person (name + DOB + MSISDN), even if ID changed
+        // 3. Upgrade case: same person (Name + DOB + MSISDN), even if ID changed
         if (notEmpty(r.firstName) && notEmpty(r.lastName) && notEmpty(r.birthDateStr) && notEmpty(r.msisdn)) {
             List<Consumer> personMatches = consumerRepository.findAll((root, query, cb) -> cb.and(
                     cb.equal(root.get("firstName"), r.firstName),
@@ -582,44 +598,15 @@ public class FileProcessingService {
 
                     for (int i = 1; i < personMatches.size(); i++) {
                         Consumer dup = personMatches.get(i);
-
-                        // Enrich primary with missing fields from duplicate
-                        applyIfEmpty(primary::getAddress, primary::setAddress, dup.getAddress());
-                        applyIfEmpty(primary::getBirthPlace, primary::setBirthPlace, dup.getBirthPlace());
-                        applyIfEmpty(primary::getGender, primary::setGender, dup.getGender());
-                        applyIfEmpty(primary::getNationality, primary::setNationality, dup.getNationality());
-                        applyIfEmpty(primary::getRegistrationDate, primary::setRegistrationDate, dup.getRegistrationDate());
-
-                        // Merge MSISDNs
-                        if (dup.getMsisdn() != null && !dup.getMsisdn().equals(primary.getMsisdn())) {
-                            if (primary.getAlternateMsisdn1() == null) {
-                                primary.setAlternateMsisdn1(dup.getMsisdn());
-                            } else if (primary.getAlternateMsisdn2() == null
-                                    && !primary.getAlternateMsisdn1().equals(dup.getMsisdn())) {
-                                primary.setAlternateMsisdn2(dup.getMsisdn());
-                            }
-                        }
-
-                        // Soft delete duplicate
-                        dup.setConsumerStatus(0);
-                        duplicatesToSoftDelete.add(dup);
-                        log.info("🗑️ Soft-deleted consumer id={} (merged into id={})", dup.getId(), primary.getId());
+                        mergeDuplicates(primary, dup, duplicatesToSoftDelete);
                     }
                 }
-
-                // 🔄 Overwrite ID fields (upgrade with new ID)
-                log.info("🔄 Updating consumer id={} with new ID {}/{} (was {}/{})",
-                        primary.getId(), r.idNumber, r.idType,
-                        primary.getIdentificationNumber(), primary.getIdentificationType());
-
-                primary.setIdentificationNumber(r.idNumber);
-                primary.setIdentificationType(r.idType);
 
                 return primary;
             }
         }
 
-        // 3. No match → new consumer
+        // 4. No match → new consumer (Airtel or others with no trxId)
         return new Consumer();
     }
 
@@ -629,28 +616,77 @@ public class FileProcessingService {
 
 
 
+    private void mergeDuplicates(Consumer primary, Consumer dup, List<Consumer> duplicatesToSoftDelete) {
+        // Merge missing fields
+        applyIfEmpty(primary::getFirstName, primary::setFirstName, dup.getFirstName());
+        applyIfEmpty(primary::getLastName, primary::setLastName, dup.getLastName());
+        applyIfEmpty(primary::getAddress, primary::setAddress, dup.getAddress());
+        applyIfEmpty(primary::getBirthPlace, primary::setBirthPlace, dup.getBirthPlace());
+        applyIfEmpty(primary::getGender, primary::setGender, dup.getGender());
+        applyIfEmpty(primary::getNationality, primary::setNationality, dup.getNationality());
+        applyIfEmpty(primary::getRegistrationDate, primary::setRegistrationDate, dup.getRegistrationDate());
+
+        // Merge MSISDNs
+        if (dup.getMsisdn() != null && !dup.getMsisdn().equals(primary.getMsisdn())) {
+            if (primary.getAlternateMsisdn1() == null) {
+                primary.setAlternateMsisdn1(dup.getMsisdn());
+            } else if (primary.getAlternateMsisdn2() == null &&
+                    !primary.getAlternateMsisdn1().equals(dup.getMsisdn())) {
+                primary.setAlternateMsisdn2(dup.getMsisdn());
+            }
+        }
+
+        // Soft delete duplicate
+        dup.setConsumerStatus(0);
+        duplicatesToSoftDelete.add(dup);
+
+        log.info("Soft-deleted duplicate consumer id={} merged into id={}", dup.getId(), primary.getId());
+    }
+
 
 
 
 
     private void mergeConsumerFields(Consumer consumer, FileProcessingService.RowData r, Timestamp nowTs, Long spId) {
         // 🔹 Handle MSISDN updates carefully
-        if (notEmpty(r.msisdn)) {
-            if (consumer.getMsisdn() != null && !consumer.getMsisdn().equals(r.msisdn)) {
-                // Preserve old MSISDN if different
-                if (consumer.getAlternateMsisdn1() == null) {
-                    consumer.setAlternateMsisdn1(consumer.getMsisdn());
-                } else if (consumer.getAlternateMsisdn2() == null
-                        && !consumer.getAlternateMsisdn1().equals(r.msisdn)) {
-                    consumer.setAlternateMsisdn2(consumer.getMsisdn());
+        // ✅ Handle MSISDN updates using Vodacom transaction id as anchor
+        // ✅ Handle MSISDN updates anchored on vodacomTransactionId
+        if (notEmpty(r.vodacomTransactionId)) {
+            // Consumer already tied to trxId → update MSISDN safely
+            if (notEmpty(r.msisdn)) {
+                if (consumer.getMsisdn() == null) {
+                    log.info("📱 Setting MSISDN for consumer id={} (trxId={}) → {}",
+                            consumer.getId(), r.vodacomTransactionId, r.msisdn);
+                    consumer.setMsisdn(r.msisdn);
+                } else if (!consumer.getMsisdn().equals(r.msisdn)) {
+                    // Preserve old value
+                    if (consumer.getAlternateMsisdn1() == null) {
+                        consumer.setAlternateMsisdn1(consumer.getMsisdn());
+                    } else if (consumer.getAlternateMsisdn2() == null &&
+                            !consumer.getAlternateMsisdn1().equals(r.msisdn)) {
+                        consumer.setAlternateMsisdn2(consumer.getMsisdn());
+                    }
+
+                    log.info("📱 Updating MSISDN for consumer id={} (trxId={}) → {}",
+                            consumer.getId(), r.vodacomTransactionId, r.msisdn);
+                    consumer.setMsisdn(r.msisdn);
                 }
-                log.info("📱 Updating MSISDN for consumer id={} → {}", consumer.getId(), r.msisdn);
-                consumer.setMsisdn(r.msisdn); // Replace with new
-            } else if (consumer.getMsisdn() == null) {
-                log.info("📱 Setting MSISDN for consumer id={} → {}", consumer.getId(), r.msisdn);
-                consumer.setMsisdn(r.msisdn);
+            }
+        } else {
+            // 🔹 Fallback for Airtel or older data (no trxId)
+            if (notEmpty(r.msisdn)) {
+                if (consumer.getMsisdn() == null) {
+                    consumer.setMsisdn(r.msisdn);
+                    log.info("📱 Set MSISDN (no trxId) for consumer id={} → {}",
+                            consumer.getId(), r.msisdn);
+                } else if (!consumer.getMsisdn().equals(r.msisdn)) {
+                    log.debug("⚠️ Skipping MSISDN change without trxId ({} → {}) for consumer id={}",
+                            consumer.getMsisdn(), r.msisdn, consumer.getId());
+                }
             }
         }
+
+
 
         // 🔹 Always overwrite ID fields (upgrade path)
         if (notEmpty(r.idNumber)) {
@@ -673,6 +709,9 @@ public class FileProcessingService {
             consumer.setIdentificationType(r.idType);
         }
 
+        if (notEmpty(r.vodacomTransactionId)) {
+            consumer.setVodacomTransactionId(r.vodacomTransactionId);
+        }
         // 🔹 Apply other fields only if empty (don’t overwrite existing good data)
         applyIfEmpty(consumer::getFirstName, consumer::setFirstName, r.firstName);
         applyIfEmpty(consumer::getLastName, consumer::setLastName, r.lastName);
@@ -682,6 +721,7 @@ public class FileProcessingService {
         applyIfEmpty(consumer::getAddress, consumer::setAddress, r.address);
         applyIfEmpty(consumer::getRegistrationDate, consumer::setRegistrationDate, r.registrationDateStr);
         applyIfEmpty(consumer::getBirthDate, consumer::setBirthDate, r.birthDateStr);
+
 
         // 🔹 Fill alternate MSISDNs if present
         applyIfEmpty(consumer::getAlternateMsisdn1, consumer::setAlternateMsisdn1, r.alt1);
@@ -1220,6 +1260,7 @@ public class FileProcessingService {
         r.alt2                = idx(f,14);
         r.idType              = idx(f,15);
         r.idNumber            = idx(f,16);
+        r.vodacomTransactionId= idx(f,17);
         r.createdOnTs         =  idx(f, 1);;
         r.serviceProviderId   = spId;
         return r;
@@ -1317,9 +1358,7 @@ public class FileProcessingService {
         public String idNumber;
         String createdOnTs;
         Long serviceProviderId;
-
-
-
+        String vodacomTransactionId;
 
 
 
