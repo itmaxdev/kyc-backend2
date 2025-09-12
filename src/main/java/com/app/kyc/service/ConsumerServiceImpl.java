@@ -2389,14 +2389,14 @@ System.out.println("Get all flagged ");
 
                 List<Consumer> relatedConsumers = consumerRepository.findAllById(consumerIds);
                 boolean anyConsistent = relatedConsumers.stream()
-                        .anyMatch(c -> Boolean.TRUE.equals(c.getIsConsistent()));
-                boolean allInconsistent = relatedConsumers.stream()
-                        .allMatch(c -> !Boolean.TRUE.equals(c.getIsConsistent()));
+                        .anyMatch(c -> Boolean.FALSE.equals(c.getIsConsistent()));
+                boolean allConsistent = relatedConsumers.stream()
+                        .allMatch(c -> Boolean.TRUE.equals(c.getIsConsistent()));
 
-                if (anyConsistent) {
-                    anomaly.setStatus(AnomalyStatus.RESOLVED_PARTIALLY); // code 5
-                } else if (allInconsistent) {
+                if (allConsistent) {
                     anomaly.setStatus(AnomalyStatus.RESOLVED_SUCCESSFULLY); // code 6
+                } else if (anyConsistent) {
+                    anomaly.setStatus(AnomalyStatus.RESOLVED_PARTIALLY); // code 5
                 }
 
                 anomalyRepository.save(anomaly);
@@ -2732,17 +2732,11 @@ System.out.println("Get all flagged ");
     }
 
 
-    private Consumer resolvedAndDeleteExceedingConsumers(Consumer consumer, Boolean flag,User user) {
+    private Consumer resolvedAndDeleteExceedingConsumers(Consumer consumer, Boolean flag, User user) {
         // Exceeding records
         AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Exceeding Threshold");
-/*
-        List<Consumer> duplicateConsumers = new ArrayList<Consumer>();
-        //previously inserted consumer
-        List<Consumer> duplicateConsumers1 = consumerRepository.findByIdentificationTypeAndIdentificationNumberAndServiceProviderAndConsumerStatus(consumer.getIdentificationType(), consumer.getIdentificationNumber(), consumer.getServiceProvider(), 0);
-        duplicateConsumers.addAll(duplicateConsumers1);
-        List<Consumer> duplicateConsumers2 = consumerRepository.findByIdentificationTypeAndIdentificationNumberAndServiceProviderAndConsumerStatus(consumer.getIdentificationType(), consumer.getIdentificationNumber(), consumer.getServiceProvider(), 0);
-        duplicateConsumers.addAll(duplicateConsumers2);*/
 
+        // Fetch duplicate consumers with status 0 or 1
         List<Consumer> duplicateConsumers = consumerRepository
                 .findByIdentificationTypeAndIdentificationNumberAndServiceProviderAndConsumerStatusIn(
                         consumer.getIdentificationType(),
@@ -2751,26 +2745,47 @@ System.out.println("Get all flagged ");
                         Arrays.asList(0, 1)
                 );
 
-        List<Long> consumerIds = duplicateConsumers.stream().map(Consumer::getId).collect(Collectors.toList());
+        List<Long> consumerIds = duplicateConsumers.stream()
+                .map(Consumer::getId)
+                .collect(Collectors.toList());
 
         Anomaly tempAnomaly = new Anomaly();
-        //previously tagged anomalies
-        List<Long> consumerAnomalies = consumerAnomalyRepository.findAnomaliesIdByConsumerAndAnomalyTypeId(consumerIds, anomalyType.getId());
 
-        if (consumerAnomalies.size() > 0) {
-            //get anomaly for duplicate that is tagged previously
+        // previously tagged anomalies
+        List<Long> consumerAnomalies = consumerAnomalyRepository.findAnomaliesIdByConsumerAndAnomalyTypeId(
+                consumerIds, anomalyType.getId());
+
+        if (!consumerAnomalies.isEmpty()) {
             Anomaly anomaly = anomalyRepository.findByIdAndAnomalyType_Id(consumerAnomalies, anomalyType.getId());
-            if (!Objects.isNull(anomaly)) {
-                //if status is resolution submitted
+
+            if (anomaly != null) {
+                // ✅ If status is Resolution Submitted
                 if (anomaly.getStatus().getCode() == 4) {
-                    //resolved old anomalies
-                    anomaly.setStatus(AnomalyStatus.RESOLVED_SUCCESSFULLY);
-                    anomalyRepository.save(anomaly);
-                    AnomalyTracking anomalyTracking = new AnomalyTracking(anomaly, new Date(), AnomalyStatus.RESOLVED_SUCCESSFULLY, "", user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn());
-                    anomalyTrackingRepository.save(anomalyTracking);
+                    // Check consistency
+                    boolean hasConsistent = duplicateConsumers.stream()
+                            .anyMatch(c -> Boolean.TRUE.equals(c.getIsConsistent()));
+
+                    if (hasConsistent) {
+                        anomaly.setStatus(AnomalyStatus.RESOLVED_PARTIALLY); // code 5
+                        anomalyRepository.save(anomaly);
+                        AnomalyTracking anomalyTracking = new AnomalyTracking(
+                                anomaly, new Date(), AnomalyStatus.RESOLVED_PARTIALLY,
+                                "", user.getFirstName() + " " + user.getLastName(), anomaly.getUpdatedOn());
+                        anomalyTrackingRepository.save(anomalyTracking);
+                    } else {
+                        anomaly.setStatus(AnomalyStatus.RESOLVED_SUCCESSFULLY); // code 6
+                        anomalyRepository.save(anomaly);
+                        AnomalyTracking anomalyTracking = new AnomalyTracking(
+                                anomaly, new Date(), AnomalyStatus.RESOLVED_SUCCESSFULLY,
+                                "", user.getFirstName() + " " + user.getLastName(), anomaly.getUpdatedOn());
+                        anomalyTrackingRepository.save(anomalyTracking);
+                    }
                 }
+
+                // if anomaly still open (0,1,2,3)
                 if (anomaly.getStatus().getCode() == 0 || anomaly.getStatus().getCode() == 1 ||
-                anomaly.getStatus().getCode() == 2 || anomaly.getStatus().getCode() == 3) {
+                        anomaly.getStatus().getCode() == 2 || anomaly.getStatus().getCode() == 3) {
+
                     ConsumerAnomaly tempConsumerAnomaly = new ConsumerAnomaly();
                     tempAnomaly.setId(anomaly.getId());
                     tempAnomaly.setNote(anomaly.getNote());
@@ -2781,8 +2796,9 @@ System.out.println("Get all flagged ");
                     tempAnomaly.addConsumer(consumer);
                     tempAnomaly.setAnomalyType(anomalyType);
                     tempAnomaly.setUpdatedOn(anomaly.getUpdatedOn());
+
                     tempConsumerAnomaly.setAnomaly(tempAnomaly);
-                    consumer.setIsConsistent(false);
+                    consumer.setIsConsistent(false); // marking this record inconsistent
                     consumer = consumerRepository.save(consumer);
 
                     tempConsumerAnomaly.setConsumer(consumer);
@@ -2792,16 +2808,16 @@ System.out.println("Get all flagged ");
                 }
             }
         }
-        // soft deleted old consumers
-        if (flag) {
-            if (consumerIds.size() > 2) {
-                for (int i = 0; i < consumerIds.size(); i++) {
-                    if (!Objects.equals(consumerIds.get(i), consumer.getId())) {
-                        consumerRepository.updatePreviousConsumersStatus(1, consumerIds.get(i));
-                    }
+
+        // ✅ Soft delete old consumers if more than 2 exist
+        if (flag && consumerIds.size() > 2) {
+            for (Long oldConsumerId : consumerIds) {
+                if (!Objects.equals(oldConsumerId, consumer.getId())) {
+                    consumerRepository.updatePreviousConsumersStatus(1, oldConsumerId);
                 }
             }
         }
+
         return consumer;
     }
 
