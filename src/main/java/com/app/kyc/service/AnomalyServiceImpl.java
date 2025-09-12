@@ -340,49 +340,52 @@ public class AnomalyServiceImpl implements AnomalyService
       } else {
          anomlyDto = new AnomlyDto(anomaly);
       }
-      //anomlyDto.setUpdateBy("System");
 
-      // Fetch anomaly tracking
-//      List<AnomalyTrackingDto> anomalyTracking = anomalyTrackingRepository.findAllByAnomalyIdOrderByCreatedOnAsc(id)
-//              .stream()
-//              .map(c -> new AnomalyTrackingDto(c.getId(), c.getCreatedOn(), c.getStatus(),
-//                      c.getNote(), c.getAnomaly(), c.getUpdateBy(), c.getUpdateOn()))
-//              .collect(Collectors.toList());
-      
-		List<AnomalyTrackingDto> anomalyTracking = anomalyTrackingRepository.findAllByAnomalyIdOrderByCreatedOnDesc(id)
-				.stream().map(c -> {
-					String finalNote;
+      // ✅ Fetch anomaly tracking (deduplicate by status)
+      List<AnomalyTrackingDto> anomalyTracking = anomalyTrackingRepository.findAllByAnomalyIdOrderByCreatedOnDesc(id)
+              .stream()
+              .map(c -> {
+                 String finalNote;
+                 if (c.getNote() != null && !c.getNote().isBlank()) {
+                    finalNote = c.getNote();
+                 } else if (AnomalyStatus.REPORTED == c.getStatus()) {
+                    finalNote = "Anomaly flagged by " + c.getUpdateBy();
+                 } else if (AnomalyStatus.RESOLVED_PARTIALLY == c.getStatus()) {
+                    finalNote = "Anomaly Resolved Partially by " + c.getUpdateBy();
+                 } else if (AnomalyStatus.RESOLVED_SUCCESSFULLY == c.getStatus()) {
+                    finalNote = "Anomaly Resolved by " + c.getUpdateBy();
+                 } else {
+                    finalNote = "";
+                 }
 
-					if (c.getNote() != null && !c.getNote().isBlank()) {
-						// case 1: note is already present → keep as is
-						finalNote = c.getNote();
-					} else {
-						if (AnomalyStatus.REPORTED == c.getStatus()) {
-							// case 1: anomaly Reported but note is blank
-							finalNote = "Anomaly flagged by " + c.getUpdateBy();
-						}else if (AnomalyStatus.RESOLVED_PARTIALLY == c.getStatus()) {
-							// case 2: anomaly resolved Partially but note is blank
-							finalNote = "Anomaly Resolved Partially by " + c.getUpdateBy();
-						}else if (AnomalyStatus.RESOLVED_SUCCESSFULLY == c.getStatus()) {
-							// case 3: anomaly resolved but note is blank
-							finalNote = "Anomaly Resolved by " + c.getUpdateBy();
-						} else {
-							// case 4: fallback
-							finalNote = "";
-						}
-					}
+                 return new AnomalyTrackingDto(
+                         c.getId(),
+                         c.getCreatedOn(),
+                         c.getStatus(),
+                         finalNote,
+                         c.getAnomaly(),
+                         c.getUpdateBy(),
+                         c.getUpdateOn()
+                 );
+              })
+              // 🔹 Deduplicate: keep only one entry per status (latest, because of DESC order)
+              .collect(Collectors.collectingAndThen(
+                      Collectors.toMap(
+                              AnomalyTrackingDto::getStatus,
+                              dto -> dto,
+                              (existing, replacement) -> existing, // keep first occurrence
+                              LinkedHashMap::new
+                      ),
+                      m -> new ArrayList<>(m.values())
+              ));
 
-					return new AnomalyTrackingDto(c.getId(), c.getCreatedOn(), c.getStatus(), finalNote, c.getAnomaly(),
-							c.getUpdateBy(), c.getUpdateOn());
-				}).collect(Collectors.toList());
-
-      // Fetch consumers linked to anomaly
+      // ✅ Fetch consumers linked to anomaly
       List<ConsumerDto> consumerDtos = consumerAnomalyRepository.findByAnomaly_Id(id)
               .stream()
               .map(ca -> {
                  ConsumerDto consumerDto = new ConsumerDto(ca.getConsumer());
                  if (Objects.nonNull(ca.getNotes())) {
-                    consumerDto.setNotes(ca.getNotes()); // Set notes directly
+                    consumerDto.setNotes(ca.getNotes());
                  }
                  return consumerDto;
               })
@@ -390,12 +393,12 @@ public class AnomalyServiceImpl implements AnomalyService
 
       anomlyDto.setConsumers(consumerDtos);
 
-      // Enrich tracking data with consumer notes (if anomaly type = 1)
+      // ✅ Enrich tracking data with consumer notes (if anomaly type = 1)
       anomalyTracking.forEach(tracking -> {
          if (tracking.getAnomlyDto().getAnomalyType().getId() == 1) {
             anomlyDto.getConsumers().forEach(consumer -> {
                List<ConsumerAnomaly> temp = consumerAnomalyRepository
-                       .findByAnomaly_IdAndConsumer_Id(id, consumer.getId()); // use anomaly id, not tracking id
+                       .findByAnomaly_IdAndConsumer_Id(id, consumer.getId());
                temp.forEach(t -> {
                   if (Objects.nonNull(t.getNotes())) {
                      consumer.setNotes(t.getNotes());
@@ -407,6 +410,7 @@ public class AnomalyServiceImpl implements AnomalyService
 
       return new AnomalyDetailsResponseDTO(anomlyDto, anomalyTracking);
    }
+
 
 
    @Override
