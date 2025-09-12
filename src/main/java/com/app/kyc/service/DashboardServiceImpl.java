@@ -69,7 +69,16 @@ public class DashboardServiceImpl implements DashboardService {
             = new ArrayList<>(List.of(
             AnomalyStatus.RESOLVED_SUCCESSFULLY
     ));
-
+    
+	static final List<AnomalyStatus> DEFAULT_TOTAL_ANOMALY = new ArrayList<>(Arrays.asList(
+            AnomalyStatus.RESOLVED_PARTIALLY,
+            AnomalyStatus.RESOLVED_SUCCESSFULLY
+    ));
+	
+	static final List<AnomalyStatus> DEFAULT_ANOMALY_PARTIALLY_RESOLVED_STATUS
+	    = new ArrayList<>(List.of(
+	    AnomalyStatus.RESOLVED_PARTIALLY
+	));
 
     //TODO:: Handle Service Types in filters
 
@@ -101,7 +110,9 @@ public class DashboardServiceImpl implements DashboardService {
                 numAnomaliesReported,
                 numAnomaliesInProgress,
                 numAnomaliesWithdrawn,
-                numAnomaliesResolved;
+                numAnomaliesResolved,
+                numAnomaliesFullyResolved,
+        		numAnomaliesPartiallyResolved;
 
 
 
@@ -197,9 +208,14 @@ public class DashboardServiceImpl implements DashboardService {
 
         numAnomaliesWithdrawn = anomalyService.getAnomaliesReportedByServiceProvidersAndDates(serviceProviderIds, DEFAULT_ANOMALY_WITHDRAWN_LIST, startDate, endDate);
 
+        //count Total anomalies based on service providers for selected dates
+        numAnomaliesResolved = anomalyService.getAnomaliesReportedByServiceProvidersAndDates(serviceProviderIds, DEFAULT_TOTAL_ANOMALY, startDate, endDate);
+        
         //count resolved anomalies based on service providers for selected dates
-        numAnomaliesResolved =
+        numAnomaliesFullyResolved =
                 anomalyService.getAnomaliesReportedByServiceProvidersAndDates(serviceProviderIds, DEFAULT_ANOMALY_RESOLVED_STATUS, startDate, endDate);
+        
+        numAnomaliesPartiallyResolved = anomalyService.getAnomaliesReportedByServiceProvidersAndDates(serviceProviderIds, DEFAULT_ANOMALY_PARTIALLY_RESOLVED_STATUS, startDate, endDate);
 
 
         //get consumers count grouped by service providers for selected dates
@@ -311,6 +327,8 @@ public class DashboardServiceImpl implements DashboardService {
         dashboardResponseDTO.setNumSubscriptions(numSubscriptions);
         dashboardResponseDTO.setNumAnomaliesReported(numAnomaliesReported);
         dashboardResponseDTO.setNumAnomaliesResolved(numAnomaliesResolved);
+        dashboardResponseDTO.setNumAnomaliesFullyResolved(numAnomaliesFullyResolved);
+        dashboardResponseDTO.setNumAnomaliesPartiallyResolved(numAnomaliesPartiallyResolved);
 
        // dashboardResponseDTO.setNumAverageResolutionTime(numAverageResolutionTime);
         dashboardResponseDTO.setSubscriptions(subscriptions);

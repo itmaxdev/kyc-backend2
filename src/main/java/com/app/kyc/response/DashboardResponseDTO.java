@@ -25,6 +25,8 @@ public class DashboardResponseDTO {
    private Integer numAnomaliesReported;
    private Integer numAnomaliesInProgress;
    private Integer numAnomaliesResolved;
+   private Integer numAnomaliesFullyResolved;
+   private Integer numAnomaliesPartiallyResolved;
    private Integer numAnomaliesWithdrawn;
 
    private Double numAverageResolutionTime;
