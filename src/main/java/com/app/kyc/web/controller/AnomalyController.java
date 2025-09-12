@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.app.kyc.entity.Anomaly;
+import com.app.kyc.model.AnomalyStatus;
 import com.app.kyc.request.UpdateAnomalyStatusRequest;
 import com.app.kyc.service.AnomalyService;
 import com.app.kyc.service.UserService;
@@ -254,4 +255,29 @@ public class AnomalyController
       }
    }
 
+   @GetMapping("/getAnomalyStatus")
+   public ResponseEntity<?> getAllAnomalyStatus(HttpServletRequest request) throws SQLException
+   {
+      //log.info("getAllAnomalyStatus");
+      try
+      {
+         List<String> roles = new ArrayList<String>();
+         roles.add("Compliance Admin");
+         roles.add("SP Admin");
+         roles.add("KYC Admin");
+         roles.add("SP User");
+         if(securityHelper.hasRole(request, roles))
+         {
+        	 List<Map<String, Object>> statusList = AnomalyStatus.asList();
+            return ResponseEntity.ok(statusList);
+         }
+         else
+            return ResponseEntity.ok("Not authorized");
+      }
+      catch(Exception e)
+      {
+         //log.info(e.getMessage());
+         return ResponseEntity.ok(e.getMessage());
+      }
+   }
 }

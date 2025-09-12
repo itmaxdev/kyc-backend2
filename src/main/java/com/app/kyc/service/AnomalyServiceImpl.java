@@ -360,8 +360,11 @@ public class AnomalyServiceImpl implements AnomalyService
 						if (AnomalyStatus.REPORTED == c.getStatus()) {
 							// case 1: anomaly Reported but note is blank
 							finalNote = "Anomaly flagged by " + c.getUpdateBy();
-						} else if (AnomalyStatus.RESOLVED_SUCCESSFULLY == c.getStatus()) {
-							// case 2: anomaly resolved but note is blank
+						}else if (AnomalyStatus.RESOLVED_PARTIALLY == c.getStatus()) {
+							// case 2: anomaly resolved Partially but note is blank
+							finalNote = "Anomaly Resolved Partially by " + c.getUpdateBy();
+						}else if (AnomalyStatus.RESOLVED_SUCCESSFULLY == c.getStatus()) {
+							// case 3: anomaly resolved but note is blank
 							finalNote = "Anomaly Resolved by " + c.getUpdateBy();
 						} else {
 							// case 4: fallback
