@@ -3225,11 +3225,15 @@ System.out.println("Get all flagged ");
 			case RESOLUTION_SUBMITTED:
 				anomalyStatus.add(AnomalyStatus.RESOLUTION_SUBMITTED);
 				break;
+				
+			case RESOLVED_PARTIALLY:
+				anomalyStatus.add(AnomalyStatus.RESOLVED_PARTIALLY);
+				break;
 
 			default:
 				anomalyStatus.addAll(Arrays.asList(AnomalyStatus.REPORTED, AnomalyStatus.QUESTION_SUBMITTED,
 						AnomalyStatus.UNDER_INVESTIGATION, AnomalyStatus.QUESTION_ANSWERED,
-						AnomalyStatus.RESOLUTION_SUBMITTED));
+						AnomalyStatus.RESOLUTION_SUBMITTED,AnomalyStatus.RESOLVED_PARTIALLY));
 				break;
 			}
 		} 
@@ -3254,7 +3258,8 @@ System.out.println("Get all flagged ");
 						AnomalyStatus.UNDER_INVESTIGATION,
 						AnomalyStatus.QUESTION_SUBMITTED,
 						AnomalyStatus.QUESTION_ANSWERED,
-						AnomalyStatus.RESOLUTION_SUBMITTED));
+						AnomalyStatus.RESOLUTION_SUBMITTED,
+						AnomalyStatus.RESOLVED_PARTIALLY));
 				break;
 
 			case "withdrawn":
