@@ -208,7 +208,7 @@ public class AnomalyServiceImpl implements AnomalyService
 //         spUsrCheck = true;
 //
 //      }
-//      else if(updateAnomalyStatusRequest.getStatus().equals(AnomalyStatus.RESOLVED_SUCCESSFULLY)){
+//      else if(updateAnomalyStatusRequest.getStatus().equals(AnomalyStatus.RESOLVED_FULLY)){
 //         message = "The anomaly for " + consumer.getFirstName() + " "  + consumer.getLastName() + " has been marked as resolved";
 //         spUsrCheck = true;
 //      }
@@ -346,13 +346,14 @@ public class AnomalyServiceImpl implements AnomalyService
               .stream()
               .map(c -> {
                  String finalNote;
+                 System.out.println("anomalyTracking values are: "+c.getId()+ "value:"+c.getConsistentOn());
                  if (c.getNote() != null && !c.getNote().isBlank()) {
                     finalNote = c.getNote();
                  } else if (AnomalyStatus.REPORTED == c.getStatus()) {
                     finalNote = "Anomaly flagged by " + c.getUpdateBy();
                  } else if (AnomalyStatus.RESOLVED_PARTIALLY == c.getStatus()) {
                     finalNote = "Anomaly Resolved Partially by " + c.getUpdateBy();
-                 } else if (AnomalyStatus.RESOLVED_SUCCESSFULLY == c.getStatus()) {
+                 } else if (AnomalyStatus.RESOLVED_FULLY == c.getStatus()) {
                     finalNote = "Anomaly Resolved by " + c.getUpdateBy();
                  } else {
                     finalNote = "";

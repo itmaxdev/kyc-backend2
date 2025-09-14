@@ -844,7 +844,7 @@ System.out.println("Get all flagged ");
             if(pagination.getFilter().getIsResolved()){
                 System.out.println("Consumer status is "+consumerStatus);
                 consumerStatus.add(1);
-                anomalyStatus.add(AnomalyStatus.RESOLVED_SUCCESSFULLY);
+                anomalyStatus.add(AnomalyStatus.RESOLVED_FULLY);
                 Page<Anomaly> anomalyData = anomalyRepository.findAllByConsumerStatus(PaginationUtil.getPageable(params), consumerStatus, anomalyStatus, pagination.getFilter().getAnomalyType());
                 pageAnomaly = anomalyData.stream()
                         .map(a -> new AnomlyDto(a , 0)).collect(Collectors.toList());
@@ -865,7 +865,7 @@ System.out.println("Get all flagged ");
             if(pagination.getFilter().getIsResolved()){
                 System.out.println("Consumer status is two"+consumerStatus);
                 consumerStatus.add(1);
-                anomalyStatus.add(AnomalyStatus.RESOLVED_SUCCESSFULLY);
+                anomalyStatus.add(AnomalyStatus.RESOLVED_FULLY);
                 Page<Anomaly> anomalyData = anomalyRepository.findAllByConsumerStatusAndServiceProviderId(PaginationUtil.getPageable(params), consumerStatus, pagination.getFilter().getServiceProviderID(), anomalyStatus,pagination.getFilter().getAnomalyType());
 
                 pageAnomaly = anomalyData
@@ -937,7 +937,7 @@ System.out.println("Get all flagged ");
         if (noSpFilter) {
             if (isResolved) {
                 consumerStatus.add(1);
-                anomalyStatus.add(AnomalyStatus.RESOLVED_SUCCESSFULLY);
+                anomalyStatus.add(AnomalyStatus.RESOLVED_FULLY);
 
                 Page<Anomaly> anomalyData =
                         anomalyRepository.findAllByConsumerStatus(pageable, consumerStatus, anomalyStatus,pagination.getFilter().getAnomalyType());
@@ -962,7 +962,7 @@ System.out.println("Get all flagged ");
 
             if (isResolved) {
                 consumerStatus.add(1);
-                anomalyStatus.add(AnomalyStatus.RESOLVED_SUCCESSFULLY);
+                anomalyStatus.add(AnomalyStatus.RESOLVED_FULLY);
 
                 Page<Anomaly> anomalyData =
                         anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus, spId, anomalyStatus, pagination.getFilter().getAnomalyType());
@@ -1087,7 +1087,7 @@ System.out.println("Get all flagged ");
             System.out.println("Test is Resolved "+isResolved);
             if (isResolved) {
                 consumerStatus.add(1);
-                anomalyStatus.add(AnomalyStatus.RESOLVED_SUCCESSFULLY);
+                anomalyStatus.add(AnomalyStatus.RESOLVED_FULLY);
 
                 Page<Anomaly> anomalyData =
                         anomalyRepository.findAllByConsumerStatus(pageable, consumerStatus, anomalyStatus, pagination.getFilter().getAnomalyType());
@@ -1126,7 +1126,7 @@ System.out.println("Get all flagged ");
             if (isResolved) {
                 System.out.println("Test is Resolved 3"+isResolved);
                 consumerStatus.add(1);
-                anomalyStatus.add(AnomalyStatus.RESOLVED_SUCCESSFULLY);
+                anomalyStatus.add(AnomalyStatus.RESOLVED_FULLY);
 
                 Page<Anomaly> anomalyData =
                         anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus, spIds, anomalyStatus, pagination.getFilter().getAnomalyType(),resolutionStatus);
@@ -2224,8 +2224,8 @@ System.out.println("Get all flagged ");
                                     .allMatch(c -> Boolean.TRUE.equals(c.getIsConsistent()));
 
                             if (allConsistent) {
-                                System.out.println("MSISDN=" + msisdn + " → RESOLVED_SUCCESSFULLY");
-                                anomaly.setStatus(AnomalyStatus.RESOLVED_SUCCESSFULLY);
+                                System.out.println("MSISDN=" + msisdn + " → RESOLVED_FULLY");
+                                anomaly.setStatus(AnomalyStatus.RESOLVED_FULLY);
                             } else {
                                 System.out.println("MSISDN=" + msisdn + " → RESOLVED_PARTIALLY");
                                 anomaly.setStatus(AnomalyStatus.RESOLVED_PARTIALLY);
@@ -2310,10 +2310,10 @@ System.out.println("Get all flagged ");
             Anomaly anomaly = anomalyRepository.findByIdAndAnomalyType_Id(consumerAnomalies, anomalyType.getId());
             if (!Objects.isNull(anomaly)) {
                 if (anomaly.getStatus().getCode() == 4) {
-                    anomaly.setStatus(AnomalyStatus.RESOLVED_SUCCESSFULLY);
+                    anomaly.setStatus(AnomalyStatus.RESOLVED_FULLY);
                     anomalyRepository.save(anomaly);
 
-                    AnomalyTracking anomalyTracking = new AnomalyTracking(anomaly, new Date(), AnomalyStatus.RESOLVED_SUCCESSFULLY, "", user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn(),"N/A");
+                    AnomalyTracking anomalyTracking = new AnomalyTracking(anomaly, new Date(), AnomalyStatus.RESOLVED_FULLY, "", user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn(),"N/A");
                     anomalyTrackingRepository.save(anomalyTracking);
 
                     tempAnomaly.setStatus(AnomalyStatus.REPORTED);
@@ -2403,9 +2403,9 @@ System.out.println("Get all flagged ");
                 //if status is resolution submitted
                 if (anomaly.getStatus().getCode() == 4) {
                     //resolved old anomalies
-                    anomaly.setStatus(AnomalyStatus.RESOLVED_SUCCESSFULLY);
+                    anomaly.setStatus(AnomalyStatus.RESOLVED_FULLY);
                     anomalyRepository.save(anomaly);
-                    AnomalyTracking anomalyTracking = new AnomalyTracking(anomaly, new Date(), AnomalyStatus.RESOLVED_SUCCESSFULLY, "", user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn(),"N/A");
+                    AnomalyTracking anomalyTracking = new AnomalyTracking(anomaly, new Date(), AnomalyStatus.RESOLVED_FULLY, "", user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn(),"N/A");
                     anomalyTrackingRepository.save(anomalyTracking);
                 }
                 if (anomaly.getStatus().getCode() == 0 || anomaly.getStatus().getCode() == 1 ||
@@ -2459,9 +2459,9 @@ System.out.println("Get all flagged ");
                 //if status is resolution submitted
                 /*if (anomaly.getStatus().getCode() == 4) {
                     //resolved old anomalies
-                    anomaly.setStatus(AnomalyStatus.RESOLVED_SUCCESSFULLY);
+                    anomaly.setStatus(AnomalyStatus.RESOLVED_FULLY);
                     anomalyRepository.save(anomaly);
-                    AnomalyTracking anomalyTracking = new AnomalyTracking(anomaly, new Date(), AnomalyStatus.RESOLVED_SUCCESSFULLY, "", user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn());
+                    AnomalyTracking anomalyTracking = new AnomalyTracking(anomaly, new Date(), AnomalyStatus.RESOLVED_FULLY, "", user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn());
                     anomalyTrackingRepository.save(anomalyTracking);
                 }*/
                 if (anomaly.getStatus().getCode() == 0 || anomaly.getStatus().getCode() == 1 ||
@@ -2630,9 +2630,9 @@ System.out.println("Get all flagged ");
                 //if status is resolution submitted
                 if (anomaly.getStatus().getCode() == 4) {
                     //resolved old anomalies
-                    anomaly.setStatus(AnomalyStatus.RESOLVED_SUCCESSFULLY);
+                    anomaly.setStatus(AnomalyStatus.RESOLVED_FULLY);
                     anomalyRepository.save(anomaly);
-                    AnomalyTracking anomalyTracking = new AnomalyTracking(anomaly, new Date(), AnomalyStatus.RESOLVED_SUCCESSFULLY, "", user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn(),"N/A");
+                    AnomalyTracking anomalyTracking = new AnomalyTracking(anomaly, new Date(), AnomalyStatus.RESOLVED_FULLY, "", user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn(),"N/A");
                     anomalyTrackingRepository.save(anomalyTracking);
                 }
                 if (anomaly.getStatus().getCode() == 0 || anomaly.getStatus().getCode() == 1 ||
@@ -2960,7 +2960,7 @@ System.out.println("Get all flagged ");
     	if (resolution != null) {
 			switch (resolution) {
 			case "resolve":
-				anomalyStatus.add(AnomalyStatus.RESOLVED_SUCCESSFULLY);
+				anomalyStatus.add(AnomalyStatus.RESOLVED_FULLY);
 				break;
 
 			case "unResolve":

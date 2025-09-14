@@ -67,12 +67,12 @@ public class DashboardServiceImpl implements DashboardService {
 
     static final List<AnomalyStatus> DEFAULT_ANOMALY_RESOLVED_STATUS
             = new ArrayList<>(List.of(
-            AnomalyStatus.RESOLVED_SUCCESSFULLY
+            AnomalyStatus.RESOLVED_FULLY
     ));
     
 	static final List<AnomalyStatus> DEFAULT_TOTAL_ANOMALY = new ArrayList<>(Arrays.asList(
             AnomalyStatus.RESOLVED_PARTIALLY,
-            AnomalyStatus.RESOLVED_SUCCESSFULLY
+            AnomalyStatus.RESOLVED_FULLY
     ));
 	
 	static final List<AnomalyStatus> DEFAULT_ANOMALY_PARTIALLY_RESOLVED_STATUS
@@ -165,7 +165,7 @@ public class DashboardServiceImpl implements DashboardService {
         anomalyCount.forEach(it -> {
             if (it.getStatus().getStatus().equalsIgnoreCase(AnomalyStatus.REPORTED.getStatus())) {
                 reportedDashboardObject.getValues().add(new DashboardObject(it.getName(), it.getAnomalyCount(), it.getServiceProviderId()));
-            } else if (it.getStatus().getStatus().equalsIgnoreCase(AnomalyStatus.RESOLVED_SUCCESSFULLY.getStatus())) {
+            } else if (it.getStatus().getStatus().equalsIgnoreCase(AnomalyStatus.RESOLVED_FULLY.getStatus())) {
                 resolvedDashboardObject.getValues().add(new DashboardObject(it.getName(), it.getAnomalyCount(), it.getServiceProviderId()));
             } else if (it.getStatus().getStatus().equalsIgnoreCase(AnomalyStatus.WITHDRAWN.getStatus())) {
                 withdrawnDashboardObject.getValues().add(new DashboardObject(it.getName(), it.getAnomalyCount(), it.getServiceProviderId()));
@@ -259,7 +259,7 @@ public class DashboardServiceImpl implements DashboardService {
         System.out.println("Customers value are "+consumersList.size());
 
         long activeCount = anomalyService.countByStatusNotIn(Arrays.asList(
-                AnomalyStatus.RESOLVED_SUCCESSFULLY,
+                AnomalyStatus.RESOLVED_FULLY,
                 AnomalyStatus.WITHDRAWN
         ));
 
