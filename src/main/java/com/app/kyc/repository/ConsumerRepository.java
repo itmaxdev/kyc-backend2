@@ -344,4 +344,8 @@ public interface ConsumerRepository
     		+ "GROUP BY c.service_provider_id ", nativeQuery = true)
     List<Object[]> getConsumersByServiceProvider(Collection<Long> ids, Date createdOnStart, Date createdOnEnd);
 
+    @Query("SELECT c FROM Consumer c WHERE c.msisdn = :msisdn AND c.id IN :ids")
+    List<Consumer> findConsumersByMsisdnAndIds(@Param("msisdn") String msisdn,
+                                               @Param("ids") List<Long> ids);
+
 }
