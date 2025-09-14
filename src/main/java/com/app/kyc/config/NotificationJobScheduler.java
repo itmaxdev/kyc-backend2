@@ -76,7 +76,7 @@ public class NotificationJobScheduler {
 
 	// Check if status equals to this 3 status
 	private boolean shouldNotifySPUsers(AnomalyStatus status) {
-		return status.equals(AnomalyStatus.WITHDRAWN) || status.equals(AnomalyStatus.RESOLVED_SUCCESSFULLY)
+		return status.equals(AnomalyStatus.WITHDRAWN) || status.equals(AnomalyStatus.RESOLVED_FULLY)
 				|| status.equals(AnomalyStatus.QUESTION_ANSWERED);
 	}
 
@@ -86,7 +86,7 @@ public class NotificationJobScheduler {
 		switch (status) {
 		case WITHDRAWN:
 			return "The anomaly for " + consumer.getFirstName() + " " + consumer.getLastName() + " has been withdrawn";
-		case RESOLVED_SUCCESSFULLY:
+		case RESOLVED_FULLY:
 			return "The anomaly for " + consumer.getFirstName() + " " + consumer.getLastName() + " has been resolved";
 		case QUESTION_ANSWERED:
 			return "Question answered for anomaly on " + consumer.getFirstName() + " " + consumer.getLastName();
