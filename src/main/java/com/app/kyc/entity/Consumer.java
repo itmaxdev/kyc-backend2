@@ -44,6 +44,7 @@ public class Consumer {
     private Date identityValitidyDate;
     private String identityCapturePath;
     private String subscriberType;
+    @Column(name = "is_consistent", nullable = false)
     private Boolean isConsistent;
     private int consumerStatus;
 

@@ -250,7 +250,7 @@ public class AnomalyServiceImpl implements AnomalyService
                request.getStatus(),
                request.getNote(),
                user.getFirstName() + " " + user.getLastName(),
-               anomaly.getUpdatedOn()
+               anomaly.getUpdatedOn(),  "N/A"
        );
        anomalyTrackingRepository.save(anomalyTracking);
 
@@ -365,7 +365,8 @@ public class AnomalyServiceImpl implements AnomalyService
                          finalNote,
                          c.getAnomaly(),
                          c.getUpdateBy(),
-                         c.getUpdateOn()
+                         c.getUpdateOn(),
+                         c.getConsistentOn()
                  );
               })
               // 🔹 Deduplicate: keep only one entry per status (latest, because of DESC order)

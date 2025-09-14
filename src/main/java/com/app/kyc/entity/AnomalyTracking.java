@@ -2,13 +2,7 @@ package com.app.kyc.entity;
 
 import java.util.Date;
 
-import javax.persistence.CascadeType;
-import javax.persistence.Entity;
-import javax.persistence.GeneratedValue;
-import javax.persistence.GenerationType;
-import javax.persistence.Id;
-import javax.persistence.ManyToOne;
-import javax.persistence.Table;
+import javax.persistence.*;
 
 import com.app.kyc.model.AnomalyStatus;
 
@@ -32,11 +26,15 @@ public class AnomalyTracking
    private String updateBy;
    private Date updateOn;
 
+   @Column(name = "consistent_on")
+   private String consistentOn;
+
+
    public AnomalyTracking()
    {
    }
 
-   public AnomalyTracking(Anomaly anomaly, Date createdOn, AnomalyStatus status, String note,String updateBy, Date updateOn)
+   public AnomalyTracking(Anomaly anomaly, Date createdOn, AnomalyStatus status, String note,String updateBy, Date updateOn, String consistentOn)
    {
       this.anomaly = anomaly;
       this.createdOn = createdOn;
@@ -44,6 +42,7 @@ public class AnomalyTracking
       this.note = note;
       this.updateBy = updateBy;
       this.updateOn = updateOn;
+      this.consistentOn=consistentOn;
    }
 
    public Long getId()
@@ -112,4 +111,11 @@ public class AnomalyTracking
       this.updateOn = updatedOn;
    }
 
+   public String getConsistentOn() {
+      return consistentOn;
+   }
+
+   public void setConsistentOn(String consistentOn) {
+      this.consistentOn = consistentOn;
+   }
 }

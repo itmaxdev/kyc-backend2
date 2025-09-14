@@ -17,14 +17,17 @@ public class AnomalyTrackingDto {
 
     private Date updatedOn;
 
+    private String consistentOn;
 
-    public AnomalyTrackingDto(Long id, Date createdOn, AnomalyStatus anomalyStatus, String note, Anomaly anomaly, String updatedBy, Date updatedOn){
+
+    public AnomalyTrackingDto(Long id, Date createdOn, AnomalyStatus anomalyStatus, String note, Anomaly anomaly, String updatedBy, Date updatedOn,String consistentOn){
         this.id = id;
         this.createdOn = createdOn;
         this.status= anomalyStatus;
         this.note = note;
         this.updatedBy = updatedBy;
         this.updatedOn = updatedOn;
+        this.consistentOn=consistentOn;
 
         this.anomlyDto = new AnomlyDto(anomaly,0);
     }
@@ -82,5 +85,13 @@ public class AnomalyTrackingDto {
 
     public void setUpdatedOn(Date updatedOn) {
         this.updatedOn = updatedOn;
+    }
+
+    public String getConsistentOn() {
+        return consistentOn;
+    }
+
+    public void setConsistentOn(String consistentOn) {
+        this.consistentOn = consistentOn;
     }
 }

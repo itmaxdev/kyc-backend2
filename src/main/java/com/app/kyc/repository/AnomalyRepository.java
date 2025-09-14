@@ -125,7 +125,10 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
    @Query(value = "SELECT * FROM anomalies WHERE id IN (:anomalyId) and anomaly_type_id = :anomalyTypeId", nativeQuery = true)
    Anomaly findByIdAndAnomalyType_Id(@Param("anomalyId") List<Long> anomalyId, @Param("anomalyTypeId") Long anomalyTypeId);
 
-   @Query(value = "select Distinct a from Anomaly a join ConsumerAnomaly ca on a.id = ca.anomaly.id join Consumer c on ca.consumer.id = c.id where c.consumerStatus in (:consumer_status) and a.status in (:anomalyStatus) and (:anomalyType is null or a.anomalyType.id = :anomalyType)")
+    @Query(value = "SELECT * FROM anomalies WHERE id IN (:anomalyId) and anomaly_type_id = :anomalyTypeId", nativeQuery = true)
+    Anomaly findByIdAndAnomalyTypeId(@Param("anomalyId") Long anomalyId, @Param("anomalyTypeId") Long anomalyTypeId);
+
+    @Query(value = "select Distinct a from Anomaly a join ConsumerAnomaly ca on a.id = ca.anomaly.id join Consumer c on ca.consumer.id = c.id where c.consumerStatus in (:consumer_status) and a.status in (:anomalyStatus) and (:anomalyType is null or a.anomalyType.id = :anomalyType)")
    Page<Anomaly> findAllByConsumerStatus(Pageable pageable, @Param("consumer_status") List<Integer> consumer_status, @Param("anomalyStatus") List<AnomalyStatus> anomalyStatus,@Param("anomalyType") Long anomalyType);
 
    @Query(value = "select Distinct a from Anomaly a join ConsumerAnomaly ca on a.id = ca.anomaly.id join Consumer c on ca.consumer.id = c.id where (coalesce(:anomalyStatus, null) is null or a.status in (:anomalyStatus)) and (coalesce(:resolutionStatus, null) is null or a.status in (:resolutionStatus))  and (:anomalyType is null or a.anomalyType.id = :anomalyType)")
