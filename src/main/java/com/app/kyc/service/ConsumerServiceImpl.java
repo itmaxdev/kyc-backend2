@@ -2218,13 +2218,21 @@ System.out.println("Get all flagged ");
             log.info("checkConsumer done | operator={} processed={} in {} ms", serviceProvider.getName(), processed, totalMs);
         }
 
+    @Transactional
     private void extracted(User user) {
         List<Consumer> consumersListFromDB = consumerRepository.findAll();
         AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Duplicate Records");
 
-        // ✅ group consumers by MSISDN
+        // ✅ log and skip consumers with null msisdn
+        consumersListFromDB.stream()
+                .filter(c -> c.getMsisdn() == null)
+                .forEach(c -> System.out.println("⚠ Skipping consumer with null msisdn → id=" + c.getId()));
+
+        // ✅ group only valid consumers by msisdn
         Map<String, List<Consumer>> consumersByMsisdn =
-                consumersListFromDB.stream().collect(Collectors.groupingBy(Consumer::getMsisdn));
+                consumersListFromDB.stream()
+                        .filter(c -> c.getMsisdn() != null)
+                        .collect(Collectors.groupingBy(Consumer::getMsisdn));
         
         for (Map.Entry<String, List<Consumer>> entry : consumersByMsisdn.entrySet()) {
             String msisdn = entry.getKey();
@@ -2245,12 +2253,11 @@ System.out.println("Get all flagged ");
                         consumerAnomalyRepository.findAnomaliesIdByConsumerAndAnomalyTypeId(consumerIds, anomalyType.getId());
 
                 if (!consumerAnomalies.isEmpty()) {
-                    // ⚡ should handle multiple anomalies
                     for (Long anomalyId : consumerAnomalies) {
                         Anomaly anomaly = anomalyRepository.findByIdAndAnomalyTypeId(anomalyId, anomalyType.getId());
 
                         if (anomaly != null && anomaly.getStatus().getCode() == 4) {
-                            // ✅ check if all consistent
+                            // ✅ check consistency
                             boolean allConsistent = relatedConsumers.stream()
                                     .allMatch(c -> Boolean.TRUE.equals(c.getIsConsistent()));
 
@@ -2267,14 +2274,14 @@ System.out.println("Get all flagged ");
                             String consistentOnDate = LocalDateTime.now()
                                     .format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
 
-                            System.out.println("Formatted date = " + consistentOnDate);
                             anomalyTrackingRepository.save(new AnomalyTracking(
                                     anomaly,
                                     new Date(),
                                     anomaly.getStatus(),
                                     "",
                                     user.getFirstName() + " " + user.getLastName(),
-                                    anomaly.getUpdatedOn(),consistentOnDate
+                                    anomaly.getUpdatedOn(),
+                                    consistentOnDate
                             ));
                         }
                     }
@@ -2496,7 +2503,7 @@ System.out.println("Get all flagged ");
                     anomalyTrackingRepository.save(anomalyTracking);
                 }*/
                 if (anomaly.getStatus().getCode() == 0 || anomaly.getStatus().getCode() == 1 ||
-                anomaly.getStatus().getCode() == 2 || anomaly.getStatus().getCode() == 3) {
+                anomaly.getStatus().getCode() == 2 || anomaly.getStatus().getCode() == 3 || anomaly.getStatus().getCode() == 5) {
                     ConsumerAnomaly tempConsumerAnomaly = new ConsumerAnomaly();
                     tempAnomaly.setId(anomaly.getId());
                     tempAnomaly.setNote(anomaly.getNote());
