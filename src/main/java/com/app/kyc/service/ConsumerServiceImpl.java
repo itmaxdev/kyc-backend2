@@ -2199,7 +2199,12 @@ System.out.println("Get all flagged ");
                         log.warn("slow record msisdn={} took {} ms", safeMsisdn(consumer), durMs);
                     }
                 }
+
+
+
             }
+
+            extracted(user);
 
             // Final flush
             if (!pendingSaves.isEmpty()) {
@@ -2208,15 +2213,45 @@ System.out.println("Get all flagged ");
                 em.clear();
             }
 
+            extractedCon();
             anomalyCollection.getParentAnomalyNoteSet().clear();
 
 
-            extracted(user);
 
 
             long totalMs = (System.nanoTime() - t0) / 1_000_000;
             log.info("checkConsumer done | operator={} processed={} in {} ms", serviceProvider.getName(), processed, totalMs);
         }
+
+
+    private void extractedCon() {
+
+        List<Consumer> consumerList = consumerRepository.findAll();
+            if(consumerList.size()>0) {
+                for (Consumer consumer : consumerList) {
+                    if (consumer.getMsisdn() == null) {
+                        consumer.setIsConsistent(true); // no MSISDN → default to consistent
+                        return;
+                    }
+                    System.out.println("consumer.getMsisdn() values are " + consumer.getMsisdn());
+                    List<Consumer> sameMsisdn = consumerRepository.findByMsisdn(consumer.getMsisdn());
+
+                    if (sameMsisdn.size() > 1) {
+                        // mark all as inconsistent
+                        System.out.println("sameMsisdn values are " + consumer.getMsisdn());
+                        sameMsisdn.forEach(c -> c.setIsConsistent(false));
+                        consumerRepository.saveAll(sameMsisdn);
+                    } else {
+                        System.out.println("not sameMsisdn values are " + consumer.getMsisdn());
+                        // unique → consistent
+                        sameMsisdn.forEach(c -> c.setIsConsistent(true));
+                        consumerRepository.saveAll(sameMsisdn);
+                    }
+
+                    System.out.println("consumer.getMsisdn() values after are " + consumer.getMsisdn());
+                }
+            }
+    }
 
     @Transactional
     private void extracted(User user) {
