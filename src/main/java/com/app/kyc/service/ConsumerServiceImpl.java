@@ -102,8 +102,39 @@ public class ConsumerServiceImpl implements ConsumerService {
         if (!consumer.isPresent()) {
             consumer = consumerRepository.findById(id);
         }
+        
+        return consumer.map(c -> {
+            // existing anomalies
+            ConsumerDto dto = new ConsumerDto(c, c.getAnomalies());
+       
+            List<ConsumerHistoryDto> history = new ArrayList<>();
 
-        return consumer.map(c -> new ConsumerDto(c, c.getAnomalies())).orElse(null);
+			// Only process if anomalies exist
+			if (c.getAnomalies() != null && !c.getAnomalies().isEmpty()) {
+				for (Anomaly anomaly : c.getAnomalies()) {
+					List<AnomalyTracking> trackings = anomalyTrackingRepository
+							.findAllByAnomalyIdOrderByCreatedOnDesc(anomaly.getId());
+
+					history.addAll(trackings.stream().map(t -> {
+						
+						String note = c.getFirstName() + " " + c.getMiddleName() + " " + c.getLastName() + " linked to " + c.getServiceProvider().getName();
+								
+						String consistencyStatus = "N/A".equals(t.getConsistentOn()) ? "Inconsistent" : "Consistent";
+
+						String InconsistentOn = t.getCreatedOn() != null ? t.getCreatedOn().toString() : null;
+
+						String consistentOn = t.getConsistentOn() != null ? t.getConsistentOn() : "N/A";
+
+						// build DTO using constructor
+						return new ConsumerHistoryDto(consistencyStatus, note , InconsistentOn, consistentOn);
+					}).collect(Collectors.toList()));
+				}
+			}
+
+            dto.setConsumerHistory(history);
+
+            return dto;
+        }).orElse(null);
     }
 
 
@@ -2192,8 +2223,11 @@ System.out.println("Get all flagged ");
         AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Duplicate Records");
 
         // ✅ group consumers by MSISDN
-        Map<String, List<Consumer>> consumersByMsisdn =
-                consumersListFromDB.stream().collect(Collectors.groupingBy(Consumer::getMsisdn));
+//        Map<String, List<Consumer>> consumersByMsisdn =
+//                consumersListFromDB.stream().collect(Collectors.groupingBy(Consumer::getMsisdn));
+        
+        Map<String, List<Consumer>> consumersByMsisdn = consumersListFromDB.stream().filter(c -> c.getMsisdn() != null)
+        .collect(Collectors.groupingBy(Consumer::getMsisdn));
 
         for (Map.Entry<String, List<Consumer>> entry : consumersByMsisdn.entrySet()) {
             String msisdn = entry.getKey();
