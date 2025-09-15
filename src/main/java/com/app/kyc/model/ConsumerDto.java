@@ -39,6 +39,7 @@ public class ConsumerDto {
     private List<Service> services;
     private String notes;
     private Boolean isConsistent;
+    private List<ConsumerHistoryDto> consumerHistory;
     public  ConsumerDto(Consumer consumer,List<Anomaly> anomlies){
         this.id = consumer.getId();
         this.firstName = consumer.getFirstName();
