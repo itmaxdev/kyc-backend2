@@ -45,7 +45,8 @@ public class Consumer {
     private String identityCapturePath;
     private String subscriberType;
     @Column(name = "is_consistent", nullable = false)
-    private Boolean isConsistent;
+    private Boolean isConsistent;// default safe value
+
     private int consumerStatus;
 
     @Column(name = "vodacom_transaction_id", unique = true, nullable = true, length = 200)
