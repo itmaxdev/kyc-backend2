@@ -3,6 +3,7 @@ package com.app.kyc.repository;
 import java.util.Collection;
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 
 import com.app.kyc.entity.*;
 import com.app.kyc.model.AnomalyStatus;
@@ -22,7 +23,39 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
    @Query(value = "SELECT * FROM anomalies WHERE anomaly_type_id = ?", nativeQuery = true)
    List<Anomaly> findByAnomalyType(@Param("anomalyTypeId") Long anomalyTypeId);
 
-   @Query(value = "select * from anomalies where anomaly_type_id in (select id from anomaly_types where (target_entity_type = 2 and entity_id = :industryId) " + "or (target_entity_type = 1 and entity_id in (select id from service_types where industry_id = :industryId)))" + "and reported_on > :start and reported_on <= :end", nativeQuery = true)
+
+
+
+    @Query("SELECT DISTINCT a FROM Anomaly a " +
+            "JOIN a.consumers c " +
+            "WHERE c.msisdn = :msisdn " +
+            "AND a.anomalyType.id = :anomalyTypeId " +
+            "AND a.status NOT IN :excludedStatuses " +   // ✅ compare directly with enum values
+            "ORDER BY a.reportedOn DESC")
+    List<Anomaly> findDuplicateAnomaliesByMsisdnAndTypeAndStatusNotIn(
+            @Param("msisdn") String msisdn,
+            @Param("anomalyTypeId") Long anomalyTypeId,
+            @Param("excludedStatuses") List<AnomalyStatus> excludedStatuses
+    );
+
+    @Query("SELECT DISTINCT a FROM Anomaly a " +
+            "JOIN a.consumers c " +
+            "WHERE c.msisdn = :msisdn " +
+            "AND a.anomalyType.id = :anomalyTypeId " +
+            "ORDER BY a.reportedOn DESC")
+    List<Anomaly> findDuplicateAnomaliesByMsisdnAndType(
+            @Param("msisdn") String msisdn,
+            @Param("anomalyTypeId") Long anomalyTypeId);
+
+
+
+
+    @Query("SELECT a FROM Anomaly a JOIN a.consumers c " +
+            "WHERE c.msisdn = :msisdn AND a.anomalyType.id = :anomalyTypeId")
+    Optional<Anomaly> findDuplicateAnomalyByMsisdnAndType(@Param("msisdn") String msisdn,
+                                                          @Param("anomalyTypeId") Long anomalyTypeId);
+
+    @Query(value = "select * from anomalies where anomaly_type_id in (select id from anomaly_types where (target_entity_type = 2 and entity_id = :industryId) " + "or (target_entity_type = 1 and entity_id in (select id from service_types where industry_id = :industryId)))" + "and reported_on > :start and reported_on <= :end", nativeQuery = true)
    List<Anomaly> findAllByIndustryIdAndReportedOnGreaterThanAndReportedOnLessThanEqual(Long industryId, Date start, Date end);
 
    @Query(value = "select * from anomalies where consumers_services_id in " + "(select id from consumers_services where service_id in" + "(select id from services where service_type_id = :serviceTypeId))" + "and reported_on > :start and reported_on <= :end", nativeQuery = true)

@@ -3,6 +3,7 @@ package com.app.kyc.repository;
 import java.util.Collection;
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 
 import com.app.kyc.model.DashboardAnomalyStatusInterface;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -21,6 +22,9 @@ public interface ConsumerAnomalyRepository extends JpaRepository<ConsumerAnomaly
     List<ConsumerAnomaly> findByAnomaly_AnomalyTypeAndConsumer(AnomalyType anomalyType,Consumer consumer);
 
     List<ConsumerAnomaly> findAllByConsumerIn(List<Consumer> consumers);
+
+    boolean existsByConsumerAndAnomaly(Consumer consumer, Anomaly anomaly);
+
 
 //    @Query(value = "select anomaly_id from consumers_anomalies where consumer_id IN (:consumerIds)",  nativeQuery = true)
 //    List<Long> findAnomaliesIdByConsumer(@Param("consumerIds") List<Long> consumerIds);
