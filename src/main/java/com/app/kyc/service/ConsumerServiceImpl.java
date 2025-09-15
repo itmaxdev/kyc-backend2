@@ -2223,12 +2223,9 @@ System.out.println("Get all flagged ");
         AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Duplicate Records");
 
         // ✅ group consumers by MSISDN
-//        Map<String, List<Consumer>> consumersByMsisdn =
-//                consumersListFromDB.stream().collect(Collectors.groupingBy(Consumer::getMsisdn));
+        Map<String, List<Consumer>> consumersByMsisdn =
+                consumersListFromDB.stream().collect(Collectors.groupingBy(Consumer::getMsisdn));
         
-        Map<String, List<Consumer>> consumersByMsisdn = consumersListFromDB.stream().filter(c -> c.getMsisdn() != null)
-        .collect(Collectors.groupingBy(Consumer::getMsisdn));
-
         for (Map.Entry<String, List<Consumer>> entry : consumersByMsisdn.entrySet()) {
             String msisdn = entry.getKey();
             List<Consumer> relatedConsumers = entry.getValue();
