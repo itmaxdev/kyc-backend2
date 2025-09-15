@@ -2465,7 +2465,7 @@ System.out.println("Get all flagged ");
                     anomalyTrackingRepository.save(anomalyTracking);
                 }*/
                 if (anomaly.getStatus().getCode() == 0 || anomaly.getStatus().getCode() == 1 ||
-                anomaly.getStatus().getCode() == 2 || anomaly.getStatus().getCode() == 3) {
+                anomaly.getStatus().getCode() == 2 || anomaly.getStatus().getCode() == 3 || anomaly.getStatus().getCode() == 5) {
                     ConsumerAnomaly tempConsumerAnomaly = new ConsumerAnomaly();
                     tempAnomaly.setId(anomaly.getId());
                     tempAnomaly.setNote(anomaly.getNote());
