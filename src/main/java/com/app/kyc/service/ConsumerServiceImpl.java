@@ -2257,7 +2257,7 @@ System.out.println("Get all flagged ");
     private void extracted(User user) {
         List<Consumer> consumersListFromDB = consumerRepository.findAll();
         AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Duplicate Records");
-
+        Anomaly tempAnomaly = new Anomaly();
         // ✅ log and skip consumers with null msisdn
         consumersListFromDB.stream()
                 .filter(c -> c.getMsisdn() == null)
@@ -2318,6 +2318,33 @@ System.out.println("Get all flagged ");
                                     anomaly.getUpdatedOn(),
                                     consistentOnDate
                             ));
+                        }
+
+
+                        if (!Objects.isNull(anomaly)) {
+                            if (anomaly.getStatus().getCode() == 0 || anomaly.getStatus().getCode() == 1 ||
+                                    anomaly.getStatus().getCode() == 2 || anomaly.getStatus().getCode() == 3 || anomaly.getStatus().getCode() == 5) {
+                                ConsumerAnomaly tempConsumerAnomaly = new ConsumerAnomaly();
+                                for(Consumer consumer:relatedConsumers) {
+                                    tempAnomaly.setId(anomaly.getId());
+                                    tempAnomaly.setNote(anomaly.getNote());
+                                    tempAnomaly.setStatus(anomaly.getStatus());
+                                    tempAnomaly.setReportedOn(anomaly.getReportedOn());
+                                    tempAnomaly.setReportedBy(anomaly.getReportedBy());
+                                    tempAnomaly.getConsumers().remove(consumer);
+                                    tempAnomaly.addConsumer(consumer);
+                                    tempAnomaly.setUpdatedOn(anomaly.getUpdatedOn());
+                                    tempAnomaly.setAnomalyType(anomalyType);
+                                    tempConsumerAnomaly.setAnomaly(tempAnomaly);
+
+                                    consumer = consumerRepository.save(consumer);
+
+                                    tempConsumerAnomaly.setConsumer(consumer);
+                                    tempConsumerAnomaly.setNotes(anomaly.getNote());
+
+                                    consumerAnomalyRepository.save(tempConsumerAnomaly);
+                                }
+                            }
                         }
                     }
                 }
@@ -2529,14 +2556,6 @@ System.out.println("Get all flagged ");
             //get anomaly for duplicate that is tagged previously
             Anomaly anomaly = anomalyRepository.findByIdAndAnomalyType_Id(consumerAnomalies, anomalyType.getId());
             if (!Objects.isNull(anomaly)) {
-                //if status is resolution submitted
-                /*if (anomaly.getStatus().getCode() == 4) {
-                    //resolved old anomalies
-                    anomaly.setStatus(AnomalyStatus.RESOLVED_FULLY);
-                    anomalyRepository.save(anomaly);
-                    AnomalyTracking anomalyTracking = new AnomalyTracking(anomaly, new Date(), AnomalyStatus.RESOLVED_FULLY, "", user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn());
-                    anomalyTrackingRepository.save(anomalyTracking);
-                }*/
                 if (anomaly.getStatus().getCode() == 0 || anomaly.getStatus().getCode() == 1 ||
                 anomaly.getStatus().getCode() == 2 || anomaly.getStatus().getCode() == 3 || anomaly.getStatus().getCode() == 5) {
                     ConsumerAnomaly tempConsumerAnomaly = new ConsumerAnomaly();
