@@ -15,4 +15,7 @@ public interface AnomalyTrackingRepository extends JpaRepository<AnomalyTracking
    // Get all tracking records for an anomaly, latest first
    List<AnomalyTracking> findAllByAnomalyIdOrderByCreatedOnDesc(Long anomalyId);
 
+   List<AnomalyTracking> findDistinctByAnomalyIdOrderByCreatedOnDesc(Long anomalyId);
+
+
 }
