@@ -175,6 +175,9 @@ public interface ConsumerRepository
     @Query(value = "select * from consumers cc where cc.msisdn in (:msisdn)  and  cc.consumer_status=:consumer_status and cc.identification_type = :id_type and cc.identification_number = :id_number and cc.service_provider_id = :sp_id", nativeQuery = true)
     List<Consumer> findConsumerIdsByMsisdnAndConsumerStatusAndIdNumberAndIdTypeAndServiceProviderID(@Param("msisdn") String msisdn, @Param("consumer_status") int consumer_status, @Param("id_type") String id_type, @Param("id_number") String id_number, @Param("sp_id") Long sp_id);
 
+    @Query(value = "select * from consumers cc where cc.msisdn in (:msisdn) and cc.identification_type = :id_type and cc.identification_number = :id_number and cc.service_provider_id = :sp_id", nativeQuery = true)
+    List<Consumer> findConsumerIdsByMsisdnAndIdNumberAndIdTypeAndServiceProviderID(@Param("msisdn") String msisdn, @Param("id_type") String id_type, @Param("id_number") String id_number, @Param("sp_id") Long sp_id);
+
     @Query(value = "update consumers set consumer_status = :flag where id in (:id)",nativeQuery = true)
     @Modifying
     @Transactional
