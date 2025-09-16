@@ -79,7 +79,7 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
            "    FROM anomalies a " +
            "    JOIN consumers_anomalies ca ON ca.anomaly_id = a.id " +
            "    JOIN consumers c ON c.id = ca.consumer_id " +
-           "    WHERE a.status IN (5,6) " +
+           "    WHERE a.status IN (6,7) " +
            "      AND a.reported_on > :start " +
            "      AND a.reported_on <= :end " +
            "      AND c.service_provider_id IN (:serviceProviderIds) " +
@@ -119,8 +119,8 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
 	        + "        WHEN :groupBy = 'MONTH' THEN DATE_FORMAT(ps.period, '%b') "
 	        + "        WHEN :groupBy = 'QUARTER' THEN CONCAT(YEAR(ps.period), '-Q', QUARTER(ps.period)) "
 	        + "    END AS period, "
-	        + "    COALESCE(SUM(CASE WHEN a.id IS NOT NULL AND a.status IN (5,6) THEN 1 ELSE 0 END), 0) AS resolved, "
-	        + "    COALESCE(SUM(CASE WHEN a.id IS NOT NULL AND a.status NOT IN (5,6) THEN 1 ELSE 0 END), 0) AS unresolved "
+	        + "    COALESCE(SUM(CASE WHEN a.id IS NOT NULL AND a.status IN (6,7) THEN 1 ELSE 0 END), 0) AS resolved, "
+	        + "    COALESCE(SUM(CASE WHEN a.id IS NOT NULL AND a.status NOT IN (6,7) THEN 1 ELSE 0 END), 0) AS unresolved "
 	        + "FROM period_series ps "
 	        + "LEFT JOIN anomalies a "
 	        + " ON ( "

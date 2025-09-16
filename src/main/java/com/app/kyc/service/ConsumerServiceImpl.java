@@ -117,16 +117,18 @@ public class ConsumerServiceImpl implements ConsumerService {
 
 					history.addAll(trackings.stream().map(t -> {
 						
-						String note = c.getFirstName() + " " + c.getMiddleName() + " " + c.getLastName() + " linked to " + c.getServiceProvider().getName();
+						String note = c.getFirstName() + " " + c.getMiddleName() + " " + c.getLastName() + " linked to ";
 								
 						String consistencyStatus = "N/A".equals(t.getConsistentOn()) ? "Inconsistent" : "Consistent";
 
 						String InconsistentOn = t.getCreatedOn() != null ? t.getCreatedOn().toString() : null;
 
 						String consistentOn = t.getConsistentOn() != null ? t.getConsistentOn() : "N/A";
+						
+						 String formattedId = anomaly.getConsumers().get(0).getServiceProvider().getName() + "-" + new SimpleDateFormat("ddMMyyyy").format(anomaly.getReportedOn()) + "-" + anomaly.getId();
 
 						// build DTO using constructor
-						return new ConsumerHistoryDto(consistencyStatus, note , InconsistentOn, consistentOn);
+						return new ConsumerHistoryDto(consistencyStatus, note , InconsistentOn, consistentOn , formattedId);
 					}).collect(Collectors.toList()));
 				}
 			}
