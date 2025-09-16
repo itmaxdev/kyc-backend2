@@ -150,10 +150,21 @@ public interface ConsumerRepository
     /**
      * Prefer using {@link #findFirstByMsisdn(String)} or {@link #findIdByMsisdn(String)}.
      */
-    @Deprecated
-    List<Consumer> findByMsisdn(String msisdn);
+
+    List<Consumer> findAllByMsisdn(String msisdn);
 
     List<Consumer> findByMsisdnAndConsumerStatus(String msisdn, int consumerStatus);
+
+    List<Consumer> findByMsisdnAndServiceProvider_Id(String msisdn, Long serviceProviderId);
+
+    List<Consumer> findByIdentificationTypeAndIdentificationNumberAndServiceProvider_Id(
+            String idType, String idNumber, Long serviceProviderId);
+
+    long countByMsisdn(String msisdn);
+
+    // Count how many consumers share the same ID + ID type
+    long countByIdentificationNumberAndIdentificationType(String identificationNumber, String identificationType);
+
 
     @Query(value = "SELECT * FROM consumers c WHERE c.msisdn in (:msisdn) and c.consumer_status = :consumer_status and c.id not in(select consumer_id from consumers_anomalies);", nativeQuery = true)
     List<Consumer> findConsumersNotInCA(@Param("msisdn") String msisdn, @Param("consumer_status") int consumer_status);
@@ -343,9 +354,5 @@ public interface ConsumerRepository
     		+ "BETWEEN STR_TO_DATE(?2, '%Y-%m-%d') AND STR_TO_DATE(?3, '%Y-%m-%d') "
     		+ "GROUP BY c.service_provider_id ", nativeQuery = true)
     List<Object[]> getConsumersByServiceProvider(Collection<Long> ids, Date createdOnStart, Date createdOnEnd);
-
-    @Query("SELECT c FROM Consumer c WHERE c.msisdn = :msisdn AND c.id IN :ids")
-    List<Consumer> findConsumersByMsisdnAndIds(@Param("msisdn") String msisdn,
-                                               @Param("ids") List<Long> ids);
 
 }
