@@ -3,7 +3,6 @@ package com.app.kyc.repository;
 import java.util.Collection;
 import java.util.Date;
 import java.util.List;
-import java.util.Optional;
 
 import com.app.kyc.entity.*;
 import com.app.kyc.model.AnomalyStatus;
@@ -23,39 +22,7 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
    @Query(value = "SELECT * FROM anomalies WHERE anomaly_type_id = ?", nativeQuery = true)
    List<Anomaly> findByAnomalyType(@Param("anomalyTypeId") Long anomalyTypeId);
 
-
-
-
-    @Query("SELECT DISTINCT a FROM Anomaly a " +
-            "JOIN a.consumers c " +
-            "WHERE c.msisdn = :msisdn " +
-            "AND a.anomalyType.id = :anomalyTypeId " +
-            "AND a.status NOT IN :excludedStatuses " +   // ✅ compare directly with enum values
-            "ORDER BY a.reportedOn DESC")
-    List<Anomaly> findDuplicateAnomaliesByMsisdnAndTypeAndStatusNotIn(
-            @Param("msisdn") String msisdn,
-            @Param("anomalyTypeId") Long anomalyTypeId,
-            @Param("excludedStatuses") List<AnomalyStatus> excludedStatuses
-    );
-
-    @Query("SELECT DISTINCT a FROM Anomaly a " +
-            "JOIN a.consumers c " +
-            "WHERE c.msisdn = :msisdn " +
-            "AND a.anomalyType.id = :anomalyTypeId " +
-            "ORDER BY a.reportedOn DESC")
-    List<Anomaly> findDuplicateAnomaliesByMsisdnAndType(
-            @Param("msisdn") String msisdn,
-            @Param("anomalyTypeId") Long anomalyTypeId);
-
-
-
-
-    @Query("SELECT a FROM Anomaly a JOIN a.consumers c " +
-            "WHERE c.msisdn = :msisdn AND a.anomalyType.id = :anomalyTypeId")
-    Optional<Anomaly> findDuplicateAnomalyByMsisdnAndType(@Param("msisdn") String msisdn,
-                                                          @Param("anomalyTypeId") Long anomalyTypeId);
-
-    @Query(value = "select * from anomalies where anomaly_type_id in (select id from anomaly_types where (target_entity_type = 2 and entity_id = :industryId) " + "or (target_entity_type = 1 and entity_id in (select id from service_types where industry_id = :industryId)))" + "and reported_on > :start and reported_on <= :end", nativeQuery = true)
+   @Query(value = "select * from anomalies where anomaly_type_id in (select id from anomaly_types where (target_entity_type = 2 and entity_id = :industryId) " + "or (target_entity_type = 1 and entity_id in (select id from service_types where industry_id = :industryId)))" + "and reported_on > :start and reported_on <= :end", nativeQuery = true)
    List<Anomaly> findAllByIndustryIdAndReportedOnGreaterThanAndReportedOnLessThanEqual(Long industryId, Date start, Date end);
 
    @Query(value = "select * from anomalies where consumers_services_id in " + "(select id from consumers_services where service_id in" + "(select id from services where service_type_id = :serviceTypeId))" + "and reported_on > :start and reported_on <= :end", nativeQuery = true)
@@ -158,10 +125,7 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
    @Query(value = "SELECT * FROM anomalies WHERE id IN (:anomalyId) and anomaly_type_id = :anomalyTypeId", nativeQuery = true)
    Anomaly findByIdAndAnomalyType_Id(@Param("anomalyId") List<Long> anomalyId, @Param("anomalyTypeId") Long anomalyTypeId);
 
-    @Query(value = "SELECT * FROM anomalies WHERE id IN (:anomalyId) and anomaly_type_id = :anomalyTypeId", nativeQuery = true)
-    Anomaly findByIdAndAnomalyTypeId(@Param("anomalyId") Long anomalyId, @Param("anomalyTypeId") Long anomalyTypeId);
-
-    @Query(value = "select Distinct a from Anomaly a join ConsumerAnomaly ca on a.id = ca.anomaly.id join Consumer c on ca.consumer.id = c.id where c.consumerStatus in (:consumer_status) and a.status in (:anomalyStatus) and (:anomalyType is null or a.anomalyType.id = :anomalyType)")
+   @Query(value = "select Distinct a from Anomaly a join ConsumerAnomaly ca on a.id = ca.anomaly.id join Consumer c on ca.consumer.id = c.id where c.consumerStatus in (:consumer_status) and a.status in (:anomalyStatus) and (:anomalyType is null or a.anomalyType.id = :anomalyType)")
    Page<Anomaly> findAllByConsumerStatus(Pageable pageable, @Param("consumer_status") List<Integer> consumer_status, @Param("anomalyStatus") List<AnomalyStatus> anomalyStatus,@Param("anomalyType") Long anomalyType);
 
    @Query(value = "select Distinct a from Anomaly a join ConsumerAnomaly ca on a.id = ca.anomaly.id join Consumer c on ca.consumer.id = c.id where (coalesce(:anomalyStatus, null) is null or a.status in (:anomalyStatus)) and (coalesce(:resolutionStatus, null) is null or a.status in (:resolutionStatus))  and (:anomalyType is null or a.anomalyType.id = :anomalyType)")
@@ -198,7 +162,10 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
       "where consumers.serviceProvider.id in ?1 and a.status in ?2 and a.reportedOn between ?3 and ?4 group by name order by a.reportedOn")
    List<DashboardObjectInterface> countDistinctByConsumers_ServiceProvider_IdInAndStatusInAndReportedOnBetweenDateGroupByYearMonthDate(Collection<Long> ids, Collection<AnomalyStatus> statuses, Date reportedOnStart, Date reportedOnEnd);
 
+    @Query(value = "SELECT * FROM anomalies WHERE id IN (:anomalyId) and anomaly_type_id = :anomalyTypeId", nativeQuery = true)
+    Anomaly findByIdAndAnomalyTypeId(@Param("anomalyId") Long anomalyId, @Param("anomalyTypeId") Long anomalyTypeId);
 
-   long countByStatusNotIn(List<AnomalyStatus> statuses);
+
+    long countByStatusNotIn(List<AnomalyStatus> statuses);
 
 }
