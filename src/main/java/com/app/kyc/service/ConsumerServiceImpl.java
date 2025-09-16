@@ -2266,7 +2266,7 @@ System.out.println("Get all flagged ");
 
         AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Incomplete Data");
 
-        List<Consumer> tempConsumer = consumerRepository.findConsumerIdsByMsisdnAndConsumerStatusAndIdNumberAndIdTypeAndServiceProviderID(consumer.getMsisdn(), 0, consumer.getIdentificationType(), consumer.getIdentificationNumber(), consumer.getServiceProvider().getId());
+        List<Consumer> tempConsumer = consumerRepository.findConsumerIdsByMsisdnAndIdNumberAndIdTypeAndServiceProviderID(consumer.getMsisdn(), consumer.getIdentificationType(), consumer.getIdentificationNumber(), consumer.getServiceProvider().getId());
         List<Long> consumerIds = tempConsumer.stream().map(Consumer::getId).collect(Collectors.toList());
         List<Long> consumerAnomalies = consumerAnomalyRepository.findAnomaliesIdByConsumerAndAnomalyTypeId(consumerIds, anomalyType.getId());
 
@@ -2357,8 +2357,8 @@ System.out.println("Get all flagged ");
     private void resolveIncompleteAnomaly(Consumer consumer,User user){
         AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Incomplete Data");
 
-        List<Consumer> tempConsumer = consumerRepository.findConsumerIdsByMsisdnAndConsumerStatusAndIdNumberAndIdTypeAndServiceProviderID(
-                consumer.getMsisdn(), 0, consumer.getIdentificationType(),
+        List<Consumer> tempConsumer = consumerRepository.findConsumerIdsByMsisdnAndIdNumberAndIdTypeAndServiceProviderID(
+                consumer.getMsisdn(), consumer.getIdentificationType(),
                 consumer.getIdentificationNumber(), consumer.getServiceProvider().getId());
         List<Long> consumerIds = tempConsumer.stream().map(Consumer::getId).collect(Collectors.toList());
 
@@ -2842,12 +2842,9 @@ System.out.println("Get all flagged ");
     
     private void softDeleteConsistentUsers(Consumer consumer){
         
-        List<Consumer> tempConsumer = consumerRepository.findConsumerIdsByMsisdnAndConsumerStatusAndIdNumberAndIdTypeAndServiceProviderID(
-            consumer.getMsisdn(), 0, consumer.getIdentificationType(),
+        List<Consumer> tempConsumer = consumerRepository.findConsumerIdsByMsisdnAndIdNumberAndIdTypeAndServiceProviderID(
+            consumer.getMsisdn(), consumer.getIdentificationType(),
             consumer.getIdentificationNumber(), consumer.getServiceProvider().getId());
-//        List<Consumer> previousConsumers = consumerRepository.findConsumerIdsByMsisdnAndConsumerStatusAndIdNumberAndIdTypeAndServiceProviderID(
-//            consumer.getMsisdn(), 1, consumer.getIdentificationType(),
-//            consumer.getIdentificationNumber(), consumer.getServiceProvider().getId());
         List<Long> consumerIds = tempConsumer.stream().map(Consumer::getId).collect(Collectors.toList());
         List<Long> consumerAnomalies = consumerAnomalyRepository.findAnomaliesIdByConsumer(consumerIds);
 
@@ -2994,21 +2991,25 @@ System.out.println("Get all flagged ");
      */
     public void updateConsistencyFlag(Consumer consumer) {
         boolean consistent = true;
+        List<String> reasons = new ArrayList<>();
 
         // 🔹 Rule 1: Mandatory fields
-        if (isNullOrEmpty(consumer.getMsisdn()) ||
-                isNullOrEmpty(consumer.getRegistrationDate()) ||
-                isNullOrEmpty(consumer.getFirstName()) ||
-                isNullOrEmpty(consumer.getLastName()) ||
-                isNullOrEmpty(consumer.getMiddleName()) ||    // middle name
-                isNullOrEmpty(consumer.getGender()) ||
-                isNullOrEmpty(consumer.getBirthDate()) ||     // birth date
-                isNullOrEmpty(consumer.getBirthPlace()) ||    // birth place
-                isNullOrEmpty(consumer.getAddress()) ||
-                isNullOrEmpty(consumer.getIdentificationType()) ||
-                isNullOrEmpty(consumer.getIdentificationNumber()) ||
-                isNullOrEmpty(consumer.getAlternateMsisdn1()) ||
-                isNullOrEmpty(consumer.getAlternateMsisdn2())) {
+        if (isNullOrEmpty(consumer.getMsisdn())) reasons.add("MSISDN is null/empty");
+        if (isNullOrEmpty(consumer.getRegistrationDate())) reasons.add("RegistrationDate is null/empty");
+        if (isNullOrEmpty(consumer.getFirstName())) reasons.add("FirstName is null/empty");
+        if (isNullOrEmpty(consumer.getLastName())) reasons.add("LastName is null/empty");
+        if (isNullOrEmpty(consumer.getMiddleName())) reasons.add("MiddleName is null/empty");
+        if (isNullOrEmpty(consumer.getGender())) reasons.add("Gender is null/empty");
+        if (isNullOrEmpty(consumer.getBirthDate())) reasons.add("BirthDate is null/empty");
+        if (isNullOrEmpty(consumer.getBirthPlace())) reasons.add("BirthPlace is null/empty");
+        if (isNullOrEmpty(consumer.getAddress())) reasons.add("Address is null/empty");
+        if (isNullOrEmpty(consumer.getIdentificationType())) reasons.add("IdentificationType is null/empty");
+        if (isNullOrEmpty(consumer.getIdentificationNumber())) reasons.add("IdentificationNumber is null/empty");
+        if (isNullOrEmpty(consumer.getAlternateMsisdn1())) reasons.add("AlternateMsisdn1 is null/empty");
+        if (isNullOrEmpty(consumer.getAlternateMsisdn2())) reasons.add("AlternateMsisdn2 is null/empty");
+
+        // If any mandatory field missing
+        if (!reasons.isEmpty()) {
             consistent = false;
         }
 
@@ -3017,6 +3018,7 @@ System.out.println("Get all flagged ");
             long count = consumerRepository.countByMsisdn(consumer.getMsisdn());
             if (count > 1) {
                 consistent = false;
+                reasons.add("Duplicate MSISDN found: " + consumer.getMsisdn());
             }
         }
 
@@ -3028,10 +3030,19 @@ System.out.println("Get all flagged ");
             );
             if (count > 2) {
                 consistent = false;
+                reasons.add("Duplicate ID+Type found: " +
+                        consumer.getIdentificationNumber() + " / " + consumer.getIdentificationType());
             }
         }
 
         consumer.setIsConsistent(consistent);
+
+        if (!consistent) {
+            log.warn("Consumer id={} marked INCONSISTENT → reasons={}",
+                    consumer.getId(), String.join("; ", reasons));
+        } else {
+            log.info("Consumer id={} is CONSISTENT", consumer.getId());
+        }
     }
 
 

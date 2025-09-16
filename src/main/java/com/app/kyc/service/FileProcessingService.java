@@ -491,6 +491,7 @@ public class FileProcessingService {
         final Timestamp nowTs = new Timestamp(System.currentTimeMillis());
         int total = 0;
 
+        // 🔹 Consumers to update/save
         List<Consumer> toSave = new ArrayList<>();
         List<Consumer> duplicatesToSoftDelete = new ArrayList<>();
 
@@ -516,35 +517,32 @@ public class FileProcessingService {
                 RowData r = mapRowVodacom(row, spId, nowTs);
                 if (r == null) continue;
 
+                // Normalize MSISDN
                 r.msisdn = normalizeMsisdnAllowNull(r.msisdn);
 
-                // 🔹 Deduplication-aware match
+                // 🔹 Try to find an existing consumer
                 Consumer consumer = findOrMergeConsumer(r, duplicatesToSoftDelete);
+
+                // 🔹 Merge data into consumer (update only if missing)
                 mergeConsumerFields(consumer, r, nowTs, spId);
 
-                // 🔹 Delegate consistency check to ConsumerServiceImpl
+                // 🔹 Update consistency flag
                 consumerServiceImpl.updateConsistencyFlag(consumer);
 
                 toSave.add(consumer);
 
+                // 🔹 Batch flush
                 if (toSave.size() >= BATCH_SIZE) {
-                    if (!duplicatesToSoftDelete.isEmpty()) {
-                        toSave.addAll(duplicatesToSoftDelete);
-                        duplicatesToSoftDelete.clear();
-                    }
-                    consumerRepository.saveAll(toSave);
+                    flushBatch(toSave, duplicatesToSoftDelete);
                     total += toSave.size();
                     toSave.clear();
                 }
             }
 
             if (!toSave.isEmpty()) {
-                if (!duplicatesToSoftDelete.isEmpty()) {
-                    toSave.addAll(duplicatesToSoftDelete);
-                    duplicatesToSoftDelete.clear();
-                }
-                consumerRepository.saveAll(toSave);
+                flushBatch(toSave, duplicatesToSoftDelete);
                 total += toSave.size();
+                toSave.clear();
             }
         }
 
