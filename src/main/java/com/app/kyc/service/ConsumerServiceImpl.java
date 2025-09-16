@@ -2220,77 +2220,7 @@ System.out.println("Get all flagged ");
             log.info("checkConsumer done | operator={} processed={} in {} ms", serviceProvider.getName(), processed, totalMs);
         }
 
-    @Transactional
-    private void extracted(User user) {
-        List<Consumer> consumersListFromDB = consumerRepository.findAll();
-        AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Duplicate Records");
 
-        // ✅ log and skip consumers with null msisdn
-        consumersListFromDB.stream()
-                .filter(c -> c.getMsisdn() == null)
-                .forEach(c -> System.out.println("⚠ Skipping consumer with null msisdn → id=" + c.getId()));
-
-        // ✅ group only valid consumers by msisdn
-        Map<String, List<Consumer>> consumersByMsisdn =
-                consumersListFromDB.stream()
-                        .filter(c -> c.getMsisdn() != null)
-                        .collect(Collectors.groupingBy(Consumer::getMsisdn));
-        
-        for (Map.Entry<String, List<Consumer>> entry : consumersByMsisdn.entrySet()) {
-            String msisdn = entry.getKey();
-            List<Consumer> relatedConsumers = entry.getValue();
-
-            System.out.println("Checking MSISDN=" + msisdn);
-            relatedConsumers.forEach(c ->
-                    System.out.println("Consumer " + c.getId() + " → isConsistent=" + c.getIsConsistent())
-            );
-
-            // collect ids for this msisdn (status 0 + 1)
-            List<Long> consumerIds = new ArrayList<>();
-            consumerIds.addAll(consumerRepository.findConsumerIdsByMsisdnAndConsumerStatus(msisdn, 0));
-            consumerIds.addAll(consumerRepository.findConsumerIdsByMsisdnAndConsumerStatus(msisdn, 1));
-
-            if (!consumerIds.isEmpty()) {
-                List<Long> consumerAnomalies =
-                        consumerAnomalyRepository.findAnomaliesIdByConsumerAndAnomalyTypeId(consumerIds, anomalyType.getId());
-
-                if (!consumerAnomalies.isEmpty()) {
-                    for (Long anomalyId : consumerAnomalies) {
-                        Anomaly anomaly = anomalyRepository.findByIdAndAnomalyTypeId(anomalyId, anomalyType.getId());
-
-                        if (anomaly != null && anomaly.getStatus().getCode() == 4) {
-                            // ✅ check consistency
-                            boolean allConsistent = relatedConsumers.stream()
-                                    .allMatch(c -> Boolean.TRUE.equals(c.getIsConsistent()));
-
-                            if (allConsistent) {
-                                System.out.println("MSISDN=" + msisdn + " → RESOLVED_FULLY");
-                                anomaly.setStatus(AnomalyStatus.RESOLVED_FULLY);
-                            } else {
-                                System.out.println("MSISDN=" + msisdn + " → RESOLVED_PARTIALLY");
-                                anomaly.setStatus(AnomalyStatus.RESOLVED_PARTIALLY);
-                            }
-
-                            anomalyRepository.save(anomaly);
-
-                            String consistentOnDate = LocalDateTime.now()
-                                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-
-                            anomalyTrackingRepository.save(new AnomalyTracking(
-                                    anomaly,
-                                    new Date(),
-                                    anomaly.getStatus(),
-                                    "",
-                                    user.getFirstName() + " " + user.getLastName(),
-                                    anomaly.getUpdatedOn(),
-                                    consistentOnDate
-                            ));
-                        }
-                    }
-                }
-            }
-        }
-    }
 
 
     // ======== helpers (same assumptions as your code) ========
@@ -2560,7 +2490,7 @@ System.out.println("Get all flagged ");
         if (!hasText(msisdn)) return; // (you already handle blank/null case separately)
 
         // 1) Fetch ALL rows with this MSISDN (ignore status)
-        List<Consumer> sameMsisdnAnyStatus = consumerRepository.findByMsisdn(msisdn);
+        List<Consumer> sameMsisdnAnyStatus = consumerRepository.findAllByMsisdn(msisdn);
 
         // Ensure current consumer is included
         if (sameMsisdnAnyStatus.stream().noneMatch(c -> Objects.equals(c.getId(), consumer.getId()))) {
@@ -2627,9 +2557,9 @@ System.out.println("Get all flagged ");
             }
         }
 
-        long activeCnt = consumerRepository.findByMsisdn(msisdn)
+        long activeCnt = consumerRepository.findAllByMsisdn(msisdn)
                 .stream().filter(c -> Integer.valueOf(0).equals(c.getConsumerStatus())).count();
-        long totalCnt = consumerRepository.findByMsisdn(msisdn).size();
+        long totalCnt = consumerRepository.findAllByMsisdn(msisdn).size();
         log.info("MSISDN={} activeCnt={} totalCnt={}", msisdn, activeCnt, totalCnt);
 
         consumerRepository.markConsumersConsistent(0, ids);
@@ -3025,32 +2955,97 @@ System.out.println("Get all flagged ");
     }
 
 
-    private void extractedCon() {
-
+    @Transactional
+    public void extractedCon() {
         List<Consumer> consumerList = consumerRepository.findAll();
-        if(consumerList.size()>0) {
-            for (Consumer consumer : consumerList) {
-                if (consumer.getMsisdn() == null) {
-                    consumer.setIsConsistent(true); // no MSISDN → default to consistent
-                    return;
-                }
-                System.out.println("consumer.getMsisdn() values are " + consumer.getMsisdn());
-                List<Consumer> sameMsisdn = consumerRepository.findByMsisdn(consumer.getMsisdn());
 
-                if (sameMsisdn.size() > 1) {
-                    // mark all as inconsistent
-                    System.out.println("sameMsisdn values are " + consumer.getMsisdn());
-                    sameMsisdn.forEach(c -> c.setIsConsistent(false));
-                    consumerRepository.saveAll(sameMsisdn);
-                } else {
-                    System.out.println("not sameMsisdn values are " + consumer.getMsisdn());
-                    // unique → consistent
-                    sameMsisdn.forEach(c -> c.setIsConsistent(true));
-                    consumerRepository.saveAll(sameMsisdn);
-                }
+        if (consumerList.isEmpty()) {
+            log.info("No consumers found for consistency check");
+            return;
+        }
 
-                System.out.println("consumer.getMsisdn() values after are " + consumer.getMsisdn());
+        log.info("Running consistency check for {} consumers", consumerList.size());
+
+        List<Consumer> toUpdate = new ArrayList<>();
+
+        for (Consumer consumer : consumerList) {
+            try {
+                // ✅ Use centralized logic from ConsumerServiceImpl
+                updateConsistencyFlag(consumer);
+                toUpdate.add(consumer);
+            } catch (Exception e) {
+                log.warn("Failed consistency check for consumer id={} msisdn={}",
+                        consumer.getId(), consumer.getMsisdn(), e);
             }
         }
+
+        if (!toUpdate.isEmpty()) {
+            consumerRepository.saveAllAndFlush(toUpdate);
+            log.info("Consistency flags updated for {} consumers", toUpdate.size());
+        }
     }
+
+
+    /**
+     * Marks consumer consistent or inconsistent based on:
+     *  - missing mandatory fields (msisdn, registrationDate, firstName, lastName, address, alt msisdns, etc.)
+     *  - duplicate msisdn
+     *  - duplicate ID number + type
+     */
+    public void updateConsistencyFlag(Consumer consumer) {
+        boolean consistent = true;
+
+        // 🔹 Rule 1: Mandatory fields
+        if (isNullOrEmpty(consumer.getMsisdn()) ||
+                isNullOrEmpty(consumer.getRegistrationDate()) ||
+                isNullOrEmpty(consumer.getFirstName()) ||
+                isNullOrEmpty(consumer.getLastName()) ||
+                isNullOrEmpty(consumer.getMiddleName()) ||    // middle name
+                isNullOrEmpty(consumer.getGender()) ||
+                isNullOrEmpty(consumer.getBirthDate()) ||     // birth date
+                isNullOrEmpty(consumer.getBirthPlace()) ||    // birth place
+                isNullOrEmpty(consumer.getAddress()) ||
+                isNullOrEmpty(consumer.getIdentificationType()) ||
+                isNullOrEmpty(consumer.getIdentificationNumber()) ||
+                isNullOrEmpty(consumer.getAlternateMsisdn1()) ||
+                isNullOrEmpty(consumer.getAlternateMsisdn2())) {
+            consistent = false;
+        }
+
+        // 🔹 Rule 2: Duplicate MSISDN
+        if (consistent && consumer.getMsisdn() != null) {
+            long count = consumerRepository.countByMsisdn(consumer.getMsisdn());
+            if (count > 1) {
+                consistent = false;
+            }
+        }
+
+        // 🔹 Rule 3: Duplicate ID (idNumber + idType)
+        if (consistent && consumer.getIdentificationNumber() != null && consumer.getIdentificationType() != null) {
+            long count = consumerRepository.countByIdentificationNumberAndIdentificationType(
+                    consumer.getIdentificationNumber(),
+                    consumer.getIdentificationType()
+            );
+            if (count > 2) {
+                consistent = false;
+            }
+        }
+
+        consumer.setIsConsistent(consistent);
+    }
+
+
+    private boolean isNullOrEmpty(String s) {
+        return (s == null || s.trim().isEmpty());
+    }
+
+
+
+
+    private boolean isEmpty(String s) {
+        return (s == null || s.trim().isEmpty());
+    }
+
+
+
 }

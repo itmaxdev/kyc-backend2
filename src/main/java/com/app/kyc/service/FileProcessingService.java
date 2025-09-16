@@ -483,12 +483,14 @@ public class FileProcessingService {
     }*/
 
 
+    // remove the old private updateConsistencyFlag(Consumer) from FileProcessingService
+
+    // ✅ Ingest method now delegates to ConsumerServiceImpl
     @Transactional(rollbackFor = Exception.class)
     protected int ingestFileTxVodacom(Path workingCopy, Long spId, char sep, Charset cs) throws Exception {
         final Timestamp nowTs = new Timestamp(System.currentTimeMillis());
         int total = 0;
 
-        // 🔹 Collect active and soft-deleted consumers
         List<Consumer> toSave = new ArrayList<>();
         List<Consumer> duplicatesToSoftDelete = new ArrayList<>();
 
@@ -520,13 +522,12 @@ public class FileProcessingService {
                 Consumer consumer = findOrMergeConsumer(r, duplicatesToSoftDelete);
                 mergeConsumerFields(consumer, r, nowTs, spId);
 
-                // 🔹 Re-check consistency
-                updateConsistencyFlag(consumer);
+                // 🔹 Delegate consistency check to ConsumerServiceImpl
+                consumerServiceImpl.updateConsistencyFlag(consumer);
 
                 toSave.add(consumer);
 
                 if (toSave.size() >= BATCH_SIZE) {
-                    // Include soft-deletes in this batch
                     if (!duplicatesToSoftDelete.isEmpty()) {
                         toSave.addAll(duplicatesToSoftDelete);
                         duplicatesToSoftDelete.clear();
@@ -551,6 +552,50 @@ public class FileProcessingService {
     }
 
 
+    /*private void updateConsistencyFlag(Consumer consumer) {
+        // Rule 1: If any mandatory field is null → inconsistent
+        if (isNullOrEmpty(consumer.getMsisdn()) ||
+                isNullOrEmpty(consumer.getRegistrationDate()) ||
+                isNullOrEmpty(consumer.getFirstName()) ||
+                isNullOrEmpty(consumer.getLastName()) ||
+                isNullOrEmpty(consumer.getGender()) ||
+                isNullOrEmpty(consumer.getBirthDate()) ||
+                isNullOrEmpty(consumer.getBirthPlace()) ||
+                isNullOrEmpty(consumer.getAddress()) ||
+                isNullOrEmpty(consumer.getIdentificationType()) ||
+                isNullOrEmpty(consumer.getIdentificationNumber()) ||
+                isNullOrEmpty(consumer.getAlternateMsisdn1()) ||
+                isNullOrEmpty(consumer.getAlternateMsisdn2())) {
+            consumer.setIsConsistent(false);
+            return;
+        }
+
+        // Rule 2: Check duplicates by MSISDN
+        if (consumer.getMsisdn() != null) {
+            List<Consumer> sameMsisdn = consumerRepository.findByMsisdnAndServiceProvider_Id(
+                    consumer.getMsisdn(), consumer.getServiceProvider().getId());
+            if (sameMsisdn.size() > 1) {
+                consumer.setIsConsistent(false);
+                return;
+            }
+        }
+
+        // Rule 3: More than 2 consumers with same ID number + type
+        if (consumer.getIdentificationNumber() != null && consumer.getIdentificationType() != null) {
+            List<Consumer> sameId = consumerRepository
+                    .findByIdentificationTypeAndIdentificationNumberAndServiceProvider_Id(
+                            consumer.getIdentificationType(),
+                            consumer.getIdentificationNumber(),
+                            consumer.getServiceProvider().getId());
+            if (sameId.size() > 2) {
+                consumer.setIsConsistent(false);
+                return;
+            }
+        }
+
+        // If passed all checks → consistent
+        consumer.setIsConsistent(true);
+    }*/
 
 
 
@@ -608,7 +653,7 @@ public class FileProcessingService {
                 mergeConsumerFields(consumer, r, nowTs, spId);
 
                 // 🔹 Re-check consistency
-                updateConsistencyFlag(consumer);
+                consumerServiceImpl.updateConsistencyFlag(consumer);
 
                 toSave.add(consumer);
 
@@ -624,6 +669,7 @@ public class FileProcessingService {
 
         return total;
     }
+
 
 
     private int flushBatch(List<Consumer> toSave, List<Consumer> duplicatesToSoftDelete) throws InterruptedException {
@@ -691,7 +737,7 @@ public class FileProcessingService {
                 RowData r = mapRowOrange(row, spId, nowTs);
                 if (r == null) continue;
 
-                // Normalize & clip
+                // 🔹 Normalize & clip
                 r.msisdn             = normalizeMsisdnAllowNull(r.msisdn);
                 r.firstName          = clip(r.firstName, 100);
                 r.middleName         = clip(r.middleName, 255);
@@ -708,10 +754,11 @@ public class FileProcessingService {
                 // 🔹 Use Specification for matching
                 Specification<Consumer> spec = ConsumerSpecifications.matchConsumer(r);
                 List<Consumer> matches = consumerRepository.findAll(spec);
-                Consumer existing = matches.isEmpty() ? null : matches.get(0);
+                Consumer consumer = matches.isEmpty() ? new Consumer() : matches.get(0);
 
-                if (existing != null) {
-                    // Update empty fields
+                // ✅ Merge/update fields
+                if (!matches.isEmpty()) {
+                    Consumer existing = consumer;
                     if (isEmpty(existing.getMsisdn()) && notEmpty(r.msisdn)) existing.setMsisdn(r.msisdn);
                     if (isEmpty(existing.getFirstName()) && notEmpty(r.firstName)) existing.setFirstName(r.firstName);
                     if (isEmpty(existing.getLastName()) && notEmpty(r.lastName)) existing.setLastName(r.lastName);
@@ -721,39 +768,39 @@ public class FileProcessingService {
                     if (isEmpty(existing.getBirthPlace()) && notEmpty(r.birthPlace)) existing.setBirthPlace(r.birthPlace);
                     if (isEmpty(existing.getAddress()) && notEmpty(r.address)) existing.setAddress(r.address);
                     if (isEmpty(existing.getRegistrationDate()) && notEmpty(r.registrationDateStr)) existing.setRegistrationDate(r.registrationDateStr);
-
-
                     if (isEmpty(existing.getBirthDate()) && notEmpty(r.birthDateStr)) existing.setBirthDate(r.birthDateStr);
                     if (isEmpty(existing.getAlternateMsisdn1()) && notEmpty(r.alt1)) existing.setAlternateMsisdn1(r.alt1);
                     if (isEmpty(existing.getAlternateMsisdn2()) && notEmpty(r.alt2)) existing.setAlternateMsisdn2(r.alt2);
                     if (isEmpty(existing.getMiddleName()) && notEmpty(r.middleName)) existing.setMiddleName(r.middleName);
 
-                    toSave.add(existing);
-
+                    consumer = existing;
                 } else {
-                    // Insert new consumer
-                    Consumer newC = new Consumer();
-                    newC.setFirstName(r.firstName);
-                    newC.setLastName(r.lastName);
-                    newC.setIdentificationNumber(r.idNumber);
-                    newC.setIdentificationType(r.idType);
-                    newC.setMsisdn(r.msisdn);
-                    newC.setGender(r.gender);
-                    newC.setBirthPlace(r.birthPlace);
-                    newC.setAddress(r.address);
-                    newC.setRegistrationDate(r.registrationDateStr);
-                    newC.setBirthDate(r.birthDateStr);
-                    newC.setMiddleName(r.middleName);
-                    newC.setAlternateMsisdn2(r.alt2);
-                    newC.setAlternateMsisdn1(r.alt1);
+                    // New consumer
+                    consumer.setFirstName(r.firstName);
+                    consumer.setLastName(r.lastName);
+                    consumer.setIdentificationNumber(r.idNumber);
+                    consumer.setIdentificationType(r.idType);
+                    consumer.setMsisdn(r.msisdn);
+                    consumer.setGender(r.gender);
+                    consumer.setBirthPlace(r.birthPlace);
+                    consumer.setAddress(r.address);
+                    consumer.setRegistrationDate(r.registrationDateStr);
+                    consumer.setBirthDate(r.birthDateStr);
+                    consumer.setMiddleName(r.middleName);
+                    consumer.setAlternateMsisdn1(r.alt1);
+                    consumer.setAlternateMsisdn2(r.alt2);
+
                     ServiceProvider spRef = new ServiceProvider();
                     spRef.setId(spId);
-                    newC.setServiceProvider(spRef);
+                    consumer.setServiceProvider(spRef);
 
-                    newC.setCreatedOn(nowTs.toString()); // better: LocalDateTime
-
-                    toSave.add(newC);
+                    consumer.setCreatedOn(nowTs.toString());
                 }
+
+                // 🔹 Apply consistency check
+                consumerServiceImpl.updateConsistencyFlag(consumer);
+
+                toSave.add(consumer);
 
                 // Batch flush
                 if (toSave.size() >= BATCH_SIZE) {
@@ -771,6 +818,7 @@ public class FileProcessingService {
 
         return total;
     }
+
 
 
     @Transactional(rollbackFor = Exception.class)
@@ -1110,14 +1158,14 @@ public class FileProcessingService {
 
 
     /** Utility: mark consumer consistent/inconsistent based on MSISDN duplicates. */
-    private void updateConsistencyFlag(Consumer consumer) {
-        if (consumer.getMsisdn() == null) {
-            consumer.setIsConsistent(true); // no MSISDN → default to consistent
-            return;
-        }
-        List<Consumer> sameMsisdn = consumerRepository.findByMsisdn(consumer.getMsisdn());
-        consumer.setIsConsistent(sameMsisdn.size() <= 1);
+
+
+    // small helper
+    private boolean isNullOrEmpty(String s) {
+        return (s == null || s.trim().isEmpty());
     }
+
+
 
 
 
