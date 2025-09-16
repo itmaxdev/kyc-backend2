@@ -334,15 +334,16 @@ public class AnomalyServiceImpl implements AnomalyService
       Anomaly anomaly = anomalyRepository.findById(id)
               .orElseThrow(() -> new RuntimeException("Anomaly not found with id: " + id));
 
-      AnomlyDto anomlyDto;
-      if (anomaly.getStatus().getCode() == 5) {
+      //todo for test
+     AnomlyDto anomlyDto;
+      if (anomaly.getStatus().getCode() == 6) {
          anomlyDto = new AnomlyDto(anomaly, 0);
       } else {
          anomlyDto = new AnomlyDto(anomaly);
       }
 
       // ✅ Fetch anomaly tracking (deduplicate by status)
-      List<AnomalyTrackingDto> anomalyTracking = anomalyTrackingRepository.findAllByAnomalyIdOrderByCreatedOnDesc(id)
+      List<AnomalyTrackingDto> anomalyTracking = anomalyTrackingRepository.findDistinctByAnomalyIdOrderByCreatedOnDesc(id)
               .stream()
               .map(c -> {
                  String finalNote;
@@ -382,18 +383,27 @@ public class AnomalyServiceImpl implements AnomalyService
               ));
 
       // ✅ Fetch consumers linked to anomaly
+      // ✅ Fetch consumers linked to anomaly (deduplicate by consumerId, ignore duplicate notes)
       List<ConsumerDto> consumerDtos = consumerAnomalyRepository.findByAnomaly_Id(id)
               .stream()
-              .map(ca -> {
-                 ConsumerDto consumerDto = new ConsumerDto(ca.getConsumer());
-                 if (Objects.nonNull(ca.getNotes())) {
-                    consumerDto.setNotes(ca.getNotes());
-                 }
-                 return consumerDto;
-              })
+              .collect(Collectors.toMap(
+                      ca -> ca.getConsumer().getId(),  // use consumerId as key
+                      ca -> {
+                         ConsumerDto dto = new ConsumerDto(ca.getConsumer());
+                         if (Objects.nonNull(ca.getNotes())) {
+                            dto.setNotes(ca.getNotes());
+                         }
+                         return dto;
+                      },
+                      (existing, duplicate) -> existing, // keep the first occurrence, ignore duplicates
+                      LinkedHashMap::new
+              ))
+              .values()
+              .stream()
               .collect(Collectors.toList());
 
       anomlyDto.setConsumers(consumerDtos);
+
 
       // ✅ Enrich tracking data with consumer notes (if anomaly type = 1)
       anomalyTracking.forEach(tracking -> {
