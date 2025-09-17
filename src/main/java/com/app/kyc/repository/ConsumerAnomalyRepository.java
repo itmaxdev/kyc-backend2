@@ -46,6 +46,7 @@ public interface ConsumerAnomalyRepository extends JpaRepository<ConsumerAnomaly
 
     List<ConsumerAnomaly> findByConsumer_IdAndAnomaly_Id(Long consumer_id, Long anomaly_id);
 
+    List<ConsumerAnomaly> findByConsumer_Id(Long consumer_id);
 
     @Transactional
     List<ConsumerAnomaly> deleteAllByConsumerIn(List<Consumer> consumers);

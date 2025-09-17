@@ -527,7 +527,8 @@ public class FileProcessingService {
                 mergeConsumerFields(consumer, r, nowTs, spId);
 
                 // 🔹 Update consistency flag
-                consumerServiceImpl.updateConsistencyFlag(consumer);
+                User user = userService.getUserByEmail("system@test.com");
+                consumerServiceImpl.updateConsistencyFlag(consumer,user);
 
                 toSave.add(consumer);
 
@@ -651,7 +652,8 @@ public class FileProcessingService {
                 mergeConsumerFields(consumer, r, nowTs, spId);
 
                 // 🔹 Re-check consistency
-                consumerServiceImpl.updateConsistencyFlag(consumer);
+                User user = userService.getUserByEmail("system@test.com");
+                consumerServiceImpl.updateConsistencyFlag(consumer,user);
 
                 toSave.add(consumer);
 
@@ -796,7 +798,8 @@ public class FileProcessingService {
                 }
 
                 // 🔹 Apply consistency check
-                consumerServiceImpl.updateConsistencyFlag(consumer);
+                User user = userService.getUserByEmail("system@test.com");
+                consumerServiceImpl.updateConsistencyFlag(consumer,user);
 
                 toSave.add(consumer);
 
