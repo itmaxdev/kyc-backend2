@@ -1212,12 +1212,25 @@ System.out.println("Get all flagged ");
                         }, Collectors.toList())
                 ));
 
-        // NEW: counts per anomalyId -> effectedRecords
+        /*// NEW: counts per anomalyId -> effectedRecords
         Map<Long, Long> effectedCountByAnomalyId = links.stream()
                 .collect(Collectors.groupingBy(
                         ca -> ca.getAnomaly().getId(),
                         Collectors.counting()
+                ));*/
+
+        Map<Long, Long> effectedCountByAnomalyId = links.stream()
+                .collect(Collectors.groupingBy(
+                        ca -> ca.getAnomaly().getId(),
+                        Collectors.mapping(
+                                ca -> ca.getConsumer().getId(), // extract consumerId
+                                Collectors.collectingAndThen(
+                                        Collectors.toSet(),
+                                        set -> (long) set.size()
+                                )
+                        )
                 ));
+
 
         Map<Long, Map<Long, String>> notesByAnomalyThenConsumer = new HashMap<>();
         for (ConsumerAnomaly ca : links) {
@@ -2435,7 +2448,11 @@ System.out.println("Get all flagged ");
                     //resolved old anomalies
                     anomaly.setStatus(AnomalyStatus.RESOLVED_FULLY);
                     anomalyRepository.save(anomaly);
-                    AnomalyTracking anomalyTracking = new AnomalyTracking(anomaly, new Date(), AnomalyStatus.RESOLVED_FULLY, "", user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn(),"16-09-2025");
+
+                    LocalDateTime now = LocalDateTime.now();
+                    String formattedDate = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+                    System.out.println(formattedDate);
+                    AnomalyTracking anomalyTracking = new AnomalyTracking(anomaly, new Date(), AnomalyStatus.RESOLVED_FULLY, "", user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn(),formattedDate);
                     anomalyTrackingRepository.save(anomalyTracking);
                 }
                 if (anomaly.getStatus().getCode() == 0 || anomaly.getStatus().getCode() == 1 ||
