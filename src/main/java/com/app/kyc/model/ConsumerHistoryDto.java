@@ -6,13 +6,15 @@ public class ConsumerHistoryDto {
     private String note;
     private String inConsistentOn;
     private String consistentOn;
+    private String formattedId;
     
-	public ConsumerHistoryDto(String status, String note, String inConsistentOn,String consistentOn) {
+	public ConsumerHistoryDto(String status, String note, String inConsistentOn,String consistentOn,String formattedId) {
 		super();
 		this.status = status;
 		this.note = note;
 		this.inConsistentOn = inConsistentOn;
 		this.consistentOn = consistentOn;
+		this.formattedId = formattedId;
 	}
 	
 	public String getStatus() {
@@ -38,5 +40,13 @@ public class ConsumerHistoryDto {
 	}
 	public void setInConsistentOn(String inConsistentOn) {
 		this.inConsistentOn = inConsistentOn;
+	}
+
+	public String getFormattedId() {
+		return formattedId;
+	}
+
+	public void setFormattedId(String formattedId) {
+		this.formattedId = formattedId;
 	}
 }
