@@ -527,8 +527,7 @@ public class FileProcessingService {
                 mergeConsumerFields(consumer, r, nowTs, spId);
 
                 // 🔹 Update consistency flag
-                User user = userService.getUserByEmail("system@test.com");
-                consumerServiceImpl.updateConsistencyFlag(consumer,user);
+                consumerServiceImpl.updateConsistencyFlag(consumer);
 
                 toSave.add(consumer);
 
@@ -551,50 +550,6 @@ public class FileProcessingService {
     }
 
 
-    /*private void updateConsistencyFlag(Consumer consumer) {
-        // Rule 1: If any mandatory field is null → inconsistent
-        if (isNullOrEmpty(consumer.getMsisdn()) ||
-                isNullOrEmpty(consumer.getRegistrationDate()) ||
-                isNullOrEmpty(consumer.getFirstName()) ||
-                isNullOrEmpty(consumer.getLastName()) ||
-                isNullOrEmpty(consumer.getGender()) ||
-                isNullOrEmpty(consumer.getBirthDate()) ||
-                isNullOrEmpty(consumer.getBirthPlace()) ||
-                isNullOrEmpty(consumer.getAddress()) ||
-                isNullOrEmpty(consumer.getIdentificationType()) ||
-                isNullOrEmpty(consumer.getIdentificationNumber()) ||
-                isNullOrEmpty(consumer.getAlternateMsisdn1()) ||
-                isNullOrEmpty(consumer.getAlternateMsisdn2())) {
-            consumer.setIsConsistent(false);
-            return;
-        }
-
-        // Rule 2: Check duplicates by MSISDN
-        if (consumer.getMsisdn() != null) {
-            List<Consumer> sameMsisdn = consumerRepository.findByMsisdnAndServiceProvider_Id(
-                    consumer.getMsisdn(), consumer.getServiceProvider().getId());
-            if (sameMsisdn.size() > 1) {
-                consumer.setIsConsistent(false);
-                return;
-            }
-        }
-
-        // Rule 3: More than 2 consumers with same ID number + type
-        if (consumer.getIdentificationNumber() != null && consumer.getIdentificationType() != null) {
-            List<Consumer> sameId = consumerRepository
-                    .findByIdentificationTypeAndIdentificationNumberAndServiceProvider_Id(
-                            consumer.getIdentificationType(),
-                            consumer.getIdentificationNumber(),
-                            consumer.getServiceProvider().getId());
-            if (sameId.size() > 2) {
-                consumer.setIsConsistent(false);
-                return;
-            }
-        }
-
-        // If passed all checks → consistent
-        consumer.setIsConsistent(true);
-    }*/
 
 
 
@@ -652,8 +607,7 @@ public class FileProcessingService {
                 mergeConsumerFields(consumer, r, nowTs, spId);
 
                 // 🔹 Re-check consistency
-                User user = userService.getUserByEmail("system@test.com");
-                consumerServiceImpl.updateConsistencyFlag(consumer,user);
+                consumerServiceImpl.updateConsistencyFlag(consumer);
 
                 toSave.add(consumer);
 
@@ -798,8 +752,7 @@ public class FileProcessingService {
                 }
 
                 // 🔹 Apply consistency check
-                User user = userService.getUserByEmail("system@test.com");
-                consumerServiceImpl.updateConsistencyFlag(consumer,user);
+                consumerServiceImpl.updateConsistencyFlag(consumer);
 
                 toSave.add(consumer);
 

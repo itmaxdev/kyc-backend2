@@ -38,10 +38,10 @@ public interface ConsumerAnomalyRepository extends JpaRepository<ConsumerAnomaly
     @Query(" select ca from ConsumerAnomaly ca join fetch ca.consumer c where ca.anomaly.id in :anomalyIds")
     List<ConsumerAnomaly> findAllByAnomalyIdInFetchConsumer(@Param("anomalyIds") Collection<Long> anomalyIds);
 
-    @Query(value = "select a.id from consumers_anomalies ac join anomalies a on ac.anomaly_id = a.id where ac.consumer_id in (:consumerIds) AND a.status NOT IN (5, 6);",  nativeQuery = true)
+    @Query(value = "select a.id from consumers_anomalies ac join anomalies a on ac.anomaly_id = a.id where ac.consumer_id in (:consumerIds) AND a.status NOT IN (6);",  nativeQuery = true)
     List<Long> findAnomaliesIdByConsumer(@Param("consumerIds") List<Long> consumerIds);
 
-    @Query(value = "select a.id from consumers_anomalies ac join anomalies a on ac.anomaly_id = a.id where ac.consumer_id in (:consumerIds) AND a.status NOT IN (5, 6) AND a.anomaly_type_id = :anomalyTypeId",  nativeQuery = true)
+    @Query(value = "select a.id from consumers_anomalies ac join anomalies a on ac.anomaly_id = a.id where ac.consumer_id in (:consumerIds) AND a.status NOT IN (6) AND a.anomaly_type_id = :anomalyTypeId",  nativeQuery = true)
     List<Long> findAnomaliesIdByConsumerAndAnomalyTypeId(@Param("consumerIds") List<Long> consumerIds, @Param("anomalyTypeId") Long anomalyTypeId);
 
     List<ConsumerAnomaly> findByConsumer_IdAndAnomaly_Id(Long consumer_id, Long anomaly_id);
