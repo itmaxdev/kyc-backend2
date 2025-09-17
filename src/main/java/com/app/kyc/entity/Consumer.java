@@ -46,6 +46,8 @@ public class Consumer {
     private String subscriberType;
     private Boolean isConsistent;
     private int consumerStatus;
+    @Column(name = "consistent_on")
+    private String consistentOn;
 
     @Column(name = "vodacom_transaction_id", unique = true, nullable = true, length = 200)
     private String vodacomTransactionId;
