@@ -25,6 +25,12 @@ public interface ConsumerAnomalyRepository extends JpaRepository<ConsumerAnomaly
 
     boolean existsByConsumerAndAnomaly(Consumer consumer, Anomaly anomaly);
 
+    @Query("SELECT ca FROM ConsumerAnomaly ca " +
+            "WHERE ca.anomaly.id = :anomalyId AND ca.consumer.id = :consumerId")
+    ConsumerAnomaly findLink(Long anomalyId, Long consumerId);
+
+
+    ConsumerAnomaly findFirstByAnomaly_IdAndConsumer_Id(Long anomalyId, Long consumerId);
 
 //    @Query(value = "select anomaly_id from consumers_anomalies where consumer_id IN (:consumerIds)",  nativeQuery = true)
 //    List<Long> findAnomaliesIdByConsumer(@Param("consumerIds") List<Long> consumerIds);

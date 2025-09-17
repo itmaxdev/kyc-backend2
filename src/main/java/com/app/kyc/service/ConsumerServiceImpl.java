@@ -17,6 +17,7 @@ import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.usermodel.Row.MissingCellPolicy;
 import org.apache.poi.xssf.usermodel.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -1625,75 +1626,6 @@ System.out.println("Get all flagged ");
         return null;
     }
 
-    /*public void checkConsumer(List<Consumer> consumers, User user, ServiceProvider serviceProvider) {
-       System.out.println("Inside check consumer");
-        Set<Consumer> consumerSet = new HashSet<>();
-        
-        AnomalyCollection anomalyCollection=new AnomalyCollection();
-        
-        HashMap<ExceedingConsumers, Integer> consumerMap = new HashMap<>();
-        int count = consumerRepository.countByServiceProvider_Id(serviceProvider.getId());
-        if (consumers != null) {
-            // this loop for duplicate consumers
-            consumers.forEach((consumer) -> {
-                consumer.setIsConsistent(true);
-                List<String> errors = checkNullAttributesForFile(consumer); // check the missing fields for Incomplete anomaly
-                
-                // incomplete anomaly
-                if (errors.size() > 0) {
-                    // tag incomplete data anomaly
-                    this.checkConsumerIncompleteAnomaly(consumer, errors, user, count != 0,anomalyCollection); // tag incomplete data anomaly
-                } else {
-                    if(count != 0){
-                        this.resolveIncompleteAnomaly(consumer,user);
-                        this.softDeleteConsistentUsers(consumer);
-                    }
-                    consumerRepository.save(consumer);
-                }
-
-                // duplicate anomaly
-                if (!consumerSet.add(consumer)) {
-                    this.tagDuplicateAnomalies(consumer, user);
-                } else {
-                    //resolved all old anomalies
-                    consumer = this.resolvedAndSoftDeleteConsumers(consumer, count != 0,user);
-                    consumerRepository.save(consumer);
-                }
-                
-                //Exceeding Anomaly
-                Boolean flag = true;
-                ExceedingConsumers exceedingConsumers = new ExceedingConsumers();
-                if(!Objects.isNull(consumer.getIdentificationType())){
-                    exceedingConsumers.setIdentificationType(consumer.getIdentificationType());
-                }else{
-                    exceedingConsumers.setIdentificationType("");
-                }
-                if(!Objects.isNull(consumer.getIdentificationNumber())){
-                    exceedingConsumers.setIdentificationNumber(consumer.getIdentificationNumber());
-                }else{
-                    exceedingConsumers.setIdentificationNumber("");
-                }
-                
-                exceedingConsumers.setServiceProviderName(consumer.getServiceProvider().getName());
-                
-                consumerMap.put(exceedingConsumers, consumerMap.containsKey(exceedingConsumers) ? consumerMap.get(exceedingConsumers) + 1 : 1);
-                
-                //consumer.setConsistent(true);
-                if (consumerMap.containsKey(exceedingConsumers)) { // check the consumer existence in hashMap
-                    if (consumerMap.get(exceedingConsumers) < 3) { // check the consumer count
-                        if (consumerMap.get(exceedingConsumers) == 2) {
-                            flag = false;
-                        }
-                        consumer = this.resolvedAndDeleteExceedingConsumers(consumer, count != 0,user);
-                        consumerRepository.save(consumer);
-                    } else {
-                        this.tagExceedingAnomalies(consumer, user);
-                    }
-                }
-            });
-        }
-        anomalyCollection.getParentAnomalyNoteSet().clear();
-    }*/
 
 
 
@@ -2017,167 +1949,90 @@ System.out.println("Get all flagged ");
 
 
 
-    private Consumer resolvedAndSoftDeleteConsumers(Consumer consumer, Boolean flag,User user) {
-       System.out.println("resolvedAndSoftDeleteConsumers values are: "+consumer.getMsisdn());
-        // duplicate records
-        AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Duplicate Records");
-        List<Long> consumerIds = new ArrayList<Long>();
-        //previously inserted consumer
-        List<Long> consumerIds1 = consumerRepository.findConsumerIdsByMsisdnAndConsumerStatus(consumer.getMsisdn(), 0);
-        consumerIds.addAll(consumerIds1);
-        List<Long> consumerIds2 = consumerRepository.findConsumerIdsByMsisdnAndConsumerStatus(consumer.getMsisdn(), 1);
-        consumerIds.addAll(consumerIds2);
-        Anomaly tempAnomaly = new Anomaly();
+    @Transactional
+    private Consumer resolvedAndSoftDeleteConsumers(Consumer consumer, Boolean flag, User user) {
+        if (consumer == null) return null;
 
-        //previously tagged anomalies
-        List<Long> consumerAnomalies = consumerAnomalyRepository.findAnomaliesIdByConsumerAndAnomalyTypeId(consumerIds, anomalyType.getId());
-        if (consumerAnomalies.size() > 0) {
-            //get anomaly for duplicate that is tagged previously
+        System.out.println("resolvedAndSoftDeleteConsumers values are: " + consumer.getMsisdn());
+
+        // Duplicate anomaly type
+        AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Duplicate Records");
+
+        // Collect existing consumer IDs (status 0 or 1)
+        List<Long> consumerIds = new ArrayList<>();
+        consumerIds.addAll(consumerRepository.findConsumerIdsByMsisdnAndConsumerStatus(consumer.getMsisdn(), 0));
+        consumerIds.addAll(consumerRepository.findConsumerIdsByMsisdnAndConsumerStatus(consumer.getMsisdn(), 1));
+
+        // Previously tagged anomalies for these consumers
+        List<Long> consumerAnomalies =
+                consumerAnomalyRepository.findAnomaliesIdByConsumerAndAnomalyTypeId(consumerIds, anomalyType.getId());
+
+        if (!consumerAnomalies.isEmpty()) {
+            // Get anomaly for duplicate that was tagged previously
             Anomaly anomaly = anomalyRepository.findByIdAndAnomalyType_Id(consumerAnomalies, anomalyType.getId());
-            if (!Objects.isNull(anomaly)) {
-                //if status is resolution submitted
+
+            if (anomaly != null) {
+                // ---- Case 1: Resolution submitted ----
                 if (anomaly.getStatus().getCode() == 4) {
-                    //resolved old anomalies
                     anomaly.setStatus(AnomalyStatus.RESOLVED_FULLY);
                     anomalyRepository.save(anomaly);
 
                     LocalDateTime now = LocalDateTime.now();
                     String formattedDate = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-                    System.out.println(formattedDate);
-                   // consumer.setConsistentOn(formattedDate);
-                    AnomalyTracking anomalyTracking = new AnomalyTracking(anomaly, new Date(), AnomalyStatus.RESOLVED_FULLY, "", user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn(),formattedDate);
-                   // consumer = consumerRepository.save(consumer);
+
+                    AnomalyTracking anomalyTracking = new AnomalyTracking(
+                            anomaly,
+                            new Date(),
+                            AnomalyStatus.RESOLVED_FULLY,
+                            "",
+                            user.getFirstName() + " " + user.getLastName(),
+                            anomaly.getUpdatedOn(),
+                            formattedDate
+                    );
                     anomalyTrackingRepository.save(anomalyTracking);
                 }
-                if (anomaly.getStatus().getCode() == 0 || anomaly.getStatus().getCode() == 1 ||
-                anomaly.getStatus().getCode() == 2 || anomaly.getStatus().getCode() == 3 || anomaly.getStatus().getCode() == 6) {
-                    System.out.println("resolvedAndSoftDeleteConsumers values with another status are: "+consumer.getMsisdn());
-                    ConsumerAnomaly tempConsumerAnomaly = new ConsumerAnomaly();
-                    tempAnomaly.setId(anomaly.getId());
-                    tempAnomaly.setNote(anomaly.getNote());
-                    tempAnomaly.setStatus(anomaly.getStatus());
-                    tempAnomaly.setReportedOn(anomaly.getReportedOn());
-                    tempAnomaly.setReportedBy(anomaly.getReportedBy());
-                    tempAnomaly.getConsumers().remove(consumer);
-                    tempAnomaly.addConsumer(consumer);
-                    tempAnomaly.setUpdatedOn(anomaly.getUpdatedOn());
-                    tempAnomaly.setAnomalyType(anomalyType);
-                    tempConsumerAnomaly.setAnomaly(tempAnomaly);
+
+                // ---- Case 2: Any other status (0,1,2,3,6) ----
+                if (anomaly.getStatus().getCode() == 0
+                        || anomaly.getStatus().getCode() == 1
+                        || anomaly.getStatus().getCode() == 2
+                        || anomaly.getStatus().getCode() == 3
+                        || anomaly.getStatus().getCode() == 6) {
+
+                    System.out.println("resolvedAndSoftDeleteConsumers values with another status are: " + consumer.getMsisdn());
 
                     consumer = consumerRepository.save(consumer);
-                    //consumer.setConsistentOn("NA");
-                    tempConsumerAnomaly.setConsumer(consumer);
-                    tempConsumerAnomaly.setNotes(anomaly.getNote());
 
-                    consumerAnomalyRepository.save(tempConsumerAnomaly);
+                    // ✅ Use safe method instead of direct save
+                    String note = anomaly.getNote() != null ? anomaly.getNote()
+                            : "Duplicate Anomaly: You can't have more than one active record per MSISDN: " + consumer.getMsisdn();
+
+                    safeLinkConsumerToAnomaly(consumer, anomaly, note);
                 }
             }
         }
 
         consumerIds.remove(consumer.getId());
 
-        //soft deleted old consumers
-        if (flag && !(consumerIds.size() > 2)) {
+        // ---- Soft delete older consumers ----
+        if (Boolean.TRUE.equals(flag) && consumerIds.size() <= 2) {
             if (consumerAnomalies.size() > 1 && consumerIds.size() > 1) {
-                for (int i = 0; i < consumerIds.size(); i++) {
-                    if (!Objects.equals(consumerIds.get(i), consumer.getId())) {
-                        consumerRepository.updatePreviousConsumersStatus(1, consumerIds.get(i));
+                for (Long id : consumerIds) {
+                    if (!Objects.equals(id, consumer.getId())) {
+                        consumerRepository.updatePreviousConsumersStatus(1, id);
                     }
                 }
             }
         }
+
         return consumer;
     }
 
 
 
+
     private static boolean hasText(String s) { return s != null && !s.trim().isEmpty(); }
     private String norm(String s) { return s == null ? null : s.trim(); }
-
-    @Transactional
-    private void tagDuplicateAnomalies(Consumer consumer, User user) {
-        if (consumer == null) return;
-
-        final String msisdn = norm(consumer.getMsisdn());
-        if (!hasText(msisdn)) return; // (you already handle blank/null case separately)
-
-        // 1) Fetch ALL rows with this MSISDN (ignore status)
-        List<Consumer> sameMsisdnAnyStatus = consumerRepository.findAllByMsisdn(msisdn);
-
-        // Ensure current consumer is included
-        if (sameMsisdnAnyStatus.stream().noneMatch(c -> Objects.equals(c.getId(), consumer.getId()))) {
-            sameMsisdnAnyStatus.add(consumer);
-        }
-
-        // 2) Decide your rule:
-        //    a) pure duplicate regardless of status:
-        if (sameMsisdnAnyStatus.size() < 2) return;
-
-        //    b) or: duplicate if at least one active AND total >= 2:
-        // boolean anyActive = sameMsisdnAnyStatus.stream().anyMatch(c -> c.getConsumerStatus() != null && c.getConsumerStatus() == 0);
-        // if (!anyActive || sameMsisdnAnyStatus.size() < 2) return;
-
-        // 3) Proceed to create/reuse anomaly and link (your existing code)...
-        sameMsisdnAnyStatus.forEach(c -> c.setIsConsistent(false));
-        consumerRepository.save(consumer);
-
-        List<Long> ids = sameMsisdnAnyStatus.stream().map(Consumer::getId).collect(Collectors.toList());
-
-        AnomalyType type = anomalyTypeRepository.findFirstByName("Duplicate Records");
-        String note = "You can't have more than one active record per MSISDN: " + msisdn;
-
-        List<Long> existingAnomalyIds =
-                consumerAnomalyRepository.findAnomaliesIdByConsumerAndAnomalyTypeId(ids, type.getId());
-
-        Date now = new Date();
-        Anomaly anomaly;
-        if (existingAnomalyIds == null || existingAnomalyIds.isEmpty()) {
-            anomaly = new Anomaly();
-            anomaly.setNote("Duplicate Anomaly: " + note);
-            anomaly.setStatus(AnomalyStatus.REPORTED);
-            anomaly.setReportedOn(now);
-            anomaly.setReportedBy(user);
-            anomaly.setUpdatedOn(now);
-            anomaly.setAnomalyType(type);
-            anomaly.setUpdatedOn(new Date());
-            anomaly.setUpdateBy(anomaly.getReportedBy().getFirstName() + " " + anomaly.getReportedBy().getLastName());
-            anomaly = anomalyRepository.save(anomaly);
-
-            anomalyTrackingRepository.save(
-                    new AnomalyTracking(anomaly, now, AnomalyStatus.REPORTED, "",
-                    		user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn(),"N/A")
-            );
-        } else {
-            anomaly = anomalyRepository.findByIdAndAnomalyType_Id(existingAnomalyIds, type.getId());
-            if (anomaly == null) return;
-        }
-
-        for (Consumer c : sameMsisdnAnyStatus) {
-
-            List<ConsumerAnomaly> links =
-                    consumerAnomalyRepository.findByAnomaly_IdAndConsumer_Id(anomaly.getId(), c.getId());
-            if (links == null || links.isEmpty()) {
-                ConsumerAnomaly link = new ConsumerAnomaly();
-                link.setAnomaly(anomaly);
-                link.setConsumer(c);
-                link.setNotes("Duplicate Anomaly: " + note);
-                consumerAnomalyRepository.save(link);
-            } else {
-                ConsumerAnomaly link = links.get(0);
-                link.setNotes("Duplicate Anomaly: " + note);
-                consumerAnomalyRepository.save(link);
-            }
-        }
-
-        long activeCnt = consumerRepository.findAllByMsisdn(msisdn)
-                .stream().filter(c -> Integer.valueOf(0).equals(c.getConsumerStatus())).count();
-        long totalCnt = consumerRepository.findAllByMsisdn(msisdn).size();
-        log.info("MSISDN={} activeCnt={} totalCnt={}", msisdn, activeCnt, totalCnt);
-
-        consumerRepository.markConsumersConsistent(0, ids);
-    }
-
-
 
     private boolean isBlank(String s) {
         return s == null || s.trim().isEmpty();
@@ -2256,96 +2111,6 @@ System.out.println("Get all flagged ");
         }
         return consumer;
     }
-
-
-
-
-
-
-    @Transactional
-    private void tagExceedingAnomalies(Consumer consumer, User user) {
-        if (consumer == null) return;
-
-        // ---- Guard: don't report when ID fields are blank/null (your rule) ----
-        final String idType   = norm(consumer.getIdentificationType());
-        final String idNumber = norm(consumer.getIdentificationNumber());
-        final ServiceProvider sp = consumer.getServiceProvider();
-        if (!hasText(idType) || !hasText(idNumber) || sp == null) return;
-
-        // ---- Fetch duplicates for SAME operator (any status) ----
-        // To make it "active-only", use a method that also filters consumer_status=0.
-        List<Consumer> candidates =
-                consumerRepository.findByIdKeyNormalizedAnyStatus(sp.getId(), idType, idNumber);
-
-        // Ensure current consumer is included
-        if (candidates.stream().noneMatch(c -> Objects.equals(c.getId(), consumer.getId()))) {
-            candidates.add(consumer);
-        }
-
-        // ---- Exceeding threshold: more than two (i.e., >=3) ----
-        if (candidates.size() <= 2) return;
-
-        // Mark all involved inconsistent (persist at least current)
-        candidates.forEach(c -> c.setIsConsistent(false));
-        consumerRepository.save(consumer);
-        List<Long> ids = candidates.stream().map(Consumer::getId).collect(Collectors.toList());
-
-        // Build note
-        final String spName = sp.getName() == null ? "" : sp.getName();
-        final String note = "You can't have more than two active records per operator for a given combination of "
-                + "(ID Card Type + ID Number + ServiceProviderName): (" + idType + " + " + idNumber + " + " + spName + ")";
-
-        // Find or create anomaly
-        final AnomalyType type = anomalyTypeRepository.findFirstByName("Exceeding Threshold");
-        final Date now = new Date();
-        List<Long> existing = consumerAnomalyRepository
-                .findAnomaliesIdByConsumerAndAnomalyTypeId(ids, type.getId());
-
-        Anomaly anomaly;
-        if (existing == null || existing.isEmpty()) {
-            anomaly = new Anomaly();
-            anomaly.setNote("Exceeding Anomaly: " + note);
-            anomaly.setStatus(AnomalyStatus.REPORTED);
-            anomaly.setReportedOn(now);
-            anomaly.setReportedBy(user);
-            anomaly.setUpdatedOn(now);
-            anomaly.setAnomalyType(type);
-            anomaly.setUpdatedOn(new Date());
-            anomaly.setUpdateBy(anomaly.getReportedBy().getFirstName() + " " + anomaly.getReportedBy().getLastName());
-            anomaly = anomalyRepository.save(anomaly);
-
-            anomalyTrackingRepository.save(
-                    new AnomalyTracking(anomaly, now, AnomalyStatus.REPORTED, "",
-                    		user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn(),"N/A")
-            );
-        } else {
-            anomaly = anomalyRepository.findByIdAndAnomalyType_Id(existing, type.getId());
-            if (anomaly == null) return;
-        }
-
-        // Link ALL involved consumers (create if missing, otherwise update notes)
-        for (Consumer c : candidates) {
-            List<ConsumerAnomaly> links =
-                    consumerAnomalyRepository.findByAnomaly_IdAndConsumer_Id(anomaly.getId(), c.getId());
-            if (links == null || links.isEmpty()) {
-                ConsumerAnomaly link = new ConsumerAnomaly();
-                link.setAnomaly(anomaly);
-                link.setConsumer(c);
-                link.setNotes("Exceeding Anomaly: " + note);
-                consumerAnomalyRepository.save(link);
-            } else {
-                ConsumerAnomaly link = links.get(0);
-                link.setNotes("Exceeding Anomaly: " + note);
-                consumerAnomalyRepository.save(link);
-            }
-        }
-
-        // Persist DB flag for all involved
-        consumerRepository.markConsumersConsistent(0, ids);
-    }
-
-
-
 
 
     private List<String> checkErrors(Consumer consumer) {
@@ -2669,6 +2434,170 @@ System.out.println("Get all flagged ");
         return (s == null || s.trim().isEmpty());
     }
 
+
+    private void safeLinkConsumerToAnomaly(Consumer consumer, Anomaly anomaly, String fullNote) {
+        if (consumer == null || anomaly == null) return;
+
+        try {
+            // Fetch all existing links (should be max 1, but safe in case old duplicates exist)
+            List<ConsumerAnomaly> links =
+                    consumerAnomalyRepository.findByAnomaly_IdAndConsumer_Id(anomaly.getId(), consumer.getId());
+
+            if (links != null && !links.isEmpty()) {
+                ConsumerAnomaly existing = links.get(0);
+
+                // Update note only if changed
+                if (!Objects.equals(existing.getNotes(), fullNote)) {
+                    existing.setNotes(fullNote);
+                    consumerAnomalyRepository.save(existing);
+                }
+
+                // If multiple duplicates exist from old runs, clean them
+                if (links.size() > 1) {
+                    for (int i = 1; i < links.size(); i++) {
+                        consumerAnomalyRepository.delete(links.get(i));
+                    }
+                }
+            } else {
+                ConsumerAnomaly link = new ConsumerAnomaly();
+                link.setAnomaly(anomaly);
+                link.setConsumer(consumer);
+                link.setNotes(fullNote);
+                consumerAnomalyRepository.save(link);
+            }
+        } catch (DataIntegrityViolationException e) {
+            log.warn("Duplicate anomaly link already exists for consumer={} anomaly={}. Ignoring insert.",
+                    consumer.getId(), anomaly.getId());
+            em.clear(); // reset session so Hibernate won’t blow up later
+        } catch (Exception e) {
+            log.error("safeLinkConsumerToAnomaly failed consumer={} anomaly={} note={}",
+                    consumer.getId(), anomaly.getId(), fullNote, e);
+            em.clear();
+        }
+    }
+
+
+    @Transactional
+    private Anomaly tagExceedingAnomalies(Consumer consumer, User user) {
+        if (consumer == null) return null;
+
+        final String idType   = norm(consumer.getIdentificationType());
+        final String idNumber = norm(consumer.getIdentificationNumber());
+        final ServiceProvider sp = consumer.getServiceProvider();
+        if (!hasText(idType) || !hasText(idNumber) || sp == null) return null;
+
+        List<Consumer> candidates =
+                consumerRepository.findByIdKeyNormalizedAnyStatus(sp.getId(), idType, idNumber);
+
+        if (candidates.stream().noneMatch(c -> Objects.equals(c.getId(), consumer.getId()))) {
+            candidates.add(consumer);
+        }
+
+        if (candidates.size() <= 2) return null;
+
+        candidates.forEach(c -> c.setIsConsistent(false));
+        consumerRepository.save(consumer);
+        List<Long> ids = candidates.stream().map(Consumer::getId).collect(Collectors.toList());
+
+        final String spName = sp.getName() == null ? "" : sp.getName();
+        final String note = "Exceeding Anomaly: You can't have more than two active records per operator "
+                + "for a given combination of (ID Card Type + ID Number + ServiceProviderName): ("
+                + idType + " + " + idNumber + " + " + spName + ")";
+
+        final AnomalyType type = anomalyTypeRepository.findFirstByName("Exceeding Threshold");
+        final Date now = new Date();
+
+        List<Long> existing = consumerAnomalyRepository
+                .findAnomaliesIdByConsumerAndAnomalyTypeId(ids, type.getId());
+
+        Anomaly anomaly;
+        if (existing == null || existing.isEmpty()) {
+            anomaly = new Anomaly();
+            anomaly.setNote(note);
+            anomaly.setStatus(AnomalyStatus.REPORTED);
+            anomaly.setReportedOn(now);
+            anomaly.setReportedBy(user);
+            anomaly.setUpdatedOn(now);
+            anomaly.setAnomalyType(type);
+            anomaly.setUpdateBy(user.getFirstName() + " " + user.getLastName());
+            anomaly = anomalyRepository.save(anomaly);
+
+            anomalyTrackingRepository.save(
+                    new AnomalyTracking(anomaly, now, AnomalyStatus.REPORTED, "",
+                            user.getFirstName() + " " + user.getLastName(), now, "N/A")
+            );
+        } else {
+            anomaly = anomalyRepository.findFirstByIdInAndAnomalyType_Id(existing, type.getId())
+                    .orElse(null);
+            if (anomaly == null) return null;
+        }
+
+        for (Consumer c : candidates) {
+            safeLinkConsumerToAnomaly(c, anomaly, note);
+        }
+
+        consumerRepository.markConsumersConsistent(0, ids);
+        return anomaly;
+    }
+
+
+    @Transactional
+    private Anomaly tagDuplicateAnomalies(Consumer consumer, User user) {
+        if (consumer == null) return null;
+
+        String msisdn = normalize(consumer.getMsisdn());
+        if (!hasText(msisdn)) return null;
+
+        List<Consumer> candidates =
+                consumerRepository.findByMsisdnAndServiceProvider_Id(msisdn, consumer.getServiceProvider().getId());
+
+        if (candidates.stream().noneMatch(c -> Objects.equals(c.getId(), consumer.getId()))) {
+            candidates.add(consumer);
+        }
+
+        if (candidates.size() <= 1) return null;
+
+        candidates.forEach(c -> c.setIsConsistent(false));
+        consumerRepository.save(consumer);
+
+        List<Long> ids = candidates.stream().map(Consumer::getId).collect(Collectors.toList());
+
+        final String note = "Duplicate Anomaly: You can't have more than one active record per MSISDN: " + msisdn;
+        final AnomalyType type = anomalyTypeRepository.findFirstByName("Duplicate Records");
+        final Date now = new Date();
+
+        List<Long> existing = consumerAnomalyRepository
+                .findAnomaliesIdByConsumerAndAnomalyTypeId(ids, type.getId());
+
+        Anomaly anomaly;
+        if (existing == null || existing.isEmpty()) {
+            anomaly = new Anomaly();
+            anomaly.setNote(note);
+            anomaly.setStatus(AnomalyStatus.REPORTED);
+            anomaly.setReportedOn(now);
+            anomaly.setReportedBy(user);
+            anomaly.setUpdatedOn(now);
+            anomaly.setAnomalyType(type);
+            anomaly.setUpdateBy(user.getFirstName() + " " + user.getLastName());
+            anomaly = anomalyRepository.save(anomaly);
+
+            anomalyTrackingRepository.save(
+                    new AnomalyTracking(anomaly, now, AnomalyStatus.REPORTED, "",
+                            user.getFirstName() + " " + user.getLastName(), now, "N/A")
+            );
+        } else {
+            anomaly = anomalyRepository.findFirstByIdInAndAnomalyType_Id(existing, type.getId())
+                    .orElse(null);
+            if (anomaly == null) return null;
+        }
+
+        for (Consumer c : candidates) {
+            safeLinkConsumerToAnomaly(c, anomaly, note);
+        }
+
+        consumerRepository.markConsumersConsistent(0, ids);
+        return anomaly;
+    }
 
 
 }
