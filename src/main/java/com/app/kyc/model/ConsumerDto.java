@@ -11,6 +11,7 @@ import lombok.Setter;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 @Data
 @Setter
@@ -38,6 +39,7 @@ public class ConsumerDto {
     private ServiceProvider serviceProvider;
     private List<Service> services;
     private String notes;
+    private String consistentOn;
     private Boolean isConsistent;
     private List<ConsumerHistoryDto> consumerHistory;
     public  ConsumerDto(Consumer consumer,List<Anomaly> anomlies){
@@ -63,6 +65,7 @@ public class ConsumerDto {
         this.alternateMsisdn1=consumer.getAlternateMsisdn1();
         this.alternateMsisdn2=consumer.getAlternateMsisdn2();
         this.isConsistent = consumer.getIsConsistent();
+        this.consistentOn=consumer.getConsistentOn();
         
         
         if(anomlies!=null&& anomlies.size()>0){
@@ -94,7 +97,22 @@ public class ConsumerDto {
         this.alternateMsisdn1=consumer.getAlternateMsisdn1();
         this.alternateMsisdn2=consumer.getAlternateMsisdn2();
         this.isConsistent = consumer.getIsConsistent();
+        this.consistentOn=consumer.getConsistentOn();
 
+    }
+
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof ConsumerDto)) return false;
+        ConsumerDto that = (ConsumerDto) o;
+        return Objects.equals(id, that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
     }
 
 }

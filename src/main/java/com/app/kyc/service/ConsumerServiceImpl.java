@@ -789,14 +789,18 @@ System.out.println("Get all flagged ");
         Map<Long, List<ConsumerDto>> consumersByAnomalyId = links.stream()
                 .collect(Collectors.groupingBy(
                         ca -> ca.getAnomaly().getId(),
-                        Collectors.mapping(ca -> {
-                            ConsumerDto cd = new ConsumerDto(ca.getConsumer(), Collections.emptyList());
-                            if (cd.getFirstName() == null) cd.setFirstName("");
-                            if (cd.getLastName()  == null) cd.setLastName("");
-                            if (ca.getNotes() != null) cd.setNotes(ca.getNotes());
-                            return cd;
-                        }, Collectors.toList())
+                        Collectors.collectingAndThen(
+                                Collectors.mapping(ca -> {
+                                    ConsumerDto cd = new ConsumerDto(ca.getConsumer(), Collections.emptyList());
+                                    if (cd.getFirstName() == null) cd.setFirstName("");
+                                    if (cd.getLastName()  == null) cd.setLastName("");
+                                    if (ca.getNotes() != null) cd.setNotes(ca.getNotes());
+                                    return cd;
+                                }, Collectors.toSet()),   // first deduplicate
+                                set -> new ArrayList<>(set)  // then convert back to List
+                        )
                 ));
+
 
         /*// NEW: counts per anomalyId -> effectedRecords
         Map<Long, Long> effectedCountByAnomalyId = links.stream()
@@ -2012,7 +2016,7 @@ System.out.println("Get all flagged ");
 
 
     private Consumer resolvedAndSoftDeleteConsumers(Consumer consumer, Boolean flag,User user) {
-       System.out.println("resolvedAndSoftDeleteConsumers values are: ");
+       System.out.println("resolvedAndSoftDeleteConsumers values are: "+consumer.getMsisdn());
         // duplicate records
         AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Duplicate Records");
         List<Long> consumerIds = new ArrayList<Long>();
@@ -2038,13 +2042,14 @@ System.out.println("Get all flagged ");
                     LocalDateTime now = LocalDateTime.now();
                     String formattedDate = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
                     System.out.println(formattedDate);
-                    consumer.setConsistentOn(formattedDate);
+                   // consumer.setConsistentOn(formattedDate);
                     AnomalyTracking anomalyTracking = new AnomalyTracking(anomaly, new Date(), AnomalyStatus.RESOLVED_FULLY, "", user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn(),formattedDate);
-                    consumer = consumerRepository.save(consumer);
+                   // consumer = consumerRepository.save(consumer);
                     anomalyTrackingRepository.save(anomalyTracking);
                 }
                 if (anomaly.getStatus().getCode() == 0 || anomaly.getStatus().getCode() == 1 ||
                 anomaly.getStatus().getCode() == 2 || anomaly.getStatus().getCode() == 3 || anomaly.getStatus().getCode() == 6) {
+                    System.out.println("resolvedAndSoftDeleteConsumers values with another status are: "+consumer.getMsisdn());
                     ConsumerAnomaly tempConsumerAnomaly = new ConsumerAnomaly();
                     tempAnomaly.setId(anomaly.getId());
                     tempAnomaly.setNote(anomaly.getNote());
@@ -2058,7 +2063,7 @@ System.out.println("Get all flagged ");
                     tempConsumerAnomaly.setAnomaly(tempAnomaly);
 
                     consumer = consumerRepository.save(consumer);
-                    consumer.setConsistentOn("NA");
+                    //consumer.setConsistentOn("NA");
                     tempConsumerAnomaly.setConsumer(consumer);
                     tempConsumerAnomaly.setNotes(anomaly.getNote());
 

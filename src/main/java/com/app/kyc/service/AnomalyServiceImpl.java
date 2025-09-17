@@ -390,17 +390,30 @@ public class AnomalyServiceImpl implements AnomalyService
                       ca -> ca.getConsumer().getId(),  // use consumerId as key
                       ca -> {
                          ConsumerDto dto = new ConsumerDto(ca.getConsumer());
+
+                         // ✅ set notes if present
                          if (Objects.nonNull(ca.getNotes())) {
                             dto.setNotes(ca.getNotes());
                          }
+
+                         // ✅ handle consistentOn
+                         String consistentOn = ca.getConsumer().getConsistentOn();
+                         if (consistentOn == null || consistentOn.isBlank()) {
+                            dto.setConsistentOn("N/A");
+                         } else {
+                            dto.setConsistentOn(consistentOn);
+                         }
+
                          return dto;
                       },
-                      (existing, duplicate) -> existing, // keep the first occurrence, ignore duplicates
+                      (existing, duplicate) -> existing, // keep the first occurrence
                       LinkedHashMap::new
               ))
               .values()
               .stream()
               .collect(Collectors.toList());
+
+
 
       anomlyDto.setConsumers(consumerDtos);
 

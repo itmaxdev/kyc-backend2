@@ -1061,6 +1061,11 @@ public class FileProcessingService {
                             !consumer.getAlternateMsisdn1().equals(r.msisdn)) {
                         consumer.setAlternateMsisdn2(consumer.getMsisdn());
                     }
+
+
+                    LocalDateTime now = LocalDateTime.now();
+                    String formattedDate = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+                    consumer.setConsistentOn(formattedDate);
                     System.out.println("Updating MSISDN for consumer id=" + consumer.getId() + " → " + r.msisdn);
                     consumer.setMsisdn(r.msisdn);
                 }
