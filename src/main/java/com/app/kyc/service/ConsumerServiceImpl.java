@@ -797,10 +797,11 @@ System.out.println("Get all flagged ");
 
             } else {
                 consumerStatus.add(0);
+                consumerStatus.add(1);
                 anomalyStatus.addAll(this.setStatusList(pagination.getFilter().getAnomalyStatus()));
                 resolutionStatus.addAll(this.setResolution(pagination.getFilter().getResolution()));
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumerStatusAndServiceProviderIdOnly(pageable, spIds,searchText);
+                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus, spIds, anomalyStatus, pagination.getFilter().getAnomalyType(),resolutionStatus,searchText);
                 pageAnomaly = anomalyData.stream()
                         .map(AnomlyDto::new)
                         .collect(Collectors.toList());
