@@ -26,8 +26,7 @@ public class AnomalyTracking
    private String updateBy;
    private Date updateOn;
 
-   @Column(name = "consistent_on")
-   private String consistentOn;
+
 
 
    public AnomalyTracking()
@@ -42,7 +41,7 @@ public class AnomalyTracking
       this.note = note;
       this.updateBy = updateBy;
       this.updateOn = updateOn;
-      this.consistentOn=consistentOn;
+
    }
 
    public Long getId()
@@ -111,11 +110,4 @@ public class AnomalyTracking
       this.updateOn = updatedOn;
    }
 
-   public String getConsistentOn() {
-      return consistentOn;
    }
-
-   public void setConsistentOn(String consistentOn) {
-      this.consistentOn = consistentOn;
-   }
-}

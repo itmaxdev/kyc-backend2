@@ -347,7 +347,6 @@ public class AnomalyServiceImpl implements AnomalyService
               .stream()
               .map(c -> {
                  String finalNote;
-                 System.out.println("anomalyTracking values are: "+c.getId()+ "value:"+c.getConsistentOn());
                  if (c.getNote() != null && !c.getNote().isBlank()) {
                     finalNote = c.getNote();
                  } else if (AnomalyStatus.REPORTED == c.getStatus()) {
@@ -367,8 +366,7 @@ public class AnomalyServiceImpl implements AnomalyService
                          finalNote,
                          c.getAnomaly(),
                          c.getUpdateBy(),
-                         c.getUpdateOn(),
-                         c.getConsistentOn()
+                         c.getUpdateOn()
                  );
               })
               // 🔹 Deduplicate: keep only one entry per status (latest, because of DESC order)
