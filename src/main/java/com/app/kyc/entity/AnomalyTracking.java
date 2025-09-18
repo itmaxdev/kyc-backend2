@@ -33,7 +33,7 @@ public class AnomalyTracking
    {
    }
 
-   public AnomalyTracking(Anomaly anomaly, Date createdOn, AnomalyStatus status, String note,String updateBy, Date updateOn, String consistentOn)
+   public AnomalyTracking(Anomaly anomaly, Date createdOn, AnomalyStatus status, String note,String updateBy, Date updateOn)
    {
       this.anomaly = anomaly;
       this.createdOn = createdOn;

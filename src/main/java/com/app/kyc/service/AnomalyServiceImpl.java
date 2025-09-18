@@ -250,7 +250,7 @@ public class AnomalyServiceImpl implements AnomalyService
                request.getStatus(),
                request.getNote(),
                user.getFirstName() + " " + user.getLastName(),
-               anomaly.getUpdatedOn(),  "N/A"
+               anomaly.getUpdatedOn()
        );
        anomalyTrackingRepository.save(anomalyTracking);
 
