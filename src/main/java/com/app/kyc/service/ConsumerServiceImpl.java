@@ -4,6 +4,7 @@ import java.io.*;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -1771,47 +1772,44 @@ System.out.println("Get all flagged ");
         }
         private String normalize(String s) { return s == null ? "" : s.trim(); }
 
-        // Your existing methods referenced here must remain:
-        // - List<String> checkNullAttributesForFile(Consumer c)
-        // - void checkConsumerIncompleteAnomaly(Consumer c, List<String> errors, User user, boolean hasExisting, AnomalyCollection ac)
-        // - void resolveIncompleteAnomaly(Consumer c, User user)
-        // - void softDeleteConsistentUsers(Consumer c)
-        // - Consumer resolvedAndSoftDeleteConsumers(Consumer c, boolean hasExisting, User user)
-        // - void tagDuplicateAnomalies(Consumer c, User user)
-        // - Consumer resolvedAndDeleteExceedingConsumers(Consumer c, boolean hasExisting, User user)
-        // - void tagExceedingAnomalies(Consumer c, User user)
 
-
-
-
-
-    private void checkConsumerIncompleteAnomaly(Consumer consumer, List<String> errors, User user, Boolean flag,AnomalyCollection collection) {
-
-        Set<String> setForDefaultErrors = new HashSet<>();
-        Set<String> setForFileErrors = new HashSet<>();
-        for (String s : errors)
-        setForDefaultErrors.add(s);
-        for (String s : checkNullAttributesForFile(consumer))
-        setForFileErrors.add(s);
+    private void checkConsumerIncompleteAnomaly(
+            Consumer consumer,
+            List<String> errors,
+            User user,
+            Boolean flag,
+            AnomalyCollection collection
+    ) {
+        Set<String> setForDefaultErrors = new HashSet<>(errors);
+        Set<String> setForFileErrors = new HashSet<>(checkNullAttributesForFile(consumer));
 
         Set<String> combinedErrors = Stream.concat(setForDefaultErrors.stream(), setForFileErrors.stream())
-        .collect(Collectors.toSet());
+                .collect(Collectors.toSet());
         collection.setParentAnomalyNoteSet(Stream.concat(combinedErrors.stream(), collection.getParentAnomalyNoteSet().stream())
-        .collect(Collectors.toSet()));
+                .collect(Collectors.toSet()));
 
         String distinctErrors = String.join(", ", combinedErrors);
-        String err_str = String.join(", ", errors);
-        String fileErrors = String.join(", ", checkNullAttributesForFile(consumer));
 
         Anomaly tempAnomaly = new Anomaly();
-
         AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Incomplete Data");
 
-        List<Consumer> tempConsumer = consumerRepository.findConsumerIdsByMsisdnAndIdNumberAndIdTypeAndServiceProviderID(consumer.getMsisdn(), consumer.getIdentificationType(), consumer.getIdentificationNumber(), consumer.getServiceProvider().getId());
+        List<Consumer> tempConsumer = consumerRepository.findConsumerIdsByMsisdnAndIdNumberAndIdTypeAndServiceProviderID(
+                consumer.getMsisdn(),
+                consumer.getIdentificationType(),
+                consumer.getIdentificationNumber(),
+                consumer.getServiceProvider().getId()
+        );
         List<Long> consumerIds = tempConsumer.stream().map(Consumer::getId).collect(Collectors.toList());
         List<Long> consumerAnomalies = consumerAnomalyRepository.findAnomaliesIdByConsumerAndAnomalyTypeId(consumerIds, anomalyType.getId());
 
+        // 🔹 Mark inconsistent & set consistentOn
         consumer.setIsConsistent(false);
+        String today = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        if (!combinedErrors.isEmpty()) {
+            consumer.setConsistentOn(today);  // anomaly triggered
+        } else {
+            consumer.setConsistentOn("N/A");
+        }
         consumer = consumerRepository.save(consumer);
 
         tempAnomaly.setNote("Missing Mandatory Fields: " + distinctErrors);
@@ -1819,48 +1817,56 @@ System.out.println("Get all flagged ");
 
         if (!consumerAnomalies.isEmpty()) {
             Anomaly anomaly = anomalyRepository.findByIdAndAnomalyType_Id(consumerAnomalies, anomalyType.getId());
-            if (!Objects.isNull(anomaly)) {
+            if (anomaly != null) {
                 if (anomaly.getStatus().getCode() == 4) {
                     anomaly.setStatus(AnomalyStatus.RESOLVED_FULLY);
                     anomalyRepository.save(anomaly);
 
-                    AnomalyTracking anomalyTracking = new AnomalyTracking(anomaly, new Date(), AnomalyStatus.RESOLVED_FULLY, "", user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn(),"N/A");
+                    AnomalyTracking anomalyTracking = new AnomalyTracking(
+                            anomaly, new Date(), AnomalyStatus.RESOLVED_FULLY, "",
+                            user.getFirstName() + " " + user.getLastName(),
+                            anomaly.getUpdatedOn(), consumer.getConsistentOn()
+                    );
                     anomalyTrackingRepository.save(anomalyTracking);
 
                     tempAnomaly.setStatus(AnomalyStatus.REPORTED);
-                    tempAnomaly.getConsumers().remove(consumer);
                     tempAnomaly.addConsumer(consumer);
                     tempAnomaly.setReportedOn(new Date());
                     tempAnomaly.setReportedBy(user);
                     tempAnomaly.setAnomalyType(anomalyType);
                     tempAnomaly.setUpdatedOn(new Date());
-                    tempAnomaly.setUpdateBy(anomaly.getReportedBy().getFirstName() + " " + anomaly.getReportedBy().getLastName());
+                    tempAnomaly.setUpdateBy(user.getFirstName() + " " + user.getLastName());
 
                     anomalyRepository.save(tempAnomaly);
-                    anomalyTracking = new AnomalyTracking(anomaly, new Date(), AnomalyStatus.REPORTED, "", user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn(),"N/A");
-                    anomalyTrackingRepository.save(anomalyTracking);
 
+                    anomalyTracking = new AnomalyTracking(
+                            anomaly, new Date(), AnomalyStatus.REPORTED, "",
+                            user.getFirstName() + " " + user.getLastName(),
+                            anomaly.getUpdatedOn(), consumer.getConsistentOn()
+                    );
+                    anomalyTrackingRepository.save(anomalyTracking);
                 }
+
                 if (anomaly.getStatus().getCode() == 0 || anomaly.getStatus().getCode() == 1 ||
-                anomaly.getStatus().getCode() == 2 || anomaly.getStatus().getCode() == 3) {
+                        anomaly.getStatus().getCode() == 2 || anomaly.getStatus().getCode() == 3) {
 
                     tempAnomaly.setId(anomaly.getId());
                     tempAnomaly.setStatus(anomaly.getStatus());
-                    tempAnomaly.getConsumers().remove(consumer);
                     tempAnomaly.addConsumer(consumer);
                     tempAnomaly.setReportedOn(anomaly.getReportedOn());
                     tempAnomaly.setReportedBy(user);
                     tempAnomaly.setAnomalyType(anomalyType);
                     tempAnomaly.setUpdatedOn(anomaly.getUpdatedOn());
-                    tempAnomaly.setUpdateBy(anomaly.getReportedBy().getFirstName() + " " + anomaly.getReportedBy().getLastName());
+                    tempAnomaly.setUpdateBy(user.getFirstName() + " " + user.getLastName());
 
                     tempCA.setAnomaly(tempAnomaly);
                     tempCA.setConsumer(consumer);
-                    if (!anomaly.getNote().equals(collection.getParentAnomalyNoteSet().toString())) {
 
-                        anomaly.setNote("Missing Mandatory Fields are: "+collection.getParentAnomalyNoteSet().toString());
+                    if (!anomaly.getNote().equals(collection.getParentAnomalyNoteSet().toString())) {
+                        anomaly.setNote("Missing Mandatory Fields are: " + collection.getParentAnomalyNoteSet());
                         anomalyRepository.save(anomaly);
                     }
+
                     tempCA.setNotes("Missing Mandatory Fields are: " + distinctErrors);
                     consumerAnomalyRepository.save(tempCA);
                 }
@@ -1872,8 +1878,14 @@ System.out.println("Get all flagged ");
             tempAnomaly.setAnomalyType(anomalyType);
             tempAnomaly.setUpdatedOn(new Date());
             tempAnomaly.setUpdateBy(user.getFirstName() + " " + user.getLastName());
+
             Anomaly savedAnomaly = anomalyRepository.save(tempAnomaly);
-            AnomalyTracking anomalyTracking = new AnomalyTracking(tempAnomaly, new Date(), AnomalyStatus.REPORTED, "", user.getFirstName()+" "+user.getLastName(), tempAnomaly.getUpdatedOn(),"N/A");
+
+            AnomalyTracking anomalyTracking = new AnomalyTracking(
+                    savedAnomaly, new Date(), AnomalyStatus.REPORTED, "",
+                    user.getFirstName() + " " + user.getLastName(),
+                    savedAnomaly.getUpdatedOn(), consumer.getConsistentOn()
+            );
             anomalyTrackingRepository.save(anomalyTracking);
 
             ConsumerAnomaly consumerAnomaly = new ConsumerAnomaly();
@@ -1884,15 +1896,14 @@ System.out.println("Get all flagged ");
             consumerAnomalyRepository.save(consumerAnomaly);
         }
 
-        // soft deleted old consumers
+        // 🔹 soft deleted old consumers
         if (flag) {
             if ((consumerAnomalies.size() == 0 || consumerAnomalies.size() == 1) && consumerIds.size() == 1) {
-                for (int i = 0; i < consumerIds.size(); i++) {
-                    consumerRepository.updatePreviousConsumersStatus(1, consumerIds.get(i));
+                for (Long id : consumerIds) {
+                    consumerRepository.updatePreviousConsumersStatus(1, id);
                 }
             }
         }
-
     }
 
     private void resolveIncompleteAnomaly(Consumer consumer,User user){
@@ -2492,6 +2503,7 @@ System.out.println("Get all flagged ");
     }
 
 
+
     @Transactional
     private Anomaly tagExceedingAnomalies(Consumer consumer, User user) {
         if (consumer == null) return null;
@@ -2508,10 +2520,21 @@ System.out.println("Get all flagged ");
             candidates.add(consumer);
         }
 
-        if (candidates.size() <= 2) return null;
+        // --- Not exceeding ---
+        if (candidates.size() <= 2) {
+            consumer.setConsistentOn("N/A");
+            consumerRepository.save(consumer);
+            return null;
+        }
 
-        candidates.forEach(c -> c.setIsConsistent(false));
-        consumerRepository.save(consumer);
+        // --- Exceeding detected ---
+        String today = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        candidates.forEach(c -> {
+            c.setIsConsistent(false);
+            c.setConsistentOn(today);
+        });
+        consumerRepository.saveAll(candidates); // persist all updated
+
         List<Long> ids = candidates.stream().map(Consumer::getId).collect(Collectors.toList());
 
         final String spName = sp.getName() == null ? "" : sp.getName();
@@ -2554,6 +2577,7 @@ System.out.println("Get all flagged ");
         consumerRepository.markConsumersConsistent(0, ids);
         return anomaly;
     }
+
 
 
     @Transactional
