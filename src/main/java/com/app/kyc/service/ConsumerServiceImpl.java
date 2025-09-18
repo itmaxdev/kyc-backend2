@@ -36,6 +36,7 @@ import com.app.kyc.repository.AnomalyTrackingRepository;
 import com.app.kyc.repository.AnomalyTypeRepository;
 import com.app.kyc.repository.ConsumerAnomalyRepository;
 import com.app.kyc.repository.ConsumerRepository;
+import com.app.kyc.repository.ConsumerSpecifications;
 import com.app.kyc.repository.ServiceProviderRepository;
 import com.app.kyc.response.ConsumersDetailsResponseDTO;
 import com.app.kyc.response.ConsumersHasSubscriptionsResponseDTO;
@@ -167,6 +168,13 @@ public class ConsumerServiceImpl implements ConsumerService {
         final Long spId = Optional.ofNullable(pagination)
                 .map(Pagination::getFilter).map(f -> f.getServiceProviderID())
                 .orElse(null);
+        
+        final String searchText = Optional.ofNullable(pagination)              
+                .map(Pagination::getFilter)                            
+                .map(f -> f.getSearchText())                          
+                .map(String::trim)                                     
+                .map(String::toLowerCase)                              
+                .orElse(null);
 
         // Statuses we allow
         final List<Integer> allowedStatuses = Arrays.asList(0, 1);
@@ -185,38 +193,64 @@ public class ConsumerServiceImpl implements ConsumerService {
 
         // ===== Fetch THREE independent pages =====
         // A) ALL
-        final Page<Consumer> allPage = (spId != null)
-                ? consumerRepository.findByServiceProvider_Id(spId, pageable)
-                : consumerRepository.findAll(pageable);
+//        final Page<Consumer> allPage = (spId != null)
+//                ? consumerRepository.findByServiceProvider_Id(spId, pageable)
+//                : consumerRepository.findAll(pageable);
 
         // B) CONSISTENT
-        final Page<Consumer> consistentPage = (spId != null)
-                ? consumerRepository.findByIsConsistentTrueAndConsumerStatusInAndServiceProvider_Id(pageable, allowedStatuses, spId)
-                : consumerRepository.findByIsConsistentTrueAndConsumerStatusIn(pageable, allowedStatuses);
+//        final Page<Consumer> consistentPage = (spId != null)
+//                ? consumerRepository.findByIsConsistentTrueAndConsumerStatusInAndServiceProvider_Id(pageable, allowedStatuses, spId)
+//                : consumerRepository.findByIsConsistentTrueAndConsumerStatusIn(pageable, allowedStatuses);
 
         // C) INCONSISTENT
-        final Page<Consumer> inconsistentPage = (spId != null)
-                ? consumerRepository.findByIsConsistentFalseAndConsumerStatusInAndServiceProvider_Id(pageable, allowedStatuses, spId)
-                : consumerRepository.findByIsConsistentFalseAndConsumerStatusIn(pageable, allowedStatuses);
+//        final Page<Consumer> inconsistentPage = (spId != null)
+//                ? consumerRepository.findByIsConsistentFalseAndConsumerStatusInAndServiceProvider_Id(pageable, allowedStatuses, spId)
+//                : consumerRepository.findByIsConsistentFalseAndConsumerStatusIn(pageable, allowedStatuses);
+        
+     
+		final Page<Consumer> filterData;
+		long filterCount;
+		if ("CONSISTENT".equals(type)) {
+			filterCount  = consumerRepository.count(
+	                ConsumerSpecifications.withFilters(spId, searchText, true ,allowedStatuses)
+			        );
+			filterData = consumerRepository
+					.findAll(ConsumerSpecifications.withFilters(spId, searchText, true, allowedStatuses), pageable);
+		} else if ("INCONSISTENT".equals(type)) {
+			filterCount = consumerRepository.count(
+	                ConsumerSpecifications.withFilters(spId, searchText, false ,allowedStatuses)
+			        );
+			filterData = consumerRepository
+					.findAll(ConsumerSpecifications.withFilters(spId, searchText, false, allowedStatuses), pageable);
+		} else {
+			filterCount = consumerRepository.count(
+	                ConsumerSpecifications.withFilters(spId, searchText, null ,null)
+	        );
+			filterData = consumerRepository.findAll(ConsumerSpecifications.withFilters(spId, searchText, null, null),
+					pageable);
+		}
+		
+		final List<ConsumersHasSubscriptionsResponseDTO> finalData = toDtoPage(dedup(filterData.getContent()));
 
         // Map each slice independently (with de-dup just in case)
-        final List<ConsumersHasSubscriptionsResponseDTO> allData          = toDtoPage(dedup(allPage.getContent()));
-        final List<ConsumersHasSubscriptionsResponseDTO> consistentData   = toDtoPage(dedup(consistentPage.getContent()));
-        final List<ConsumersHasSubscriptionsResponseDTO> inconsistentData = toDtoPage(dedup(inconsistentPage.getContent()));
+//        final List<ConsumersHasSubscriptionsResponseDTO> allData          = toDtoPage(dedup(allPage.getContent()));
+//        final List<ConsumersHasSubscriptionsResponseDTO> consistentData   = toDtoPage(dedup(consistentPage.getContent()));
+//        final List<ConsumersHasSubscriptionsResponseDTO> inconsistentData = toDtoPage(dedup(inconsistentPage.getContent()));
 
         // "data" shaped by filter.type
-        final List<ConsumersHasSubscriptionsResponseDTO> dataBucket =
-                "CONSISTENT".equals(type)   ? consistentData :
-                        "INCONSISTENT".equals(type) ? inconsistentData :
-                                allData;
+//        final List<ConsumersHasSubscriptionsResponseDTO> dataBucket =
+//                "CONSISTENT".equals(type)   ? consistentData :
+//                        "INCONSISTENT".equals(type) ? inconsistentData :
+//                                allData;
 
         Map<String, Object> resp = new HashMap<>();
         resp.put("count", allCount);
         resp.put("consistentCount", consistentCount);
         resp.put("inconsistentCount", inconsistentCount);
-        resp.put("data", dataBucket);               // page of ALL / CONSISTENT / INCONSISTENT based on type
-        resp.put("consistentData", consistentData); // always a consistent page
-        resp.put("inconsistentData", inconsistentData); // always an inconsistent page
+        resp.put("filterCount", filterCount);
+        resp.put("data", finalData);               // page of ALL / CONSISTENT / INCONSISTENT based on type
+        //resp.put("consistentData", consistentData); // always a consistent page
+        //resp.put("inconsistentData", inconsistentData); // always an inconsistent page
         return resp;
     }
 
@@ -700,18 +734,25 @@ System.out.println("Get all flagged ");
                 && pagination.getFilter() != null
                 && (pagination.getFilter().getServiceProviderID() == null
                 || pagination.getFilter().getServiceProviderID() == -1);
-
+        
         final boolean isResolved = pagination != null
                 && pagination.getFilter() != null
                 && Boolean.TRUE.equals(pagination.getFilter().getIsResolved());
+        
+        final String searchText = Optional.ofNullable(pagination)              
+                .map(Pagination::getFilter)                            
+                .map(f -> f.getSearchText())                          
+                .map(String::trim)                                     
+                .map(String::toLowerCase)                              
+                .orElse(null);
+        
         if (noSpFilter) {
-            System.out.println("Test is Resolved "+isResolved);
             if (isResolved) {
                 consumerStatus.add(1);
                 anomalyStatus.add(AnomalyStatus.RESOLVED_FULLY);
 
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumerStatus(pageable, consumerStatus, anomalyStatus, pagination.getFilter().getAnomalyType());
+                        anomalyRepository.findAllByConsumerStatus(pageable, consumerStatus, anomalyStatus, pagination.getFilter().getAnomalyType(),searchText);
 
                 pageAnomaly = anomalyData.stream()
                         .map(a -> new AnomlyDto(a, 0))
@@ -719,12 +760,11 @@ System.out.println("Get all flagged ");
                 totalAnomaliesCount = anomalyData.getTotalElements();
 
             } else {
-                System.out.println("Test is Resolved 1"+isResolved);
                 anomalyStatus.addAll(this.setStatusList(pagination.getFilter().getAnomalyStatus()));
                 resolutionStatus.addAll(this.setResolution(pagination.getFilter().getResolution()));
 
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumersAll(pageable, anomalyStatus, pagination.getFilter().getAnomalyType(),resolutionStatus);
+                        anomalyRepository.findAllByConsumersAll(pageable, anomalyStatus, pagination.getFilter().getAnomalyType(),resolutionStatus,searchText);
 
                 pageAnomaly = anomalyData.stream()
                         .map(AnomlyDto::new)
@@ -732,7 +772,6 @@ System.out.println("Get all flagged ");
                 totalAnomaliesCount = anomalyData.getTotalElements();
             }
         } else {
-            System.out.println("Test is Resolved 2"+isResolved);
             final Long spId = pagination.getFilter().getServiceProviderID();
             List<Long> spIds;
             
@@ -745,12 +784,11 @@ System.out.println("Get all flagged ");
                         .collect(Collectors.toList());
             }
             if (isResolved) {
-                System.out.println("Test is Resolved 3"+isResolved);
                 consumerStatus.add(1);
                 anomalyStatus.add(AnomalyStatus.RESOLVED_FULLY);
 
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus, spIds, anomalyStatus, pagination.getFilter().getAnomalyType(),resolutionStatus);
+                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus, spIds, anomalyStatus, pagination.getFilter().getAnomalyType(),resolutionStatus,searchText);
 
                 pageAnomaly = anomalyData.stream()
                         .map(a -> new AnomlyDto(a, 0))
@@ -758,12 +796,11 @@ System.out.println("Get all flagged ");
                 totalAnomaliesCount = anomalyData.getTotalElements();
 
             } else {
-                System.out.println("Test is Resolved 4 "+isResolved);
                 consumerStatus.add(0);
                 anomalyStatus.addAll(this.setStatusList(pagination.getFilter().getAnomalyStatus()));
                 resolutionStatus.addAll(this.setResolution(pagination.getFilter().getResolution()));
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumerStatusAndServiceProviderIdOnly(pageable, spIds);
+                        anomalyRepository.findAllByConsumerStatusAndServiceProviderIdOnly(pageable, spIds,searchText);
                 pageAnomaly = anomalyData.stream()
                         .map(AnomlyDto::new)
                         .collect(Collectors.toList());
@@ -2313,11 +2350,19 @@ System.out.println("Get all flagged ");
 			case RESOLVED_PARTIALLY:
 				anomalyStatus.add(AnomalyStatus.RESOLVED_PARTIALLY);
 				break;
+				
+			case RESOLVED_FULLY:
+				anomalyStatus.add(AnomalyStatus.RESOLVED_FULLY);
+				break;
+				
+			case WITHDRAWN:
+				anomalyStatus.add(AnomalyStatus.WITHDRAWN);
+				break;
 
 			default:
 				anomalyStatus.addAll(Arrays.asList(AnomalyStatus.REPORTED, AnomalyStatus.QUESTION_SUBMITTED,
 						AnomalyStatus.UNDER_INVESTIGATION, AnomalyStatus.QUESTION_ANSWERED,
-						AnomalyStatus.RESOLUTION_SUBMITTED,AnomalyStatus.RESOLVED_PARTIALLY));
+						AnomalyStatus.RESOLUTION_SUBMITTED,AnomalyStatus.RESOLVED_PARTIALLY,AnomalyStatus.RESOLVED_FULLY,AnomalyStatus.WITHDRAWN));
 				break;
 			}
 		} 
