@@ -129,23 +129,48 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
    @Query(value = "SELECT * FROM anomalies WHERE id IN (:anomalyId) and anomaly_type_id = :anomalyTypeId", nativeQuery = true)
    Anomaly findByIdAndAnomalyType_Id(@Param("anomalyId") List<Long> anomalyId, @Param("anomalyTypeId") Long anomalyTypeId);
 
-   @Query(value = "select Distinct a from Anomaly a join ConsumerAnomaly ca on a.id = ca.anomaly.id join Consumer c on ca.consumer.id = c.id where c.consumerStatus in (:consumer_status) and a.status in (:anomalyStatus) and (:anomalyType is null or a.anomalyType.id = :anomalyType)")
-   Page<Anomaly> findAllByConsumerStatus(Pageable pageable, @Param("consumer_status") List<Integer> consumer_status, @Param("anomalyStatus") List<AnomalyStatus> anomalyStatus,@Param("anomalyType") Long anomalyType);
+   @Query(value = "select Distinct a from Anomaly a join ConsumerAnomaly ca on a.id = ca.anomaly.id join Consumer c on ca.consumer.id = c.id where c.consumerStatus in (:consumer_status) and a.status in (:anomalyStatus) and (:anomalyType is null or a.anomalyType.id = :anomalyType)"
+	   	+ " and (:searchText is null "
+   		+ " or lower(concat(coalesce(c.firstName, ''),' ',coalesce(c.middleName, ''),' ',coalesce(c.lastName, ''))) like lower(concat('%', :searchText, '%'))"
+   		+ " or lower(c.msisdn) like lower(concat('%', :searchText, '%'))"
+   		+ " or lower(c.serviceProvider.name) like lower(concat('%', :searchText, '%'))"
+   		+ " or lower(concat(coalesce(c.serviceProvider.name, ''), '-',coalesce(function('date_format', a.reportedOn, '%d%m%Y')), '-',coalesce(a.id, ''))) like lower(concat('%', :searchText, '%'))"
+   		+ ")")
+   Page<Anomaly> findAllByConsumerStatus(Pageable pageable, @Param("consumer_status") List<Integer> consumer_status, @Param("anomalyStatus") List<AnomalyStatus> anomalyStatus,@Param("anomalyType") Long anomalyType, @Param("searchText") String searchText);
 
-   @Query(value = "select Distinct a from Anomaly a join ConsumerAnomaly ca on a.id = ca.anomaly.id join Consumer c on ca.consumer.id = c.id where (coalesce(:anomalyStatus, null) is null or a.status in (:anomalyStatus)) and (coalesce(:resolutionStatus, null) is null or a.status in (:resolutionStatus))  and (:anomalyType is null or a.anomalyType.id = :anomalyType)")
-   Page<Anomaly> findAllByConsumersAll(Pageable pageable, @Param("anomalyStatus") List<AnomalyStatus> anomalyStatus, @Param("anomalyType") Long anomalyType, @Param("resolutionStatus") List<AnomalyStatus> resolutionStatus);
+   @Query(value = "select Distinct a from Anomaly a join ConsumerAnomaly ca on a.id = ca.anomaly.id join Consumer c on ca.consumer.id = c.id where (coalesce(:anomalyStatus, null) is null or a.status in (:anomalyStatus)) and (coalesce(:resolutionStatus, null) is null or a.status in (:resolutionStatus))  and (:anomalyType is null or a.anomalyType.id = :anomalyType)"
+   		+ " and (:searchText is null "
+   		+ " or lower(concat(coalesce(c.firstName, ''),' ',coalesce(c.middleName, ''),' ',coalesce(c.lastName, ''))) like lower(concat('%', :searchText, '%'))"
+   		+ " or lower(c.msisdn) like lower(concat('%', :searchText, '%'))"
+   		+ " or lower(c.serviceProvider.name) like lower(concat('%', :searchText, '%'))"
+   		+ " or lower(concat(coalesce(c.serviceProvider.name, ''), '-',coalesce(function('date_format', a.reportedOn, '%d%m%Y')), '-',coalesce(a.id, ''))) like lower(concat('%', :searchText, '%'))"
+   		+ ")")
+   Page<Anomaly> findAllByConsumersAll(Pageable pageable, @Param("anomalyStatus") List<AnomalyStatus> anomalyStatus, @Param("anomalyType") Long anomalyType, @Param("resolutionStatus") List<AnomalyStatus> resolutionStatus, @Param("searchText") String searchText);
 
-   @Query(value = "select Distinct a from Anomaly a join ConsumerAnomaly ca on a.id = ca.anomaly.id join Consumer c on ca.consumer.id = c.id where c.consumerStatus in (:consumer_status) and c.serviceProvider.id IN (:serviceProviderId) and (coalesce(:anomalyStatus, null) is null or a.status in (:anomalyStatus)) and (coalesce(:resolutionStatus, null) is null or a.status in (:resolutionStatus)) and (:anomalyType is null or a.anomalyType.id = :anomalyType)")
-   Page<Anomaly> findAllByConsumerStatusAndServiceProviderId(Pageable pageable, @Param("consumer_status") List<Integer> consumer_status, @Param("serviceProviderId") List<Long> serviceProviderId, @Param("anomalyStatus") List<AnomalyStatus> anomalyStatus, @Param("anomalyType") Long anomalyType,@Param("resolutionStatus") List<AnomalyStatus> resolutionStatus);
+   @Query(value = "select Distinct a from Anomaly a join ConsumerAnomaly ca on a.id = ca.anomaly.id join Consumer c on ca.consumer.id = c.id where c.consumerStatus in (:consumer_status) and c.serviceProvider.id IN (:serviceProviderId) and (coalesce(:anomalyStatus, null) is null or a.status in (:anomalyStatus)) and (coalesce(:resolutionStatus, null) is null or a.status in (:resolutionStatus)) and (:anomalyType is null or a.anomalyType.id = :anomalyType)"
+	    + " and (:searchText is null "
+   		+ " or lower(concat(coalesce(c.firstName, ''),' ',coalesce(c.middleName, ''),' ',coalesce(c.lastName, ''))) like lower(concat('%', :searchText, '%'))"
+   		+ " or lower(c.msisdn) like lower(concat('%', :searchText, '%'))"
+   		+ " or lower(c.serviceProvider.name) like lower(concat('%', :searchText, '%'))"
+   		+ " or lower(concat(coalesce(c.serviceProvider.name, ''), '-',coalesce(function('date_format', a.reportedOn, '%d%m%Y')), '-',coalesce(a.id, ''))) like lower(concat('%', :searchText, '%'))"
+   		+ ")")
+   Page<Anomaly> findAllByConsumerStatusAndServiceProviderId(Pageable pageable, @Param("consumer_status") List<Integer> consumer_status, @Param("serviceProviderId") List<Long> serviceProviderId, @Param("anomalyStatus") List<AnomalyStatus> anomalyStatus, @Param("anomalyType") Long anomalyType,@Param("resolutionStatus") List<AnomalyStatus> resolutionStatus, @Param("searchText") String searchText);
 
    @Query("SELECT DISTINCT a " +
            "FROM Anomaly a " +
            "JOIN ConsumerAnomaly ca ON a.id = ca.anomaly.id " +
            "JOIN Consumer c ON ca.consumer.id = c.id " +
-           "WHERE c.serviceProvider.id IN (:serviceProviderId)")
+           "WHERE c.serviceProvider.id IN (:serviceProviderId)"
+            + " and (:searchText is null "
+      		+ " or lower(concat(coalesce(c.firstName, ''),' ',coalesce(c.middleName, ''),' ',coalesce(c.lastName, ''))) like lower(concat('%', :searchText, '%'))"
+      		+ " or lower(c.msisdn) like lower(concat('%', :searchText, '%'))"
+      		+ " or lower(c.serviceProvider.name) like lower(concat('%', :searchText, '%'))"
+      		+ " or lower(concat(coalesce(c.serviceProvider.name, ''), '-',coalesce(function('date_format', a.reportedOn, '%d%m%Y')), '-',coalesce(a.id, ''))) like lower(concat('%', :searchText, '%'))"
+      		+ ")")
    Page<Anomaly> findAllByConsumerStatusAndServiceProviderIdOnly(
            Pageable pageable,
-           @Param("serviceProviderId") List<Long> serviceProviderId);
+           @Param("serviceProviderId") List<Long> serviceProviderId,
+           @Param("searchText") String searchText);
 
    @Transactional
    void deleteAllByIdIn(List<Long> ids);

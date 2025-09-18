@@ -4,6 +4,7 @@ import java.io.*;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -35,6 +36,7 @@ import com.app.kyc.repository.AnomalyTrackingRepository;
 import com.app.kyc.repository.AnomalyTypeRepository;
 import com.app.kyc.repository.ConsumerAnomalyRepository;
 import com.app.kyc.repository.ConsumerRepository;
+import com.app.kyc.repository.ConsumerSpecifications;
 import com.app.kyc.repository.ServiceProviderRepository;
 import com.app.kyc.response.ConsumersDetailsResponseDTO;
 import com.app.kyc.response.ConsumersHasSubscriptionsResponseDTO;
@@ -166,6 +168,13 @@ public class ConsumerServiceImpl implements ConsumerService {
         final Long spId = Optional.ofNullable(pagination)
                 .map(Pagination::getFilter).map(f -> f.getServiceProviderID())
                 .orElse(null);
+        
+        final String searchText = Optional.ofNullable(pagination)              
+                .map(Pagination::getFilter)                            
+                .map(f -> f.getSearchText())                          
+                .map(String::trim)                                     
+                .map(String::toLowerCase)                              
+                .orElse(null);
 
         // Statuses we allow
         final List<Integer> allowedStatuses = Arrays.asList(0, 1);
@@ -184,38 +193,64 @@ public class ConsumerServiceImpl implements ConsumerService {
 
         // ===== Fetch THREE independent pages =====
         // A) ALL
-        final Page<Consumer> allPage = (spId != null)
-                ? consumerRepository.findByServiceProvider_Id(spId, pageable)
-                : consumerRepository.findAll(pageable);
+//        final Page<Consumer> allPage = (spId != null)
+//                ? consumerRepository.findByServiceProvider_Id(spId, pageable)
+//                : consumerRepository.findAll(pageable);
 
         // B) CONSISTENT
-        final Page<Consumer> consistentPage = (spId != null)
-                ? consumerRepository.findByIsConsistentTrueAndConsumerStatusInAndServiceProvider_Id(pageable, allowedStatuses, spId)
-                : consumerRepository.findByIsConsistentTrueAndConsumerStatusIn(pageable, allowedStatuses);
+//        final Page<Consumer> consistentPage = (spId != null)
+//                ? consumerRepository.findByIsConsistentTrueAndConsumerStatusInAndServiceProvider_Id(pageable, allowedStatuses, spId)
+//                : consumerRepository.findByIsConsistentTrueAndConsumerStatusIn(pageable, allowedStatuses);
 
         // C) INCONSISTENT
-        final Page<Consumer> inconsistentPage = (spId != null)
-                ? consumerRepository.findByIsConsistentFalseAndConsumerStatusInAndServiceProvider_Id(pageable, allowedStatuses, spId)
-                : consumerRepository.findByIsConsistentFalseAndConsumerStatusIn(pageable, allowedStatuses);
+//        final Page<Consumer> inconsistentPage = (spId != null)
+//                ? consumerRepository.findByIsConsistentFalseAndConsumerStatusInAndServiceProvider_Id(pageable, allowedStatuses, spId)
+//                : consumerRepository.findByIsConsistentFalseAndConsumerStatusIn(pageable, allowedStatuses);
+        
+     
+		final Page<Consumer> filterData;
+		long filterCount;
+		if ("CONSISTENT".equals(type)) {
+			filterCount  = consumerRepository.count(
+	                ConsumerSpecifications.withFilters(spId, searchText, true ,allowedStatuses)
+			        );
+			filterData = consumerRepository
+					.findAll(ConsumerSpecifications.withFilters(spId, searchText, true, allowedStatuses), pageable);
+		} else if ("INCONSISTENT".equals(type)) {
+			filterCount = consumerRepository.count(
+	                ConsumerSpecifications.withFilters(spId, searchText, false ,allowedStatuses)
+			        );
+			filterData = consumerRepository
+					.findAll(ConsumerSpecifications.withFilters(spId, searchText, false, allowedStatuses), pageable);
+		} else {
+			filterCount = consumerRepository.count(
+	                ConsumerSpecifications.withFilters(spId, searchText, null ,null)
+	        );
+			filterData = consumerRepository.findAll(ConsumerSpecifications.withFilters(spId, searchText, null, null),
+					pageable);
+		}
+		
+		final List<ConsumersHasSubscriptionsResponseDTO> finalData = toDtoPage(dedup(filterData.getContent()));
 
         // Map each slice independently (with de-dup just in case)
-        final List<ConsumersHasSubscriptionsResponseDTO> allData          = toDtoPage(dedup(allPage.getContent()));
-        final List<ConsumersHasSubscriptionsResponseDTO> consistentData   = toDtoPage(dedup(consistentPage.getContent()));
-        final List<ConsumersHasSubscriptionsResponseDTO> inconsistentData = toDtoPage(dedup(inconsistentPage.getContent()));
+//        final List<ConsumersHasSubscriptionsResponseDTO> allData          = toDtoPage(dedup(allPage.getContent()));
+//        final List<ConsumersHasSubscriptionsResponseDTO> consistentData   = toDtoPage(dedup(consistentPage.getContent()));
+//        final List<ConsumersHasSubscriptionsResponseDTO> inconsistentData = toDtoPage(dedup(inconsistentPage.getContent()));
 
         // "data" shaped by filter.type
-        final List<ConsumersHasSubscriptionsResponseDTO> dataBucket =
-                "CONSISTENT".equals(type)   ? consistentData :
-                        "INCONSISTENT".equals(type) ? inconsistentData :
-                                allData;
+//        final List<ConsumersHasSubscriptionsResponseDTO> dataBucket =
+//                "CONSISTENT".equals(type)   ? consistentData :
+//                        "INCONSISTENT".equals(type) ? inconsistentData :
+//                                allData;
 
         Map<String, Object> resp = new HashMap<>();
         resp.put("count", allCount);
         resp.put("consistentCount", consistentCount);
         resp.put("inconsistentCount", inconsistentCount);
-        resp.put("data", dataBucket);               // page of ALL / CONSISTENT / INCONSISTENT based on type
-        resp.put("consistentData", consistentData); // always a consistent page
-        resp.put("inconsistentData", inconsistentData); // always an inconsistent page
+        resp.put("filterCount", filterCount);
+        resp.put("data", finalData);               // page of ALL / CONSISTENT / INCONSISTENT based on type
+        //resp.put("consistentData", consistentData); // always a consistent page
+        //resp.put("inconsistentData", inconsistentData); // always an inconsistent page
         return resp;
     }
 
@@ -699,18 +734,25 @@ System.out.println("Get all flagged ");
                 && pagination.getFilter() != null
                 && (pagination.getFilter().getServiceProviderID() == null
                 || pagination.getFilter().getServiceProviderID() == -1);
-
+        
         final boolean isResolved = pagination != null
                 && pagination.getFilter() != null
                 && Boolean.TRUE.equals(pagination.getFilter().getIsResolved());
+        
+        final String searchText = Optional.ofNullable(pagination)              
+                .map(Pagination::getFilter)                            
+                .map(f -> f.getSearchText())                          
+                .map(String::trim)                                     
+                .map(String::toLowerCase)                              
+                .orElse(null);
+        
         if (noSpFilter) {
-            System.out.println("Test is Resolved "+isResolved);
             if (isResolved) {
                 consumerStatus.add(1);
                 anomalyStatus.add(AnomalyStatus.RESOLVED_FULLY);
 
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumerStatus(pageable, consumerStatus, anomalyStatus, pagination.getFilter().getAnomalyType());
+                        anomalyRepository.findAllByConsumerStatus(pageable, consumerStatus, anomalyStatus, pagination.getFilter().getAnomalyType(),searchText);
 
                 pageAnomaly = anomalyData.stream()
                         .map(a -> new AnomlyDto(a, 0))
@@ -718,12 +760,11 @@ System.out.println("Get all flagged ");
                 totalAnomaliesCount = anomalyData.getTotalElements();
 
             } else {
-                System.out.println("Test is Resolved 1"+isResolved);
                 anomalyStatus.addAll(this.setStatusList(pagination.getFilter().getAnomalyStatus()));
                 resolutionStatus.addAll(this.setResolution(pagination.getFilter().getResolution()));
 
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumersAll(pageable, anomalyStatus, pagination.getFilter().getAnomalyType(),resolutionStatus);
+                        anomalyRepository.findAllByConsumersAll(pageable, anomalyStatus, pagination.getFilter().getAnomalyType(),resolutionStatus,searchText);
 
                 pageAnomaly = anomalyData.stream()
                         .map(AnomlyDto::new)
@@ -731,7 +772,6 @@ System.out.println("Get all flagged ");
                 totalAnomaliesCount = anomalyData.getTotalElements();
             }
         } else {
-            System.out.println("Test is Resolved 2"+isResolved);
             final Long spId = pagination.getFilter().getServiceProviderID();
             List<Long> spIds;
             
@@ -744,12 +784,11 @@ System.out.println("Get all flagged ");
                         .collect(Collectors.toList());
             }
             if (isResolved) {
-                System.out.println("Test is Resolved 3"+isResolved);
                 consumerStatus.add(1);
                 anomalyStatus.add(AnomalyStatus.RESOLVED_FULLY);
 
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus, spIds, anomalyStatus, pagination.getFilter().getAnomalyType(),resolutionStatus);
+                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus, spIds, anomalyStatus, pagination.getFilter().getAnomalyType(),resolutionStatus,searchText);
 
                 pageAnomaly = anomalyData.stream()
                         .map(a -> new AnomlyDto(a, 0))
@@ -757,12 +796,11 @@ System.out.println("Get all flagged ");
                 totalAnomaliesCount = anomalyData.getTotalElements();
 
             } else {
-                System.out.println("Test is Resolved 4 "+isResolved);
                 consumerStatus.add(0);
                 anomalyStatus.addAll(this.setStatusList(pagination.getFilter().getAnomalyStatus()));
                 resolutionStatus.addAll(this.setResolution(pagination.getFilter().getResolution()));
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumerStatusAndServiceProviderIdOnly(pageable, spIds);
+                        anomalyRepository.findAllByConsumerStatusAndServiceProviderIdOnly(pageable, spIds,searchText);
                 pageAnomaly = anomalyData.stream()
                         .map(AnomlyDto::new)
                         .collect(Collectors.toList());
@@ -1771,47 +1809,44 @@ System.out.println("Get all flagged ");
         }
         private String normalize(String s) { return s == null ? "" : s.trim(); }
 
-        // Your existing methods referenced here must remain:
-        // - List<String> checkNullAttributesForFile(Consumer c)
-        // - void checkConsumerIncompleteAnomaly(Consumer c, List<String> errors, User user, boolean hasExisting, AnomalyCollection ac)
-        // - void resolveIncompleteAnomaly(Consumer c, User user)
-        // - void softDeleteConsistentUsers(Consumer c)
-        // - Consumer resolvedAndSoftDeleteConsumers(Consumer c, boolean hasExisting, User user)
-        // - void tagDuplicateAnomalies(Consumer c, User user)
-        // - Consumer resolvedAndDeleteExceedingConsumers(Consumer c, boolean hasExisting, User user)
-        // - void tagExceedingAnomalies(Consumer c, User user)
 
-
-
-
-
-    private void checkConsumerIncompleteAnomaly(Consumer consumer, List<String> errors, User user, Boolean flag,AnomalyCollection collection) {
-
-        Set<String> setForDefaultErrors = new HashSet<>();
-        Set<String> setForFileErrors = new HashSet<>();
-        for (String s : errors)
-        setForDefaultErrors.add(s);
-        for (String s : checkNullAttributesForFile(consumer))
-        setForFileErrors.add(s);
+    private void checkConsumerIncompleteAnomaly(
+            Consumer consumer,
+            List<String> errors,
+            User user,
+            Boolean flag,
+            AnomalyCollection collection
+    ) {
+        Set<String> setForDefaultErrors = new HashSet<>(errors);
+        Set<String> setForFileErrors = new HashSet<>(checkNullAttributesForFile(consumer));
 
         Set<String> combinedErrors = Stream.concat(setForDefaultErrors.stream(), setForFileErrors.stream())
-        .collect(Collectors.toSet());
+                .collect(Collectors.toSet());
         collection.setParentAnomalyNoteSet(Stream.concat(combinedErrors.stream(), collection.getParentAnomalyNoteSet().stream())
-        .collect(Collectors.toSet()));
+                .collect(Collectors.toSet()));
 
         String distinctErrors = String.join(", ", combinedErrors);
-        String err_str = String.join(", ", errors);
-        String fileErrors = String.join(", ", checkNullAttributesForFile(consumer));
 
         Anomaly tempAnomaly = new Anomaly();
-
         AnomalyType anomalyType = anomalyTypeRepository.findFirstByName("Incomplete Data");
 
-        List<Consumer> tempConsumer = consumerRepository.findConsumerIdsByMsisdnAndIdNumberAndIdTypeAndServiceProviderID(consumer.getMsisdn(), consumer.getIdentificationType(), consumer.getIdentificationNumber(), consumer.getServiceProvider().getId());
+        List<Consumer> tempConsumer = consumerRepository.findConsumerIdsByMsisdnAndIdNumberAndIdTypeAndServiceProviderID(
+                consumer.getMsisdn(),
+                consumer.getIdentificationType(),
+                consumer.getIdentificationNumber(),
+                consumer.getServiceProvider().getId()
+        );
         List<Long> consumerIds = tempConsumer.stream().map(Consumer::getId).collect(Collectors.toList());
         List<Long> consumerAnomalies = consumerAnomalyRepository.findAnomaliesIdByConsumerAndAnomalyTypeId(consumerIds, anomalyType.getId());
 
+        // 🔹 Mark inconsistent & set consistentOn
         consumer.setIsConsistent(false);
+        String today = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        if (!combinedErrors.isEmpty()) {
+            consumer.setConsistentOn(today);  // anomaly triggered
+        } else {
+            consumer.setConsistentOn("N/A");
+        }
         consumer = consumerRepository.save(consumer);
 
         tempAnomaly.setNote("Missing Mandatory Fields: " + distinctErrors);
@@ -1819,48 +1854,56 @@ System.out.println("Get all flagged ");
 
         if (!consumerAnomalies.isEmpty()) {
             Anomaly anomaly = anomalyRepository.findByIdAndAnomalyType_Id(consumerAnomalies, anomalyType.getId());
-            if (!Objects.isNull(anomaly)) {
+            if (anomaly != null) {
                 if (anomaly.getStatus().getCode() == 4) {
                     anomaly.setStatus(AnomalyStatus.RESOLVED_FULLY);
                     anomalyRepository.save(anomaly);
 
-                    AnomalyTracking anomalyTracking = new AnomalyTracking(anomaly, new Date(), AnomalyStatus.RESOLVED_FULLY, "", user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn(),"N/A");
+                    AnomalyTracking anomalyTracking = new AnomalyTracking(
+                            anomaly, new Date(), AnomalyStatus.RESOLVED_FULLY, "",
+                            user.getFirstName() + " " + user.getLastName(),
+                            anomaly.getUpdatedOn(), consumer.getConsistentOn()
+                    );
                     anomalyTrackingRepository.save(anomalyTracking);
 
                     tempAnomaly.setStatus(AnomalyStatus.REPORTED);
-                    tempAnomaly.getConsumers().remove(consumer);
                     tempAnomaly.addConsumer(consumer);
                     tempAnomaly.setReportedOn(new Date());
                     tempAnomaly.setReportedBy(user);
                     tempAnomaly.setAnomalyType(anomalyType);
                     tempAnomaly.setUpdatedOn(new Date());
-                    tempAnomaly.setUpdateBy(anomaly.getReportedBy().getFirstName() + " " + anomaly.getReportedBy().getLastName());
+                    tempAnomaly.setUpdateBy(user.getFirstName() + " " + user.getLastName());
 
                     anomalyRepository.save(tempAnomaly);
-                    anomalyTracking = new AnomalyTracking(anomaly, new Date(), AnomalyStatus.REPORTED, "", user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn(),"N/A");
-                    anomalyTrackingRepository.save(anomalyTracking);
 
+                    anomalyTracking = new AnomalyTracking(
+                            anomaly, new Date(), AnomalyStatus.REPORTED, "",
+                            user.getFirstName() + " " + user.getLastName(),
+                            anomaly.getUpdatedOn(), consumer.getConsistentOn()
+                    );
+                    anomalyTrackingRepository.save(anomalyTracking);
                 }
+
                 if (anomaly.getStatus().getCode() == 0 || anomaly.getStatus().getCode() == 1 ||
-                anomaly.getStatus().getCode() == 2 || anomaly.getStatus().getCode() == 3) {
+                        anomaly.getStatus().getCode() == 2 || anomaly.getStatus().getCode() == 3) {
 
                     tempAnomaly.setId(anomaly.getId());
                     tempAnomaly.setStatus(anomaly.getStatus());
-                    tempAnomaly.getConsumers().remove(consumer);
                     tempAnomaly.addConsumer(consumer);
                     tempAnomaly.setReportedOn(anomaly.getReportedOn());
                     tempAnomaly.setReportedBy(user);
                     tempAnomaly.setAnomalyType(anomalyType);
                     tempAnomaly.setUpdatedOn(anomaly.getUpdatedOn());
-                    tempAnomaly.setUpdateBy(anomaly.getReportedBy().getFirstName() + " " + anomaly.getReportedBy().getLastName());
+                    tempAnomaly.setUpdateBy(user.getFirstName() + " " + user.getLastName());
 
                     tempCA.setAnomaly(tempAnomaly);
                     tempCA.setConsumer(consumer);
-                    if (!anomaly.getNote().equals(collection.getParentAnomalyNoteSet().toString())) {
 
-                        anomaly.setNote("Missing Mandatory Fields are: "+collection.getParentAnomalyNoteSet().toString());
+                    if (!anomaly.getNote().equals(collection.getParentAnomalyNoteSet().toString())) {
+                        anomaly.setNote("Missing Mandatory Fields are: " + collection.getParentAnomalyNoteSet());
                         anomalyRepository.save(anomaly);
                     }
+
                     tempCA.setNotes("Missing Mandatory Fields are: " + distinctErrors);
                     consumerAnomalyRepository.save(tempCA);
                 }
@@ -1872,8 +1915,14 @@ System.out.println("Get all flagged ");
             tempAnomaly.setAnomalyType(anomalyType);
             tempAnomaly.setUpdatedOn(new Date());
             tempAnomaly.setUpdateBy(user.getFirstName() + " " + user.getLastName());
+
             Anomaly savedAnomaly = anomalyRepository.save(tempAnomaly);
-            AnomalyTracking anomalyTracking = new AnomalyTracking(tempAnomaly, new Date(), AnomalyStatus.REPORTED, "", user.getFirstName()+" "+user.getLastName(), tempAnomaly.getUpdatedOn(),"N/A");
+
+            AnomalyTracking anomalyTracking = new AnomalyTracking(
+                    savedAnomaly, new Date(), AnomalyStatus.REPORTED, "",
+                    user.getFirstName() + " " + user.getLastName(),
+                    savedAnomaly.getUpdatedOn(), consumer.getConsistentOn()
+            );
             anomalyTrackingRepository.save(anomalyTracking);
 
             ConsumerAnomaly consumerAnomaly = new ConsumerAnomaly();
@@ -1884,15 +1933,14 @@ System.out.println("Get all flagged ");
             consumerAnomalyRepository.save(consumerAnomaly);
         }
 
-        // soft deleted old consumers
+        // 🔹 soft deleted old consumers
         if (flag) {
             if ((consumerAnomalies.size() == 0 || consumerAnomalies.size() == 1) && consumerIds.size() == 1) {
-                for (int i = 0; i < consumerIds.size(); i++) {
-                    consumerRepository.updatePreviousConsumersStatus(1, consumerIds.get(i));
+                for (Long id : consumerIds) {
+                    consumerRepository.updatePreviousConsumersStatus(1, id);
                 }
             }
         }
-
     }
 
     private void resolveIncompleteAnomaly(Consumer consumer,User user){
@@ -2302,11 +2350,19 @@ System.out.println("Get all flagged ");
 			case RESOLVED_PARTIALLY:
 				anomalyStatus.add(AnomalyStatus.RESOLVED_PARTIALLY);
 				break;
+				
+			case RESOLVED_FULLY:
+				anomalyStatus.add(AnomalyStatus.RESOLVED_FULLY);
+				break;
+				
+			case WITHDRAWN:
+				anomalyStatus.add(AnomalyStatus.WITHDRAWN);
+				break;
 
 			default:
 				anomalyStatus.addAll(Arrays.asList(AnomalyStatus.REPORTED, AnomalyStatus.QUESTION_SUBMITTED,
 						AnomalyStatus.UNDER_INVESTIGATION, AnomalyStatus.QUESTION_ANSWERED,
-						AnomalyStatus.RESOLUTION_SUBMITTED,AnomalyStatus.RESOLVED_PARTIALLY));
+						AnomalyStatus.RESOLUTION_SUBMITTED,AnomalyStatus.RESOLVED_PARTIALLY,AnomalyStatus.RESOLVED_FULLY,AnomalyStatus.WITHDRAWN));
 				break;
 			}
 		} 
@@ -2492,6 +2548,7 @@ System.out.println("Get all flagged ");
     }
 
 
+
     @Transactional
     private Anomaly tagExceedingAnomalies(Consumer consumer, User user) {
         if (consumer == null) return null;
@@ -2508,10 +2565,21 @@ System.out.println("Get all flagged ");
             candidates.add(consumer);
         }
 
-        if (candidates.size() <= 2) return null;
+        // --- Not exceeding ---
+        if (candidates.size() <= 2) {
+            consumer.setConsistentOn("N/A");
+            consumerRepository.save(consumer);
+            return null;
+        }
 
-        candidates.forEach(c -> c.setIsConsistent(false));
-        consumerRepository.save(consumer);
+        // --- Exceeding detected ---
+        String today = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        candidates.forEach(c -> {
+            c.setIsConsistent(false);
+            c.setConsistentOn(today);
+        });
+        consumerRepository.saveAll(candidates); // persist all updated
+
         List<Long> ids = candidates.stream().map(Consumer::getId).collect(Collectors.toList());
 
         final String spName = sp.getName() == null ? "" : sp.getName();
@@ -2554,6 +2622,7 @@ System.out.println("Get all flagged ");
         consumerRepository.markConsumersConsistent(0, ids);
         return anomaly;
     }
+
 
 
     @Transactional

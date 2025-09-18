@@ -26,6 +26,9 @@ public class Filter {
     
     @JsonAlias({"resolution"})
     private String resolution;
+    
+    @JsonAlias({"searchText"})
+    private String searchText;
 
     public Boolean getConsistent() { return consistent; }
     public void setConsistent(Boolean consistent) { this.consistent = consistent; }
@@ -47,4 +50,7 @@ public class Filter {
 	
 	public String getResolution() {return resolution;}
 	public void setResolution(String resolution) {this.resolution = resolution;}
+	
+	public String getSearchText() {return searchText;}
+	public void setSearchText(String searchText) {this.searchText = searchText;}
 }
