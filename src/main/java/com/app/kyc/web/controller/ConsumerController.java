@@ -289,27 +289,27 @@ public class ConsumerController
          try
          {
             List<String> roles = new ArrayList<String>();
-            roles.add("Compliance Admin");
+            roles.add("and ");
             if(securityHelper.hasRole(request, roles)) {
                entityManager.createNativeQuery(
-                               "DELETE FROM kyc_dev.consumers_anomalies " +
-                                       "WHERE consumer_id IN (SELECT id FROM kyc_dev.consumers WHERE service_provider_id = :spId)")
+                               "DELETE FROM consumers_anomalies " +
+                                       "WHERE consumer_id IN (SELECT id FROM consumers WHERE service_provider_id = :spId)")
                        .setParameter("spId", serviceProviderId)
                        .executeUpdate();
 
                // 2. Delete anomalies reported for consumers of this service provider
                entityManager.createNativeQuery(
-                               "DELETE FROM kyc_dev.anomalies " +
+                               "DELETE FROM anomalies " +
                                        "WHERE id IN (SELECT ca.anomaly_id " +
-                                       "              FROM kyc_dev.consumers_anomalies ca " +
-                                       "              JOIN kyc_dev.consumers c ON ca.consumer_id = c.id " +
+                                       "              FROM consumers_anomalies ca " +
+                                       "              JOIN consumers c ON ca.consumer_id = c.id " +
                                        "              WHERE c.service_provider_id = :spId)")
                        .setParameter("spId", serviceProviderId)
                        .executeUpdate();
 
                // 3. Delete the consumers themselves
                entityManager.createNativeQuery(
-                               "DELETE FROM kyc_dev.consumers WHERE service_provider_id = :spId")
+                               "DELETE FROM consumers WHERE service_provider_id = :spId")
                        .setParameter("spId", serviceProviderId)
                        .executeUpdate();
 

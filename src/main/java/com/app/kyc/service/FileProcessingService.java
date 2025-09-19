@@ -1021,7 +1021,7 @@ public class FileProcessingService {
 
                     LocalDateTime now = LocalDateTime.now();
                     String formattedDate = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-                    consumer.setConsistentOn(formattedDate);
+                    //consumer.setConsistentOn(formattedDate);
                     System.out.println("Updating MSISDN for consumer id=" + consumer.getId() + " → " + r.msisdn);
                     consumer.setMsisdn(r.msisdn);
                 }
