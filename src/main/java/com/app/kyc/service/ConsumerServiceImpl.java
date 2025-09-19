@@ -50,6 +50,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.app.kyc.Masking.MaskingUtil;
 import com.app.kyc.entity.Anomaly;
 import com.app.kyc.entity.AnomalyTracking;
 import com.app.kyc.entity.AnomalyType;
@@ -150,7 +151,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                 List<ConsumerTracking> trackings = consumerTrackingRepository.findByConsumerIdOrderByCreatedOnDesc(c.getId());
                 for (ConsumerTracking t : trackings) {
                     if (t != null) {
-                        String note = c.getFirstName() + " " + c.getMiddleName() + " " + c.getLastName() + " linked to ";
+                    	String note = MaskingUtil.maskName(c.getFirstName()) + " " + MaskingUtil.maskName(c.getMiddleName()) + " " + MaskingUtil.maskName(c.getLastName()) + " linked to ";
                         String formattedId = c.getServiceProvider().getName()
 							        + "-" + new SimpleDateFormat("ddMMyyyy").format(c.getAnomalies().get(0).getReportedOn()) 
 							        + "-" + c.getAnomalies().get(0).getId();
