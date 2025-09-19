@@ -29,6 +29,7 @@ import com.app.kyc.entity.AnomalyTracking;
 import com.app.kyc.entity.AnomalyType;
 import com.app.kyc.entity.Consumer;
 import com.app.kyc.entity.ConsumerAnomaly;
+import com.app.kyc.entity.ConsumerTracking;
 import com.app.kyc.entity.ServiceProvider;
 import com.app.kyc.entity.User;
 import com.app.kyc.repository.AnomalyRepository;
@@ -37,6 +38,7 @@ import com.app.kyc.repository.AnomalyTypeRepository;
 import com.app.kyc.repository.ConsumerAnomalyRepository;
 import com.app.kyc.repository.ConsumerRepository;
 import com.app.kyc.repository.ConsumerSpecifications;
+import com.app.kyc.repository.ConsumerTrackingRepository;
 import com.app.kyc.repository.ServiceProviderRepository;
 import com.app.kyc.response.ConsumersDetailsResponseDTO;
 import com.app.kyc.response.ConsumersHasSubscriptionsResponseDTO;
@@ -83,6 +85,9 @@ public class ConsumerServiceImpl implements ConsumerService {
 
     @Autowired
     private AnomalyTrackingRepository anomalyTrackingRepository;
+    
+    @Autowired
+    private ConsumerTrackingRepository consumerTrackingRepository;
 
     static final Integer DEFAULT_FIRST_ROW = 0;
 
@@ -1717,6 +1722,7 @@ System.out.println("Get all flagged ");
                             log.warn("incomplete-anomaly failed msisdn={}", safeMsisdn(consumer), e);
                         }
                     } else {
+                    	log.info("complete consumer msisdn={}",consumer.getMsisdn());
                         if (existingCountForSp != 0) {
                             try { resolveIncompleteAnomaly(consumer, user); } catch (Exception e) { log.warn("resolveIncomplete failed msisdn={}", safeMsisdn(consumer), e); }
                             try { softDeleteConsistentUsers(consumer); }   catch (Exception e) { log.warn("softDeleteConsistent failed msisdn={}", safeMsisdn(consumer), e); }
@@ -1865,6 +1871,8 @@ System.out.println("Get all flagged ");
                             anomaly.getUpdatedOn(), consumer.getConsistentOn()
                     );
                     anomalyTrackingRepository.save(anomalyTracking);
+                    
+                    consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),true));
 
                     tempAnomaly.setStatus(AnomalyStatus.REPORTED);
                     tempAnomaly.addConsumer(consumer);
@@ -1882,6 +1890,8 @@ System.out.println("Get all flagged ");
                             anomaly.getUpdatedOn(), consumer.getConsistentOn()
                     );
                     anomalyTrackingRepository.save(anomalyTracking);
+                    
+                    
                 }
 
                 if (anomaly.getStatus().getCode() == 0 || anomaly.getStatus().getCode() == 1 ||
@@ -1906,6 +1916,8 @@ System.out.println("Get all flagged ");
 
                     tempCA.setNotes("Missing Mandatory Fields are: " + distinctErrors);
                     consumerAnomalyRepository.save(tempCA);
+                    
+                    consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),"N/A",false));
                 }
             }
         } else {
@@ -1931,6 +1943,7 @@ System.out.println("Get all flagged ");
             consumerAnomaly.setConsumer(consumer);
 
             consumerAnomalyRepository.save(consumerAnomaly);
+            consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),"N/A",false));
         }
 
         // 🔹 soft deleted old consumers
@@ -1966,6 +1979,8 @@ System.out.println("Get all flagged ");
                     anomalyRepository.save(anomaly);
                     AnomalyTracking anomalyTracking = new AnomalyTracking(anomaly, new Date(), AnomalyStatus.RESOLVED_FULLY, "", user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn(),"N/A");
                     anomalyTrackingRepository.save(anomalyTracking);
+                    
+                    consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),true));
                 }
                 if (anomaly.getStatus().getCode() == 0 || anomaly.getStatus().getCode() == 1 ||
                         anomaly.getStatus().getCode() == 2 || anomaly.getStatus().getCode() == 3) {
@@ -2041,6 +2056,8 @@ System.out.println("Get all flagged ");
                                         user.getFirstName() + " " + user.getLastName(),
                                         anomaly.getUpdatedOn(), "auto-resolution")
                         );
+                        
+                        consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),true));
                     }
                 }
             }
@@ -2138,6 +2155,7 @@ System.out.println("Get all flagged ");
                     anomalyRepository.save(anomaly);
                     AnomalyTracking anomalyTracking = new AnomalyTracking(anomaly, new Date(), AnomalyStatus.RESOLVED_FULLY, "", user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn(),"N/A");
                     anomalyTrackingRepository.save(anomalyTracking);
+                    consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),true));
                 }
                 if (anomaly.getStatus().getCode() == 0 || anomaly.getStatus().getCode() == 1 ||
                 anomaly.getStatus().getCode() == 2 || anomaly.getStatus().getCode() == 3) {
@@ -2535,6 +2553,8 @@ System.out.println("Get all flagged ");
                 link.setConsumer(consumer);
                 link.setNotes(fullNote);
                 consumerAnomalyRepository.save(link);
+                
+                consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),"N/A",false));
             }
         } catch (DataIntegrityViolationException e) {
             log.warn("Duplicate anomaly link already exists for consumer={} anomaly={}. Ignoring insert.",
