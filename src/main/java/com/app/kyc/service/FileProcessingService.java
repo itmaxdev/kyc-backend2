@@ -40,6 +40,7 @@ import java.nio.file.*;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import java.time.format.DateTimeFormatter;
@@ -586,32 +587,42 @@ public class FileProcessingService {
                 if (r == null) continue;
 
                 // 🔹 Normalize & clip
-                r.msisdn             = normalizeMsisdnAllowNull(r.msisdn);
-                r.firstName          = clip(r.firstName, 100);
-                r.middleName         = clip(r.middleName, 255);
-                r.lastName           = clip(r.lastName, 45);
-                r.gender             = clip(r.gender, 45);
-                r.birthDateStr       = clip(r.birthDateStr, 45);
-                r.birthPlace         = clip(r.birthPlace, 45);
-                r.alt1               = clip(r.alt1, 255);
-                r.alt2               = clip(r.alt2, 255);
-                r.idType             = clip(r.idType, 45);
-                r.idNumber           = clip(r.idNumber, 45);
-                r.registrationDateStr= clip(r.registrationDateStr, 50);
-                r.airtelTransactionId= clip(r.airtelTransactionId, 200);
+                r.msisdn              = normalizeMsisdnAllowNull(r.msisdn);
+                r.firstName           = clip(r.firstName, 100);
+                r.middleName          = clip(r.middleName, 255);
+                r.lastName            = clip(r.lastName, 45);
+                r.gender              = clip(r.gender, 45);
+                r.birthDateStr        = clip(r.birthDateStr, 45);
+                r.birthPlace          = clip(r.birthPlace, 45);
+                r.alt1                = clip(r.alt1, 255);
+                r.alt2                = clip(r.alt2, 255);
+                r.idType              = clip(r.idType, 45);
+                r.idNumber            = clip(r.idNumber, 45);
+                r.registrationDateStr = clip(r.registrationDateStr, 50);
+                r.airtelTransactionId = clip(r.airtelTransactionId, 200);
 
                 // 🔹 Deduplication-aware match
                 Consumer consumer = findOrMergeConsumer(r, duplicatesToSoftDelete);
 
-                // 🔹 Merge fields
+                // 🔹 Merge new row data into consumer
                 mergeConsumerFields(consumer, r, nowTs, spId);
 
                 // 🔹 Re-check consistency
                 consumerServiceImpl.updateConsistencyFlag(consumer);
 
+                // 🔹 Stamp consistentOn (if entity hook not used)
+                if (Boolean.TRUE.equals(consumer.getIsConsistent())) {
+                    if (consumer.getConsistentOn() == null || "N/A".equalsIgnoreCase(consumer.getConsistentOn())) {
+                        consumer.setConsistentOn(LocalDate.now().toString());
+                    }
+                } else {
+                    consumer.setConsistentOn("N/A");
+                }
+
                 toSave.add(consumer);
 
-                if (toSave.size() >= 50) { // smaller batch
+                // 🔹 Batch flush (smaller for Airtel)
+                if (toSave.size() >= BATCH_SIZE) {
                     total += flushBatch(toSave, duplicatesToSoftDelete);
                 }
             }
@@ -623,6 +634,7 @@ public class FileProcessingService {
 
         return total;
     }
+
 
 
 
@@ -692,44 +704,44 @@ public class FileProcessingService {
                 if (r == null) continue;
 
                 // 🔹 Normalize & clip
-                r.msisdn             = normalizeMsisdnAllowNull(r.msisdn);
-                r.firstName          = clip(r.firstName, 100);
-                r.middleName         = clip(r.middleName, 255);
-                r.lastName           = clip(r.lastName, 45);
-                r.gender             = clip(r.gender, 45);
-                r.birthDateStr       = clip(r.birthDateStr, 45);
-                r.birthPlace         = clip(r.birthPlace, 45);
-                r.alt1               = clip(r.alt1, 255);
-                r.alt2               = clip(r.alt2, 255);
-                r.idType             = clip(r.idType, 45);
-                r.idNumber           = clip(r.idNumber, 45);
-                r.registrationDateStr= clip(r.registrationDateStr, 50);
+                r.msisdn              = normalizeMsisdnAllowNull(r.msisdn);
+                r.firstName           = clip(r.firstName, 100);
+                r.middleName          = clip(r.middleName, 255);
+                r.lastName            = clip(r.lastName, 45);
+                r.gender              = clip(r.gender, 45);
+                r.birthDateStr        = clip(r.birthDateStr, 45);
+                r.birthPlace          = clip(r.birthPlace, 45);
+                r.alt1                = clip(r.alt1, 255);
+                r.alt2                = clip(r.alt2, 255);
+                r.idType              = clip(r.idType, 45);
+                r.idNumber            = clip(r.idNumber, 45);
+                r.registrationDateStr = clip(r.registrationDateStr, 50);
 
-                // 🔹 Use Specification for matching
+                // 🔹 Try to match existing consumer using spec
                 Specification<Consumer> spec = ConsumerSpecifications.matchConsumer(r);
                 List<Consumer> matches = consumerRepository.findAll(spec);
-                Consumer consumer = matches.isEmpty() ? new Consumer() : matches.get(0);
 
-                // ✅ Merge/update fields
+                Consumer consumer;
                 if (!matches.isEmpty()) {
-                    Consumer existing = consumer;
-                    if (isEmpty(existing.getMsisdn()) && notEmpty(r.msisdn)) existing.setMsisdn(r.msisdn);
-                    if (isEmpty(existing.getFirstName()) && notEmpty(r.firstName)) existing.setFirstName(r.firstName);
-                    if (isEmpty(existing.getLastName()) && notEmpty(r.lastName)) existing.setLastName(r.lastName);
-                    if (isEmpty(existing.getIdentificationNumber()) && notEmpty(r.idNumber)) existing.setIdentificationNumber(r.idNumber);
-                    if (isEmpty(existing.getIdentificationType()) && notEmpty(r.idType)) existing.setIdentificationType(r.idType);
-                    if (isEmpty(existing.getGender()) && notEmpty(r.gender)) existing.setGender(r.gender);
-                    if (isEmpty(existing.getBirthPlace()) && notEmpty(r.birthPlace)) existing.setBirthPlace(r.birthPlace);
-                    if (isEmpty(existing.getAddress()) && notEmpty(r.address)) existing.setAddress(r.address);
-                    if (isEmpty(existing.getRegistrationDate()) && notEmpty(r.registrationDateStr)) existing.setRegistrationDate(r.registrationDateStr);
-                    if (isEmpty(existing.getBirthDate()) && notEmpty(r.birthDateStr)) existing.setBirthDate(r.birthDateStr);
-                    if (isEmpty(existing.getAlternateMsisdn1()) && notEmpty(r.alt1)) existing.setAlternateMsisdn1(r.alt1);
-                    if (isEmpty(existing.getAlternateMsisdn2()) && notEmpty(r.alt2)) existing.setAlternateMsisdn2(r.alt2);
-                    if (isEmpty(existing.getMiddleName()) && notEmpty(r.middleName)) existing.setMiddleName(r.middleName);
+                    consumer = matches.get(0);
+                    // ✅ Merge fields only if missing
+                    if (isEmpty(consumer.getMsisdn()) && notEmpty(r.msisdn)) consumer.setMsisdn(r.msisdn);
+                    if (isEmpty(consumer.getFirstName()) && notEmpty(r.firstName)) consumer.setFirstName(r.firstName);
+                    if (isEmpty(consumer.getLastName()) && notEmpty(r.lastName)) consumer.setLastName(r.lastName);
+                    if (isEmpty(consumer.getIdentificationNumber()) && notEmpty(r.idNumber)) consumer.setIdentificationNumber(r.idNumber);
+                    if (isEmpty(consumer.getIdentificationType()) && notEmpty(r.idType)) consumer.setIdentificationType(r.idType);
+                    if (isEmpty(consumer.getGender()) && notEmpty(r.gender)) consumer.setGender(r.gender);
+                    if (isEmpty(consumer.getBirthPlace()) && notEmpty(r.birthPlace)) consumer.setBirthPlace(r.birthPlace);
+                    if (isEmpty(consumer.getAddress()) && notEmpty(r.address)) consumer.setAddress(r.address);
+                    if (isEmpty(consumer.getRegistrationDate()) && notEmpty(r.registrationDateStr)) consumer.setRegistrationDate(r.registrationDateStr);
+                    if (isEmpty(consumer.getBirthDate()) && notEmpty(r.birthDateStr)) consumer.setBirthDate(r.birthDateStr);
+                    if (isEmpty(consumer.getAlternateMsisdn1()) && notEmpty(r.alt1)) consumer.setAlternateMsisdn1(r.alt1);
+                    if (isEmpty(consumer.getAlternateMsisdn2()) && notEmpty(r.alt2)) consumer.setAlternateMsisdn2(r.alt2);
+                    if (isEmpty(consumer.getMiddleName()) && notEmpty(r.middleName)) consumer.setMiddleName(r.middleName);
 
-                    consumer = existing;
                 } else {
-                    // New consumer
+                    // ✅ New consumer
+                    consumer = new Consumer();
                     consumer.setFirstName(r.firstName);
                     consumer.setLastName(r.lastName);
                     consumer.setIdentificationNumber(r.idNumber);
@@ -754,9 +766,18 @@ public class FileProcessingService {
                 // 🔹 Apply consistency check
                 consumerServiceImpl.updateConsistencyFlag(consumer);
 
+                // 🔹 Stamp consistentOn (if not using @PreUpdate hook)
+                if (Boolean.TRUE.equals(consumer.getIsConsistent())) {
+                    if (consumer.getConsistentOn() == null || "N/A".equalsIgnoreCase(consumer.getConsistentOn())) {
+                        consumer.setConsistentOn(LocalDate.now().toString());
+                    }
+                } else {
+                    consumer.setConsistentOn("N/A");
+                }
+
                 toSave.add(consumer);
 
-                // Batch flush
+                // 🔹 Batch flush
                 if (toSave.size() >= BATCH_SIZE) {
                     consumerRepository.saveAll(toSave);
                     total += toSave.size();
@@ -772,6 +793,7 @@ public class FileProcessingService {
 
         return total;
     }
+
 
 
 
@@ -804,69 +826,78 @@ public class FileProcessingService {
                 if (r == null) continue;
 
                 // 🔹 Normalize & clip
-                r.msisdn             = normalizeMsisdnAllowNull(r.msisdn);
-                r.firstName          = clip(r.firstName, 100);
-                r.middleName         = clip(r.middleName, 255);
-                r.lastName           = clip(r.lastName, 45);
-                r.gender             = clip(r.gender, 45);
-                r.birthDateStr       = clip(r.birthDateStr, 45);
-                r.birthPlace         = clip(r.birthPlace, 45);
-                r.alt1               = clip(r.alt1, 255);
-                r.alt2               = clip(r.alt2, 255);
-                r.idType             = clip(r.idType, 45);
-                r.idNumber           = clip(r.idNumber, 45);
-                r.registrationDateStr= clip(r.registrationDateStr, 50);
+                r.msisdn              = normalizeMsisdnAllowNull(r.msisdn);
+                r.firstName           = clip(r.firstName, 100);
+                r.middleName          = clip(r.middleName, 255);
+                r.lastName            = clip(r.lastName, 45);
+                r.gender              = clip(r.gender, 45);
+                r.birthDateStr        = clip(r.birthDateStr, 45);
+                r.birthPlace          = clip(r.birthPlace, 45);
+                r.alt1                = clip(r.alt1, 255);
+                r.alt2                = clip(r.alt2, 255);
+                r.idType              = clip(r.idType, 45);
+                r.idNumber            = clip(r.idNumber, 45);
+                r.registrationDateStr = clip(r.registrationDateStr, 50);
 
-                // 🔹 Match existing consumer (by core fields first, fallback to msisdn)
+                // 🔹 Match existing consumer (by specification)
                 Specification<Consumer> spec = ConsumerSpecifications.matchConsumer(r);
                 List<Consumer> matches = consumerRepository.findAll(spec);
-                Consumer existing = matches.isEmpty() ? null : matches.get(0);
 
-                if (existing != null) {
-                    // update empty fields
-                    if (isEmpty(existing.getMsisdn()) && notEmpty(r.msisdn)) existing.setMsisdn(r.msisdn);
-                    if (isEmpty(existing.getFirstName()) && notEmpty(r.firstName)) existing.setFirstName(r.firstName);
-                    if (isEmpty(existing.getLastName()) && notEmpty(r.lastName)) existing.setLastName(r.lastName);
-                    if (isEmpty(existing.getIdentificationNumber()) && notEmpty(r.idNumber)) existing.setIdentificationNumber(r.idNumber);
-                    if (isEmpty(existing.getIdentificationType()) && notEmpty(r.idType)) existing.setIdentificationType(r.idType);
-                    if (isEmpty(existing.getGender()) && notEmpty(r.gender)) existing.setGender(r.gender);
-                    if (isEmpty(existing.getBirthPlace()) && notEmpty(r.birthPlace)) existing.setBirthPlace(r.birthPlace);
-                    if (isEmpty(existing.getAddress()) && notEmpty(r.address)) existing.setAddress(r.address);
-                    if (isEmpty(existing.getRegistrationDate()) && notEmpty(r.registrationDateStr)) existing.setRegistrationDate(r.registrationDateStr);
+                Consumer consumer;
+                if (!matches.isEmpty()) {
+                    consumer = matches.get(0);
 
-                    if (isEmpty(existing.getBirthDate()) && notEmpty(r.birthDateStr)) existing.setBirthDate(r.birthDateStr);
-                    if (isEmpty(existing.getAlternateMsisdn1()) && notEmpty(r.alt1)) existing.setAlternateMsisdn1(r.alt1);
-                    if (isEmpty(existing.getAlternateMsisdn2()) && notEmpty(r.alt2)) existing.setAlternateMsisdn2(r.alt2);
-                    if (isEmpty(existing.getMiddleName()) && notEmpty(r.middleName)) existing.setMiddleName(r.middleName);
-
-                    toSave.add(existing);
+                    if (isEmpty(consumer.getMsisdn()) && notEmpty(r.msisdn)) consumer.setMsisdn(r.msisdn);
+                    if (isEmpty(consumer.getFirstName()) && notEmpty(r.firstName)) consumer.setFirstName(r.firstName);
+                    if (isEmpty(consumer.getLastName()) && notEmpty(r.lastName)) consumer.setLastName(r.lastName);
+                    if (isEmpty(consumer.getIdentificationNumber()) && notEmpty(r.idNumber)) consumer.setIdentificationNumber(r.idNumber);
+                    if (isEmpty(consumer.getIdentificationType()) && notEmpty(r.idType)) consumer.setIdentificationType(r.idType);
+                    if (isEmpty(consumer.getGender()) && notEmpty(r.gender)) consumer.setGender(r.gender);
+                    if (isEmpty(consumer.getBirthPlace()) && notEmpty(r.birthPlace)) consumer.setBirthPlace(r.birthPlace);
+                    if (isEmpty(consumer.getAddress()) && notEmpty(r.address)) consumer.setAddress(r.address);
+                    if (isEmpty(consumer.getRegistrationDate()) && notEmpty(r.registrationDateStr)) consumer.setRegistrationDate(r.registrationDateStr);
+                    if (isEmpty(consumer.getBirthDate()) && notEmpty(r.birthDateStr)) consumer.setBirthDate(r.birthDateStr);
+                    if (isEmpty(consumer.getAlternateMsisdn1()) && notEmpty(r.alt1)) consumer.setAlternateMsisdn1(r.alt1);
+                    if (isEmpty(consumer.getAlternateMsisdn2()) && notEmpty(r.alt2)) consumer.setAlternateMsisdn2(r.alt2);
+                    if (isEmpty(consumer.getMiddleName()) && notEmpty(r.middleName)) consumer.setMiddleName(r.middleName);
 
                 } else {
-                    // insert new consumer
-                    Consumer newC = new Consumer();
-                    newC.setFirstName(r.firstName);
-                    newC.setLastName(r.lastName);
-                    newC.setIdentificationNumber(r.idNumber);
-                    newC.setIdentificationType(r.idType);
-                    newC.setMsisdn(r.msisdn);
-                    newC.setGender(r.gender);
-                    newC.setBirthPlace(r.birthPlace);
-                    newC.setAddress(r.address);
-                    newC.setRegistrationDate(r.registrationDateStr);
-
-                    newC.setBirthDate(r.birthDateStr);
-                    newC.setMiddleName(r.middleName);
-                    newC.setAlternateMsisdn2(r.alt2);
-                    newC.setAlternateMsisdn1(r.alt1);
+                    // New consumer
+                    consumer = new Consumer();
+                    consumer.setFirstName(r.firstName);
+                    consumer.setLastName(r.lastName);
+                    consumer.setIdentificationNumber(r.idNumber);
+                    consumer.setIdentificationType(r.idType);
+                    consumer.setMsisdn(r.msisdn);
+                    consumer.setGender(r.gender);
+                    consumer.setBirthPlace(r.birthPlace);
+                    consumer.setAddress(r.address);
+                    consumer.setRegistrationDate(r.registrationDateStr);
+                    consumer.setBirthDate(r.birthDateStr);
+                    consumer.setMiddleName(r.middleName);
+                    consumer.setAlternateMsisdn1(r.alt1);
+                    consumer.setAlternateMsisdn2(r.alt2);
 
                     ServiceProvider spRef = new ServiceProvider();
                     spRef.setId(spId);
-                    newC.setServiceProvider(spRef);
+                    consumer.setServiceProvider(spRef);
 
-                    newC.setCreatedOn(nowTs.toString()); // better: LocalDateTime
-
-                    toSave.add(newC);
+                    consumer.setCreatedOn(nowTs.toString());
                 }
+
+                // 🔹 Apply consistency check
+                consumerServiceImpl.updateConsistencyFlag(consumer);
+
+                // 🔹 Stamp consistentOn if not using @PreUpdate hook
+                if (Boolean.TRUE.equals(consumer.getIsConsistent())) {
+                    if (consumer.getConsistentOn() == null || "N/A".equalsIgnoreCase(consumer.getConsistentOn())) {
+                        consumer.setConsistentOn(LocalDate.now().toString());
+                    }
+                } else {
+                    consumer.setConsistentOn("N/A");
+                }
+
+                toSave.add(consumer);
 
                 if (toSave.size() >= BATCH_SIZE) {
                     consumerRepository.saveAll(toSave);
