@@ -1,46 +1,81 @@
 package com.app.kyc.service;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileReader;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import com.app.kyc.model.DashboardObjectInterface;
-import com.app.kyc.model.*;
-import com.app.kyc.util.AnomalyCollection;
-import org.apache.poi.ss.usermodel.*;
+import javax.persistence.EntityManager;
+import javax.persistence.FlushModeType;
+import javax.persistence.PersistenceContext;
+
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Row.MissingCellPolicy;
-import org.apache.poi.xssf.usermodel.*;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.Workbook;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.app.kyc.entity.Anomaly;
 import com.app.kyc.entity.AnomalyTracking;
 import com.app.kyc.entity.AnomalyType;
 import com.app.kyc.entity.Consumer;
 import com.app.kyc.entity.ConsumerAnomaly;
+import com.app.kyc.entity.ConsumerTracking;
 import com.app.kyc.entity.ServiceProvider;
 import com.app.kyc.entity.User;
+import com.app.kyc.model.AnomalyStatus;
+import com.app.kyc.model.AnomlyDto;
+import com.app.kyc.model.ConsumerDto;
+import com.app.kyc.model.ConsumerHistoryDto;
+import com.app.kyc.model.DashboardObjectInterface;
+import com.app.kyc.model.ExceedingConsumers;
+import com.app.kyc.model.Pagination;
 import com.app.kyc.repository.AnomalyRepository;
 import com.app.kyc.repository.AnomalyTrackingRepository;
 import com.app.kyc.repository.AnomalyTypeRepository;
 import com.app.kyc.repository.ConsumerAnomalyRepository;
 import com.app.kyc.repository.ConsumerRepository;
 import com.app.kyc.repository.ConsumerSpecifications;
+import com.app.kyc.repository.ConsumerTrackingRepository;
 import com.app.kyc.repository.ServiceProviderRepository;
 import com.app.kyc.response.ConsumersDetailsResponseDTO;
 import com.app.kyc.response.ConsumersHasSubscriptionsResponseDTO;
 import com.app.kyc.response.FlaggedConsumersListDTO;
+import com.app.kyc.util.AnomalyCollection;
 import com.app.kyc.util.PaginationUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
@@ -50,12 +85,6 @@ import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
-
-import javax.persistence.EntityManager;
-import javax.persistence.FlushModeType;
-import javax.persistence.PersistenceContext;
 
 @Service
 @Slf4j
@@ -83,6 +112,9 @@ public class ConsumerServiceImpl implements ConsumerService {
 
     @Autowired
     private AnomalyTrackingRepository anomalyTrackingRepository;
+    
+    @Autowired
+    private ConsumerTrackingRepository consumerTrackingRepository;
 
     static final Integer DEFAULT_FIRST_ROW = 0;
 
@@ -113,28 +145,24 @@ public class ConsumerServiceImpl implements ConsumerService {
             List<ConsumerHistoryDto> history = new ArrayList<>();
 
 			// Only process if anomalies exist
-			if (c.getAnomalies() != null && !c.getAnomalies().isEmpty()) {
-				for (Anomaly anomaly : c.getAnomalies()) {
-					List<AnomalyTracking> trackings = anomalyTrackingRepository
-							.findAllByAnomalyIdOrderByCreatedOnDesc(anomaly.getId());
-
-					history.addAll(trackings.stream().map(t -> {
+            if (c.getAnomalies() != null && !c.getAnomalies().isEmpty()) {
+                List<ConsumerTracking> trackings = consumerTrackingRepository.findByConsumerIdOrderByCreatedOnDesc(c.getId());
+                for (ConsumerTracking t : trackings) {
+                    if (t != null) {
+                        String note = c.getFirstName() + " " + c.getMiddleName() + " " + c.getLastName() + " linked to ";
+                        String formattedId = c.getServiceProvider().getName()
+							        + "-" + new SimpleDateFormat("ddMMyyyy").format(c.getAnomalies().get(0).getReportedOn()) 
+							        + "-" + c.getAnomalies().get(0).getId();
 						
-						String note = c.getFirstName() + " " + c.getMiddleName() + " " + c.getLastName() + " linked to ";
-								
-						//String consistencyStatus = "N/A".equals(t.getConsistentOn()) ? "Inconsistent" : "Consistent";
 
-						String InconsistentOn = t.getCreatedOn() != null ? t.getCreatedOn().toString() : null;
+                        String consistencyStatus = t.getIsConsistent() == true ? "Consistent" : "Inconsistent";
+                        String inconsistentOn = c.getCreatedOn();
+                        String consistentOn = t.getConsistentOn() != null ? t.getConsistentOn() : "N/A";
 
-						//String consistentOn = t.getConsistentOn() != null ? t.getConsistentOn() : "N/A";
-						
-						 String formattedId = anomaly.getConsumers().get(0).getServiceProvider().getName() + "-" + new SimpleDateFormat("ddMMyyyy").format(anomaly.getReportedOn()) + "-" + anomaly.getId();
-
-						// build DTO using constructor
-						return new ConsumerHistoryDto("", note , InconsistentOn, "" , formattedId);
-					}).collect(Collectors.toList()));
-				}
-			}
+                        history.add(new ConsumerHistoryDto(consistencyStatus, note , inconsistentOn, consistentOn , formattedId));
+                    }
+                }
+            }
 
             dto.setConsumerHistory(history);
 
@@ -1718,6 +1746,7 @@ System.out.println("Get all flagged ");
                             log.warn("incomplete-anomaly failed msisdn={}", safeMsisdn(consumer), e);
                         }
                     } else {
+                    	log.info("complete consumer msisdn={}",consumer.getMsisdn());
                         if (existingCountForSp != 0) {
                             try { resolveIncompleteAnomaly(consumer, user); } catch (Exception e) { log.warn("resolveIncomplete failed msisdn={}", safeMsisdn(consumer), e); }
                             try { softDeleteConsistentUsers(consumer); }   catch (Exception e) { log.warn("softDeleteConsistent failed msisdn={}", safeMsisdn(consumer), e); }
@@ -1866,6 +1895,8 @@ System.out.println("Get all flagged ");
                             anomaly.getUpdatedOn()
                     );
                     anomalyTrackingRepository.save(anomalyTracking);
+                    
+                    consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),true,new Date()));
 
                     tempAnomaly.setStatus(AnomalyStatus.REPORTED);
                     tempAnomaly.addConsumer(consumer);
@@ -1883,6 +1914,8 @@ System.out.println("Get all flagged ");
                             anomaly.getUpdatedOn()
                     );
                     anomalyTrackingRepository.save(anomalyTracking);
+                    
+                    
                 }
 
                 if (anomaly.getStatus().getCode() == 0 || anomaly.getStatus().getCode() == 1 ||
@@ -1907,6 +1940,11 @@ System.out.println("Get all flagged ");
 
                     tempCA.setNotes("Missing Mandatory Fields are: " + distinctErrors);
                     consumerAnomalyRepository.save(tempCA);
+                    
+                    List<ConsumerTracking> consumerTracking = consumerTrackingRepository.findByConsumerId(consumer.getId());
+                    if(consumerTracking.size() <= 0) {
+                    	consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),"N/A",false,new Date()));
+                    }
                 }
             }
         } else {
@@ -1932,6 +1970,10 @@ System.out.println("Get all flagged ");
             consumerAnomaly.setConsumer(consumer);
 
             consumerAnomalyRepository.save(consumerAnomaly);
+            List<ConsumerTracking> consumerTracking = consumerTrackingRepository.findByConsumerId(consumer.getId());
+            if(consumerTracking.size() <= 0) {
+            	consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),"N/A",false,new Date()));
+            }
         }
 
         // 🔹 soft deleted old consumers
@@ -1967,6 +2009,8 @@ System.out.println("Get all flagged ");
                     anomalyRepository.save(anomaly);
                     AnomalyTracking anomalyTracking = new AnomalyTracking(anomaly, new Date(), AnomalyStatus.RESOLVED_FULLY, "", user.getFirstName()+" "+user.getLastName(), anomaly.getUpdatedOn());
                     anomalyTrackingRepository.save(anomalyTracking);
+                    
+                    consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),true,new Date()));
                 }
                 if (anomaly.getStatus().getCode() == 0 || anomaly.getStatus().getCode() == 1 ||
                         anomaly.getStatus().getCode() == 2 || anomaly.getStatus().getCode() == 3) {
@@ -1988,6 +2032,8 @@ System.out.println("Get all flagged ");
                     tempConsumerAnomaly.setNotes(anomaly.getNote());
 
                     consumerAnomalyRepository.save(tempConsumerAnomaly);
+                    
+                    consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),"N/A",false,new Date()));
                 }
             }
         }
@@ -2042,6 +2088,8 @@ System.out.println("Get all flagged ");
                                         user.getFirstName() + " " + user.getLastName(),
                                         anomaly.getUpdatedOn())
                         );
+                        
+                        consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),true,new Date()));
                     }
                 }
             }
@@ -2517,6 +2565,8 @@ System.out.println("Get all flagged ");
                 link.setConsumer(consumer);
                 link.setNotes(fullNote);
                 consumerAnomalyRepository.save(link);
+                
+                consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),"N/A",false,new Date()));
             }
         } catch (DataIntegrityViolationException e) {
             log.warn("Duplicate anomaly link already exists for consumer={} anomaly={}. Ignoring insert.",
