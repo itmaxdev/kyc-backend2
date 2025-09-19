@@ -1,5 +1,7 @@
 package com.app.kyc.entity;
 
+import java.util.Date;
+
 import javax.persistence.Column;
 import javax.persistence.Entity;
 import javax.persistence.GeneratedValue;
@@ -33,13 +35,19 @@ public class ConsumerTracking {
     private Long consumerId;
     
     private Boolean isConsistent;
+    
+    private Date createdOn;
+    
+    public ConsumerTracking() {
+    }
 
-	public ConsumerTracking(Long consumerId, ServiceProvider serviceProvider, String consistentOn, Boolean isConsistent) {
+	public ConsumerTracking(Long consumerId, ServiceProvider serviceProvider, String consistentOn, Boolean isConsistent, Date createdOn) {
 		super();
 		this.consistentOn = consistentOn;
 		this.serviceProvider = serviceProvider;
 		this.consumerId = consumerId;
 		this.isConsistent = isConsistent;
+		this.createdOn = createdOn;
 	}
 
 }
