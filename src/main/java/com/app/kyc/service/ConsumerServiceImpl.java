@@ -2553,10 +2553,10 @@ System.out.println("Get all flagged ");
         }
 
         // --- Exceeding detected ---
-        String today = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+
         candidates.forEach(c -> {
             c.setIsConsistent(false);
-            c.setConsistentOn(today);
+            //c.setConsistentOn(today);
         });
         consumerRepository.saveAll(candidates); // persist all updated
 
@@ -2708,8 +2708,9 @@ System.out.println("Get all flagged ");
                                 )
                         );
                     }
-
-                    consumer.setConsistentOn(LocalDate.now().toString());
+                    LocalDateTime now = LocalDateTime.now();
+                    String formattedDate = now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+                    consumer.setConsistentOn(formattedDate);
                     consumer = consumerRepository.save(consumer);
                 }
 
