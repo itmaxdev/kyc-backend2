@@ -160,17 +160,10 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
            "FROM Anomaly a " +
            "JOIN ConsumerAnomaly ca ON a.id = ca.anomaly.id " +
            "JOIN Consumer c ON ca.consumer.id = c.id " +
-           "WHERE c.serviceProvider.id IN (:serviceProviderId)"
-            + " and (:searchText is null "
-      		+ " or lower(concat(coalesce(c.firstName, ''),' ',coalesce(c.middleName, ''),' ',coalesce(c.lastName, ''))) like lower(concat('%', :searchText, '%'))"
-      		+ " or lower(c.msisdn) like lower(concat('%', :searchText, '%'))"
-      		+ " or lower(c.serviceProvider.name) like lower(concat('%', :searchText, '%'))"
-      		+ " or lower(concat(coalesce(c.serviceProvider.name, ''), '-',coalesce(function('date_format', a.reportedOn, '%d%m%Y')), '-',coalesce(a.id, ''))) like lower(concat('%', :searchText, '%'))"
-      		+ ")")
+           "WHERE c.serviceProvider.id IN (:serviceProviderId)")
    Page<Anomaly> findAllByConsumerStatusAndServiceProviderIdOnly(
            Pageable pageable,
-           @Param("serviceProviderId") List<Long> serviceProviderId,
-           @Param("searchText") String searchText);
+           @Param("serviceProviderId") List<Long> serviceProviderId);
 
    @Transactional
    void deleteAllByIdIn(List<Long> ids);

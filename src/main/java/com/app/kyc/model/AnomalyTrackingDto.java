@@ -20,7 +20,7 @@ public class AnomalyTrackingDto {
     private String consistentOn;
 
 
-    public AnomalyTrackingDto(Long id, Date createdOn, AnomalyStatus anomalyStatus, String note, Anomaly anomaly, String updatedBy, Date updatedOn,String consistentOn){
+    public AnomalyTrackingDto(Long id, Date createdOn, AnomalyStatus anomalyStatus, String note, Anomaly anomaly, String updatedBy, Date updatedOn){
         this.id = id;
         this.createdOn = createdOn;
         this.status= anomalyStatus;

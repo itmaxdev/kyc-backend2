@@ -5,18 +5,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import javax.persistence.EntityManager;
 import javax.servlet.http.HttpServletRequest;
+import javax.transaction.Transactional;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import com.app.kyc.entity.Consumer;
 import com.app.kyc.entity.ConsumerService;
@@ -39,6 +35,8 @@ public class ConsumerController
    @Autowired
    com.app.kyc.service.ConsumerService consumerService;
 
+   @Autowired
+   private EntityManager entityManager;
    @Autowired
    ConsumerServiceService consumerServiceService;
 
@@ -280,4 +278,49 @@ public class ConsumerController
       }
    }
 
+
+
+
+
+
+      @Transactional
+      @DeleteMapping("/deleteAll/{serviceProviderId}")
+      public ResponseEntity<String> deleteAll(HttpServletRequest request,@PathVariable Long serviceProviderId) throws SQLException {
+         try
+         {
+            List<String> roles = new ArrayList<String>();
+            roles.add("Compliance Admin");
+            if(securityHelper.hasRole(request, roles)) {
+               entityManager.createNativeQuery(
+                               "DELETE FROM kyc_dev.consumers_anomalies " +
+                                       "WHERE consumer_id IN (SELECT id FROM kyc_dev.consumers WHERE service_provider_id = :spId)")
+                       .setParameter("spId", serviceProviderId)
+                       .executeUpdate();
+
+               // 2. Delete anomalies reported for consumers of this service provider
+               entityManager.createNativeQuery(
+                               "DELETE FROM kyc_dev.anomalies " +
+                                       "WHERE id IN (SELECT ca.anomaly_id " +
+                                       "              FROM kyc_dev.consumers_anomalies ca " +
+                                       "              JOIN kyc_dev.consumers c ON ca.consumer_id = c.id " +
+                                       "              WHERE c.service_provider_id = :spId)")
+                       .setParameter("spId", serviceProviderId)
+                       .executeUpdate();
+
+               // 3. Delete the consumers themselves
+               entityManager.createNativeQuery(
+                               "DELETE FROM kyc_dev.consumers WHERE service_provider_id = :spId")
+                       .setParameter("spId", serviceProviderId)
+                       .executeUpdate();
+
+
+               return ResponseEntity.ok("All data deleted from consumers, anomalies, and consumers_anomalies");
+            }else
+               return ResponseEntity.ok("Not authorized");
+         }
+          catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Failed to delete data: " + e.getMessage());
+         }
+      }
 }

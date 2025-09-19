@@ -1,35 +1,45 @@
 package com.app.kyc.model;
 
-import com.app.kyc.entity.Anomaly;
-import com.app.kyc.entity.Consumer;
-import com.app.kyc.entity.Service;
-import com.app.kyc.entity.ServiceProvider;
-import lombok.Data;
-import lombok.Getter;
-import lombok.Setter;
-
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
+
+import com.app.kyc.Masking.Mask;
+import com.app.kyc.Masking.MaskType;
+import com.app.kyc.entity.Anomaly;
+import com.app.kyc.entity.Consumer;
+import com.app.kyc.entity.Service;
+import com.app.kyc.entity.ServiceProvider;
+
+import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 @Data
 @Setter
 @Getter
 public class ConsumerDto {
     List<AnomlyDto> anomlies=new ArrayList<AnomlyDto>();
     private Long id;
+    @Mask(MaskType.PHONE)
     private String msisdn;
     private String registrationDate;
+    @Mask(MaskType.NAME)
     private String firstName;
+    @Mask(MaskType.NAME)
     private String middleName;
+    @Mask(MaskType.NAME)
     private String lastName;
     private String gender;
     private String birthDate;
     private String birthPlace;
     private String address;
+    @Mask(MaskType.PHONE)
     private String alternateMsisdn1;
+    @Mask(MaskType.PHONE)
     private String alternateMsisdn2;
+    @Mask(MaskType.IDENTITY)
     private String identificationNumber;
     private String identificationType;
     private String nationality;
