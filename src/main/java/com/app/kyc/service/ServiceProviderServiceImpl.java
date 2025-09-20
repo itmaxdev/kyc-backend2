@@ -8,9 +8,14 @@ import com.app.kyc.model.AnomlyDto;
 import com.app.kyc.model.ConsumerDto;
 import com.app.kyc.model.DashboardObjectInterface;
 import com.app.kyc.repository.*;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.crossstore.ChangeSetPersister.NotFoundException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import com.app.kyc.model.ServiceProviderStatus;
@@ -65,7 +70,7 @@ public class ServiceProviderServiceImpl implements ServiceProviderService
       return serviceProviderRepository.findByName(name);
    }
 
-   public Map<String, Object> getAllServiceProviders(String params) throws JsonMappingException, JsonProcessingException
+   /*public Map<String, Object> getAllServiceProviders(String params) throws JsonMappingException, JsonProcessingException
    {
       Page<ServiceProvider> pageServiceProvider = serviceProviderRepository.findAll(PaginationUtil.getPageable(params));
       List<ServiceProvider> serviceProviders = pageServiceProvider.toList();
@@ -81,7 +86,72 @@ public class ServiceProviderServiceImpl implements ServiceProviderService
       serviceProvidersWithCount.put("data", response);
       serviceProvidersWithCount.put("count", pageServiceProvider.getTotalElements());
       return serviceProvidersWithCount;
+   }*/
+
+   public Map<String, Object> getAllServiceProviders(String params) throws JsonMappingException, JsonProcessingException {
+      ObjectMapper mapper = new ObjectMapper();
+      Map<String, Object> paramMap = mapper.readValue(params, new TypeReference<Map<String, Object>>() {});
+
+      // 🔹 Extract pagination safely
+      Map<String, Object> pagination = (Map<String, Object>) paramMap.get("pagination");
+      if (pagination == null) {
+         pagination = new HashMap<>();
+         paramMap.put("pagination", pagination);
+      }
+
+      // Default page
+      int page = (int) pagination.getOrDefault("page", 0);
+
+      // Fix perPage → if <= 1, fetch all
+      int perPage = 1;
+      if (pagination.containsKey("perPage")) {
+         Object perPageObj = pagination.get("perPage");
+         if (perPageObj instanceof Number) {
+            perPage = ((Number) perPageObj).intValue();
+         }
+      }
+
+      if (perPage <= 1) {
+         perPage = Integer.MAX_VALUE; // fetch all rows
+      }
+
+      // 🔹 Build Pageable manually (respect sort if given)
+      Map<String, Object> sortMap = (Map<String, Object>) paramMap.get("sort");
+      Sort sort = Sort.by("id").ascending(); // default
+      if (sortMap != null && sortMap.containsKey("field") && sortMap.containsKey("order")) {
+         String field = sortMap.get("field").toString();
+         String order = sortMap.get("order").toString();
+         sort = order.equalsIgnoreCase("DESC") ? Sort.by(field).descending() : Sort.by(field).ascending();
+      }
+
+      Pageable pageable = PageRequest.of(page, perPage, sort);
+
+      // 🔹 Fetch data
+      Page<ServiceProvider> pageServiceProvider = serviceProviderRepository.findAll(pageable);
+
+      List<ServiceProviderUserResponseDTO> response = new ArrayList<>();
+      for (ServiceProvider s : pageServiceProvider) {
+         List<com.app.kyc.entity.Service> services = serviceRepository.findByServiceProvider(s.getId());
+         ServiceProviderUserResponseDTO obj = new ServiceProviderUserResponseDTO(
+                 s.getId(),
+                 s.getName(),
+                 s.getCreatedOn(),
+                 s.getIndustry().getName(),
+                 userService.getUserById(s.getCreatedBy()),
+                 !services.isEmpty(),
+                 s.getColor()
+         );
+         response.add(obj);
+      }
+
+      // 🔹 Wrap response
+      Map<String, Object> serviceProvidersWithCount = new HashMap<>();
+      serviceProvidersWithCount.put("data", response);
+      serviceProvidersWithCount.put("count", pageServiceProvider.getTotalElements());
+
+      return serviceProvidersWithCount;
    }
+
 
    @Override
    public List<ServiceProvider> getAllServiceProviders()

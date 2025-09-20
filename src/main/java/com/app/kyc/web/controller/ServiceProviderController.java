@@ -101,10 +101,12 @@ public class ServiceProviderController
       }
    }
 
-   @GetMapping("/getAll/")
+   /*@GetMapping("/getAll/")
    public ResponseEntity<?> getAllServiceProviders(HttpServletRequest request, @RequestParam("params") String params) throws SQLException
    {
       //log.info("ServiceProviderController/getAllServiceProviders");
+
+
       try
       {
          List<String> roles = new ArrayList<String>();
@@ -125,6 +127,27 @@ public class ServiceProviderController
          return ResponseEntity.ok(e.getMessage());
       }
    }
+*/
+
+   @GetMapping("/getAll/")
+   public ResponseEntity<?> getAllServiceProviders(HttpServletRequest request,
+                                                   @RequestParam("params") String params) throws SQLException {
+      try {
+         List<String> roles = new ArrayList<>();
+         roles.add("SP Admin");
+         roles.add("Compliance Admin");
+         roles.add("KYC Admin");
+         if (securityHelper.hasRole(request, roles)) {
+            Map<String, Object> serviceProviders = serviceProviderService.getAllServiceProviders(params);
+            return ResponseEntity.ok(serviceProviders);
+         } else {
+            return ResponseEntity.ok("Not authorized");
+         }
+      } catch (Exception e) {
+         return ResponseEntity.ok(e.getMessage());
+      }
+   }
+
 
    @GetMapping("/getByUserIndustry/{userId}")
    public ResponseEntity<?> getServiceProvidersByUserIndustry(HttpServletRequest request, @PathVariable("userId") Long userId) throws SQLException
