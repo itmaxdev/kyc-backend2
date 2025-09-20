@@ -2470,6 +2470,9 @@ System.out.println("Get all flagged ");
      *  - duplicate ID number + type
      */
     public void updateConsistencyFlag(Consumer consumer) {
+        System.out.println("updateConsistencyFlag values :  "+consumer.getMsisdn() +" inconsigtent value "+consumer.getIsConsistent());
+        System.out.println("updateConsistencyFlag getConsistentOn :  "+consumer.getConsistentOn());
+
         boolean consistent = true;
         List<String> reasons = new ArrayList<>();
 
@@ -2518,11 +2521,21 @@ System.out.println("Get all flagged ");
         consumer.setIsConsistent(consistent);
 
         if (!consistent) {
+            consumer.setConsistentOn("N/A");
             log.warn("Consumer id={} marked INCONSISTENT → reasons={}",
                     consumer.getId(), String.join("; ", reasons));
         } else {
+            // Only set date if not already stamped
+            if (consumer.getConsistentOn() == null || "N/A".equalsIgnoreCase(consumer.getConsistentOn())) {
+                consumer.setConsistentOn(LocalDate.now().toString());
+            }
             log.info("Consumer id={} is CONSISTENT", consumer.getId());
         }
+
+
+        System.out.println("updateConsistencyFlag values finishing  :  "+consumer.getMsisdn() +" inconsigtent value "+consumer.getIsConsistent());
+        System.out.println("updateConsistencyFlag getConsistentOn finishing :  "+consumer.getConsistentOn());
+
     }
 
 
