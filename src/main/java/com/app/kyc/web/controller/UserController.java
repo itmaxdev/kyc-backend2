@@ -8,6 +8,7 @@ import java.util.Map;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import com.app.kyc.model.OtpRequest;
 import com.app.kyc.model.VerifyEmailChangePasswordDTO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -26,9 +27,12 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.app.kyc.entity.Otp;
 import com.app.kyc.entity.User;
+import com.app.kyc.exception.CustomNotFoundException;
 import com.app.kyc.request.ChangePasswordRequestDTO;
 import com.app.kyc.request.ResetPasswordRequestDTO;
+import com.app.kyc.service.EmailService;
 import com.app.kyc.service.UserService;
 import com.app.kyc.service.exception.InvalidDataException;
 import com.app.kyc.web.security.AuthRequest;
@@ -47,13 +51,30 @@ public class UserController
 
    @Autowired
    SecurityHelper securityHelper;
+   
+   @Autowired
+   EmailService emailService;
+   
+   @PutMapping("/sendOTP")
+   public ResponseEntity<?> generateOtp(HttpServletResponse response, OtpRequest otpRequest) throws Exception
+   {
+		try {
+			userService.generateOtp(otpRequest);
+			return ResponseEntity.ok("OTP sent successfully");
+		} catch (CustomNotFoundException e) {
+			return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+		} catch (Exception e) {
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Something went wrong");
+		}
+   }
 
    @PatchMapping("/authenticate")
    public ResponseEntity<?> authenticateUser(HttpServletResponse response, @RequestBody AuthRequest authRequest) throws Exception
    {
       //log.info("UserController/authenticateUser");
-      AuthResponse authResponse = userService.authenticateUser(authRequest);
-      return new ResponseEntity<>(authResponse, HttpStatus.OK);
+	   AuthResponse authResponse = userService.authenticateUser(authRequest);
+	   return ResponseEntity.ok(authResponse);
+
    }
 
    @GetMapping("/{id}")

@@ -6,8 +6,10 @@ import java.util.Map;
 import org.springframework.data.crossstore.ChangeSetPersister.NotFoundException;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.app.kyc.entity.Otp;
 import com.app.kyc.entity.Role;
 import com.app.kyc.entity.User;
+import com.app.kyc.model.OtpRequest;
 import com.app.kyc.request.ChangePasswordRequestDTO;
 import com.app.kyc.request.ResetPasswordRequestDTO;
 import com.app.kyc.service.exception.InvalidDataException;
@@ -56,5 +58,6 @@ public interface UserService
    Map<String, Object> getAllByCreatedById(String params, Long createdById) throws JsonMappingException, JsonProcessingException;
 
    List<User> getByServiceProviderId(Long serviceProviderId);
-
+   
+   public void generateOtp(OtpRequest otpRequest);
 }
