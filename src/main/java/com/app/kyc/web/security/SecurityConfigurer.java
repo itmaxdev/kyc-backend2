@@ -42,7 +42,7 @@ public class SecurityConfigurer extends WebSecurityConfigurerAdapter
       try
       {
          httpSecurity.csrf().disable().authorizeRequests()
-            .antMatchers("/users/authenticate", "/users/verifyEmailToChangePassword/**", "/users/resetPassword", "/users/setupUser", "/swagger-ui/**", "/swagger-ui/",
+            .antMatchers("/users/sendOTP","/users/authenticate", "/users/verifyEmailToChangePassword/**", "/users/resetPassword", "/users/setupUser", "/swagger-ui/**", "/swagger-ui/",
                "/swagger-resources/**", "/v2/**", "/webjars/**", "/actuator/**", "/metrics/**")
             .permitAll().anyRequest().authenticated().and().sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS);
          httpSecurity.cors();

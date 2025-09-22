@@ -1,5 +1,6 @@
 package com.app.kyc.service;
 
+import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -8,6 +9,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 
 import javax.persistence.EntityManager;
@@ -16,22 +18,35 @@ import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
 import javax.persistence.criteria.Predicate;
 import javax.persistence.criteria.Root;
+import javax.servlet.http.HttpServletResponse;
 
+import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.FilenameUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.data.crossstore.ChangeSetPersister.NotFoundException;
 import org.springframework.data.domain.Page;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.app.kyc.entity.Otp;
 import com.app.kyc.entity.Role;
 import com.app.kyc.entity.User;
+import com.app.kyc.enums.Channel;
+import com.app.kyc.enums.ErrorKeys;
+import com.app.kyc.enums.OtpPurpose;
+import com.app.kyc.exception.CustomNotFoundException;
+import com.app.kyc.model.OtpMapper;
+import com.app.kyc.model.OtpRequest;
 import com.app.kyc.model.ServiceProviderStatus;
 import com.app.kyc.model.UserStatus;
+import com.app.kyc.repository.OtpRepository;
 import com.app.kyc.repository.UserRepository;
 import com.app.kyc.request.ChangePasswordRequestDTO;
 import com.app.kyc.request.ResetPasswordRequestDTO;
@@ -40,6 +55,7 @@ import com.app.kyc.service.exception.InvalidDataException;
 import com.app.kyc.service.storage.FileStorageService;
 import com.app.kyc.util.EmailUtil;
 import com.app.kyc.util.PaginationUtil;
+import com.app.kyc.web.controller.ConsumerController;
 import com.app.kyc.web.security.AuthRequest;
 import com.app.kyc.web.security.AuthResponse;
 import com.app.kyc.web.security.JWTUtil;
@@ -51,6 +67,7 @@ import com.fasterxml.jackson.databind.JsonMappingException;
 public class UserServiceImpl implements UserService
 {
 
+   private static final Logger log = LoggerFactory.getLogger(UserServiceImpl.class);
    @Autowired
    private EntityManager entityManager;
 
@@ -71,6 +88,12 @@ public class UserServiceImpl implements UserService
 
    @Autowired
    FileStorageService storageService;
+   
+   @Autowired
+   EmailService emailService;
+   
+   @Autowired
+   OtpRepository otpRepository;
 
    public User getUserById(Long id)
    {
@@ -210,30 +233,72 @@ public class UserServiceImpl implements UserService
       return user.getRole();
    }
 
+//   @Override
+//   public AuthResponse authenticateUser(AuthRequest authRequest) throws InvalidDataException
+//   {
+//      User user = getUserByEmail(authRequest.getEmail());
+//      if(user == null) throw new InvalidDataException(ErrorCode.EMAIL_NOT_FOUND);
+//      if(!(securityHelper.passwordIsValid(authRequest.getPassword(), user.getPassword())))
+//      {
+//         throw new InvalidDataException(ErrorCode.PASSWORD_INCORRECT);
+//      }
+//      if(user.getStatus() != UserStatus.Active)
+//      {
+//         throw new InvalidDataException(ErrorCode.USER_INACTIVE);
+//      }
+//      else
+//         if(user.getServiceProvider() != null && user.getServiceProvider().getStatus() != ServiceProviderStatus.Active)
+//         {
+//            throw new InvalidDataException(ErrorCode.SERVICE_PROVIDER_INACTIVE);
+//         }
+//      authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(authRequest.getEmail(), authRequest.getPassword()));
+//      updateLastLogin(authRequest.getEmail());
+//      AuthResponse authResponse = new AuthResponse(jwtUtil.generateToken(authRequest.getEmail(), user.getRole()), user.getRole().getName(), user.getId(), user.getFirstName());
+//
+//      return authResponse;
+//   }
+   
    @Override
-   public AuthResponse authenticateUser(AuthRequest authRequest) throws InvalidDataException
-   {
-      User user = getUserByEmail(authRequest.getEmail());
-      if(user == null) throw new InvalidDataException(ErrorCode.EMAIL_NOT_FOUND);
-      if(!(securityHelper.passwordIsValid(authRequest.getPassword(), user.getPassword())))
-      {
-         throw new InvalidDataException(ErrorCode.PASSWORD_INCORRECT);
-      }
-      if(user.getStatus() != UserStatus.Active)
-      {
-         throw new InvalidDataException(ErrorCode.USER_INACTIVE);
-      }
-      else
-         if(user.getServiceProvider() != null && user.getServiceProvider().getStatus() != ServiceProviderStatus.Active)
-         {
-            throw new InvalidDataException(ErrorCode.SERVICE_PROVIDER_INACTIVE);
-         }
-      authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(authRequest.getEmail(), authRequest.getPassword()));
-      updateLastLogin(authRequest.getEmail());
-      AuthResponse authResponse = new AuthResponse(jwtUtil.generateToken(authRequest.getEmail(), user.getRole()), user.getRole().getName(), user.getId(), user.getFirstName());
+   public AuthResponse authenticateUser(AuthRequest authRequest) throws InvalidDataException {
+       User user = getUserByEmail(authRequest.getEmail());
+       if (user == null) throw new InvalidDataException(ErrorCode.EMAIL_NOT_FOUND);
 
-      return authResponse;
+       if (!(securityHelper.passwordIsValid(authRequest.getPassword(), user.getPassword()))) {
+           throw new InvalidDataException(ErrorCode.PASSWORD_INCORRECT);
+       }
+
+       if (user.getStatus() != UserStatus.Active) {
+           throw new InvalidDataException(ErrorCode.USER_INACTIVE);
+       }
+
+       if (user.getServiceProvider() != null && user.getServiceProvider().getStatus() != ServiceProviderStatus.Active) {
+           throw new InvalidDataException(ErrorCode.SERVICE_PROVIDER_INACTIVE);
+       }
+
+       // Step 1: Validate OTP before authentication
+		if (!validateOtp(authRequest.getEmail(), authRequest.getOtp(), authRequest.getChannel(), authRequest.getPurpose())) {
+		       //throw new InvalidDataException(ErrorCode.OTP_INVALID);
+		       throw new InvalidDataException(ErrorCode.OTP_INVALID.getMessage());
+		}
+
+       // Step 2: Standard Spring authentication
+       authenticationManager.authenticate(
+           new UsernamePasswordAuthenticationToken(authRequest.getEmail(), authRequest.getPassword())
+       );
+
+       //Step 3: Update login & issue token
+       updateLastLogin(authRequest.getEmail());
+
+       AuthResponse authResponse = new AuthResponse(
+           jwtUtil.generateToken(authRequest.getEmail(), user.getRole()),
+           user.getRole().getName(),
+           user.getId(),
+           user.getFirstName()
+       );
+
+       return authResponse;
    }
+
 
    @Override
    public void verifyEmailToChangePassword(String email)
@@ -315,5 +380,71 @@ public class UserServiceImpl implements UserService
    {
       return userRepository.findAllByServiceProviderId(serviceProviderId);
    }
+   
+   public void generateOtp(OtpRequest otpRequest) {
+       User user;
+       try {
+           user = userRepository.findByEmail(otpRequest.getEmail().trim().toLowerCase());
+	
+	       final String rawOtp;
+	       if (otpRequest.getChannel() == Channel.EMAIL) {
+	           rawOtp = generateSecureOTP(user.getEmail());
+	       } else {
+	           throw new CustomNotFoundException("Unsupported channel: " + otpRequest.getChannel());
+	       }
+	
+	       Optional<Otp> otpOpt = otpRepository.findByUserIdAndChannelAndPurpose(user.getId(), otpRequest.getChannel(), otpRequest.getPurpose());
+	       Otp otpEntity = otpOpt.orElseGet(() -> OtpMapper.toEntity(otpRequest, user, hashOtp(rawOtp)));
+	       otpEntity.setOtpCode(hashOtp(rawOtp));
+	       otpEntity.setExpiryDate(LocalDateTime.now().plusMinutes(5));
+	       otpRepository.save(otpEntity);
+	       if (otpRequest.getChannel() == Channel.EMAIL) {
+	           String fullName = user.getFirstName() + " " + user.getLastName();
+	           emailService.sendOtpEmail(new String[]{user.getEmail()}, rawOtp, otpRequest.getLang().getValue(), fullName);
+	       }
+       } catch (Exception e) {
+           log.error("Error finding user with email [{}]", otpRequest.getEmail(), e);
+           throw new CustomNotFoundException(ErrorKeys.USER_NOT_FOUND.getValue());
+       }
+   }
+   
+   private static String generateSecureOTP(String value) {
+	    SecureRandom secureRandom = new SecureRandom();
+	    secureRandom.setSeed(value.hashCode() + System.currentTimeMillis());
+
+	    int otp = 100000 + secureRandom.nextInt(900000);
+	    return String.valueOf(otp);
+   }
+   
+   private String hashOtp(String rawOtp) {
+       // Use BCrypt, SHA-256 or any secure hash
+       return DigestUtils.sha256Hex(rawOtp);
+   }
+   
+	public boolean validateOtp(String email, String rawOtp, Channel channel, OtpPurpose purpose) throws InvalidDataException{
+		log.info("START - validating OTP for [{}]", email);
+
+		User user = userRepository.findByEmail(email.trim().toLowerCase());
+		
+		// Find OTP entity
+		Otp otpEntity = otpRepository.findByUserIdAndChannelAndPurpose(user.getId(), channel, purpose)
+				.orElseThrow(() -> new CustomNotFoundException("No OTP found for validation"));
+
+		// Check expiry
+		if (otpEntity.getExpiryDate().isBefore(LocalDateTime.now())) {
+			log.warn("OTP expired for user {}", email);
+			throw new InvalidDataException(ErrorCode.OTP_EXPIRED);
+		}
+
+		// Check value (stored is hashed, so hash the input)
+		if (!otpEntity.getOtpCode().equals(hashOtp(rawOtp))) {
+			log.warn("Invalid OTP entered for user {}", email);
+			throw new InvalidDataException(ErrorCode.OTP_INVALID);
+		}
+
+		log.info("OTP validated successfully for user {}", email);
+		return true;
+		
+	}
 
 }

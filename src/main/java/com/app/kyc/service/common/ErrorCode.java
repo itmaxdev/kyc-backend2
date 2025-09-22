@@ -10,7 +10,12 @@ public enum ErrorCode {
 
    REASON_IS_REQUIRED(658, "Rejection reason is required"), SERVICE_ALREADY_PROCESSED(659, "Service is already processed"),
 
-   ANOMALIES_ALREADY_REPORTED(661, "Anomalies Already Reported"), SERVICE_PROVIDER_INACTIVE(662, "Inactive service provider");
+   ANOMALIES_ALREADY_REPORTED(661, "Anomalies Already Reported"), SERVICE_PROVIDER_INACTIVE(662, "Inactive service provider"),
+	
+   OTP_INVALID(663, "Invalid OTP"),
+   OTP_EXPIRED(664, "OTP Expired"),
+   OTP_NOT_FOUND(665, "OTP not found"),
+   OTP_CHANNEL_UNSUPPORTED(666, "Unsupported OTP channel");
 
    private final Integer code;
    private final String message;
