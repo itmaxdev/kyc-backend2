@@ -1,5 +1,7 @@
 package com.app.kyc.web.security;
 
+import com.app.kyc.model.OtpRequest;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -7,11 +9,12 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class AuthRequest
+public class AuthRequest extends OtpRequest
 {
 
    private String email;
    private String password;
+   private String otp;
 
    public String getEmail()
    {

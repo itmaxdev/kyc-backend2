@@ -1,6 +1,7 @@
 package com.app.kyc.repository;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -14,7 +15,7 @@ import com.app.kyc.entity.User;
 @Repository
 public interface UserRepository extends JpaRepository<User, Long>
 {
-   @Query(value = "SELECT * FROM users WHERE email = ?", nativeQuery = true)
+   @Query(value = "SELECT * FROM users WHERE email = ?1", nativeQuery = true)
    User findByEmail(@Param("email") String email);
 
    Page<User> findAllByCreatedBy(Pageable pageable, Long createdById);
