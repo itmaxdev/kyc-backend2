@@ -31,8 +31,8 @@ public class EmailService {
 	 private final JavaMailSender javaMailSender;
 	 private final TemplateEngine templateEngine;
 
-    @Value("${users.email-images}")
-    private String emailImages;
+//    @Value("${users.email-images}")
+//    private String emailImages;
 
     @Async
     public void sendOtpEmail(String[] to, String otp, String lang, String clientName) {
