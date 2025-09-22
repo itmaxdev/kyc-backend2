@@ -127,7 +127,10 @@ public class ServiceProviderServiceImpl implements ServiceProviderService
       Pageable pageable = PageRequest.of(page, perPage, sort);
 
       // 🔹 Fetch data
-      Page<ServiceProvider> pageServiceProvider = serviceProviderRepository.findAll(pageable);
+      //Page<ServiceProvider> pageServiceProvider = serviceProviderRepository.findAll(pageable);
+      //Page<ServiceProvider> pageServiceProvider = serviceProviderRepository.findAllByStatus(,pageable);
+      Page<ServiceProvider> pageServiceProvider =
+              serviceProviderRepository.findAllByStatus(ServiceProviderStatus.Active, pageable);
 
       List<ServiceProviderUserResponseDTO> response = new ArrayList<>();
       for (ServiceProvider s : pageServiceProvider) {
