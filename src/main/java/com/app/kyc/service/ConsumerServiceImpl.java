@@ -2767,7 +2767,7 @@ System.out.println("Get all flagged ");
                                         anomaly,
                                         new Date(),
                                         newStatus,
-                                        "auto-resolution",
+                                        "Anomaly fagged by system",
                                         user.getFirstName() + " " + user.getLastName(),
                                         anomaly.getUpdatedOn()
                                 )

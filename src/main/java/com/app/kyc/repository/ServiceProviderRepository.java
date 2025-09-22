@@ -5,6 +5,9 @@ import java.util.List;
 import java.util.Optional;
 
 import com.app.kyc.model.DashboardObjectInterface;
+import com.app.kyc.model.ServiceProviderStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -35,4 +38,8 @@ public interface ServiceProviderRepository extends JpaRepository<ServiceProvider
    @Query("select s.name from ServiceProvider s where s.id in (:ids)")
    List<String> findNamesByIds(@Param("ids") List<Long> ids);
    Optional<ServiceProvider> findByNameIgnoreCase(String name);
+
+   Page<ServiceProvider> findAllByStatus(ServiceProviderStatus status, Pageable pageabl);  // only active ones
+
+
 }
