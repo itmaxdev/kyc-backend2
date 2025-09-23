@@ -1945,7 +1945,7 @@ System.out.println("Get all flagged ");
                     
                     List<ConsumerTracking> consumerTracking = consumerTrackingRepository.findByConsumerId(consumer.getId());
                     if(consumerTracking.size() <= 0) {
-                    	consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),"N/A",false,new Date()));
+                    	consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),"N/A",consumer.getIsConsistent(),new Date()));
                     }
                 }
             }
@@ -1974,7 +1974,7 @@ System.out.println("Get all flagged ");
             consumerAnomalyRepository.save(consumerAnomaly);
             List<ConsumerTracking> consumerTracking = consumerTrackingRepository.findByConsumerId(consumer.getId());
             if(consumerTracking.size() <= 0) {
-            	consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),"N/A",false,new Date()));
+            	consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),"N/A",consumer.getIsConsistent(),new Date()));
             }
         }
 
@@ -2035,7 +2035,7 @@ System.out.println("Get all flagged ");
 
                     consumerAnomalyRepository.save(tempConsumerAnomaly);
                     
-                    consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),"N/A",false,new Date()));
+                    consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),"N/A",consumer.getIsConsistent(),new Date()));
                 }
             }
         }
@@ -2574,6 +2574,7 @@ System.out.println("Get all flagged ");
                         consumerAnomalyRepository.delete(links.get(i));
                     }
                 }
+
             } else {
                 ConsumerAnomaly link = new ConsumerAnomaly();
                 link.setAnomaly(anomaly);
@@ -2581,7 +2582,7 @@ System.out.println("Get all flagged ");
                 link.setNotes(fullNote);
                 consumerAnomalyRepository.save(link);
                 
-                consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),"N/A",false,new Date()));
+                consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),"N/A",consumer.getIsConsistent(),new Date()));
             }
         } catch (DataIntegrityViolationException e) {
             log.warn("Duplicate anomaly link already exists for consumer={} anomaly={}. Ignoring insert.",
