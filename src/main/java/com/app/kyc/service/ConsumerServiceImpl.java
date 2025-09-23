@@ -2820,6 +2820,7 @@ System.out.println("Get all flagged ");
             }
         }
 
+        System.out.println("resolvedAndDeleteExceedingConsumers after values are "+consumer.getMsisdn()+ "Consistent values: " +consumer.getIsConsistent());
         return consumer;
     }
 
