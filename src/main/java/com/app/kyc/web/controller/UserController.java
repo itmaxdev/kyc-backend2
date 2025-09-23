@@ -29,6 +29,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.app.kyc.entity.Otp;
 import com.app.kyc.entity.User;
+import com.app.kyc.enums.Channel;
+import com.app.kyc.enums.Lang;
+import com.app.kyc.enums.OtpPurpose;
 import com.app.kyc.exception.CustomNotFoundException;
 import com.app.kyc.request.ChangePasswordRequestDTO;
 import com.app.kyc.request.ResetPasswordRequestDTO;
@@ -56,9 +59,17 @@ public class UserController
    EmailService emailService;
    
    @PutMapping("/sendOTP")
-   public ResponseEntity<?> generateOtp(HttpServletResponse response, OtpRequest otpRequest) throws Exception
+   public ResponseEntity<?> generateOtp(HttpServletResponse response, @RequestParam(required = true) Channel channel,
+	        @RequestParam(required = true) OtpPurpose purpose,
+	        @RequestParam(required = true) Lang lang,
+	        @RequestParam(required = true) String email) throws Exception
    {
 		try {
+			OtpRequest otpRequest = new OtpRequest();
+		    otpRequest.setChannel(channel);
+		    otpRequest.setPurpose(purpose);
+		    otpRequest.setLang(lang);
+		    otpRequest.setEmail(email);
 			userService.generateOtp(otpRequest);
 			return ResponseEntity.ok("OTP sent successfully");
 		} catch (CustomNotFoundException e) {
@@ -410,6 +421,28 @@ public class UserController
          //log.info(e.getMessage());
          return ResponseEntity.ok(e.getMessage());
       }
+   }
+   
+   @PutMapping("/unMaskData")
+   public ResponseEntity<?> unMaskData(HttpServletResponse response, 
+		   	@RequestParam(required = true) Channel channel,
+	        @RequestParam(required = true) OtpPurpose purpose,
+	        @RequestParam(required = true) Lang lang,
+	        @RequestParam(required = true) Long userId) throws Exception
+   {
+	   	OtpRequest otpRequest = new OtpRequest();
+	    otpRequest.setChannel(channel);
+	    otpRequest.setPurpose(purpose);
+	    otpRequest.setLang(lang);
+	    otpRequest.setUserId(userId);
+		try {
+			userService.generateOtp(otpRequest);
+			return ResponseEntity.ok("OTP sent successfully");
+		} catch (CustomNotFoundException e) {
+			return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+		} catch (Exception e) {
+			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Something went wrong");
+		}
    }
 
 }

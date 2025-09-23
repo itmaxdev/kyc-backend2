@@ -384,9 +384,14 @@ public class UserServiceImpl implements UserService
    public void generateOtp(OtpRequest otpRequest) {
        User user;
        try {
-           user = userRepository.findByEmail(otpRequest.getEmail().trim().toLowerCase());
+    	   if(!otpRequest.getEmail().isEmpty() && otpRequest.getEmail() !=null) {
+    		   user = userRepository.findByEmail(otpRequest.getEmail().trim().toLowerCase());
+    	   }else {
+    		   user = userRepository.findById(otpRequest.getUserId()).orElseThrow(() -> new CustomNotFoundException("User not found"));
+    	   }
 	
 	       final String rawOtp;
+	   	   Long minute;
 	       if (otpRequest.getChannel() == Channel.EMAIL) {
 	           rawOtp = generateSecureOTP(user.getEmail());
 	       } else {
@@ -396,7 +401,12 @@ public class UserServiceImpl implements UserService
 	       Optional<Otp> otpOpt = otpRepository.findByUserIdAndChannelAndPurpose(user.getId(), otpRequest.getChannel(), otpRequest.getPurpose());
 	       Otp otpEntity = otpOpt.orElseGet(() -> OtpMapper.toEntity(otpRequest, user, hashOtp(rawOtp)));
 	       otpEntity.setOtpCode(hashOtp(rawOtp));
-	       otpEntity.setExpiryDate(LocalDateTime.now().plusMinutes(5));
+	        if(otpRequest.getPurpose().equals(OtpPurpose.UNMASK)) {
+	        	minute = 2L;
+	        }else {
+	        	minute = 5L;
+	        }
+	       otpEntity.setExpiryDate(LocalDateTime.now().plusMinutes(minute));
 	       otpRepository.save(otpEntity);
 	       if (otpRequest.getChannel() == Channel.EMAIL) {
 	           String fullName = user.getFirstName() + " " + user.getLastName();
