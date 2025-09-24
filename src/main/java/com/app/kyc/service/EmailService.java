@@ -1,6 +1,5 @@
 package com.app.kyc.service;
 
-import java.io.File;
 import java.io.UnsupportedEncodingException;
 import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
@@ -10,8 +9,6 @@ import javax.mail.internet.MimeMessage;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.FileSystemResource;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
@@ -19,7 +16,7 @@ import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
-import com.app.kyc.util.EmailUtil;
+import com.app.kyc.enums.OtpPurpose;
 
 import lombok.RequiredArgsConstructor;
 
@@ -35,7 +32,7 @@ public class EmailService {
 //    private String emailImages;
 
     @Async
-    public void sendOtpEmail(String[] to, String otp, String lang, String clientName) {
+    public void sendOtpEmail(String[] to, String otp, String lang, String clientName, OtpPurpose otpPurpose) {
         try {
             log.info("Sending OTP email to: [{}]", Arrays.toString(to));
 
@@ -45,11 +42,22 @@ public class EmailService {
             context.setVariable("lang", lang);
             context.setVariable("clientName", clientName);
 
-            String title = lang.equalsIgnoreCase("fr") ?
-                    "Votre code OTP pour activer votre compte" :
-                    "Your OTP Code to Activate Your Account";
+			String title = "";
+			if (otpPurpose.equals(OtpPurpose.LOGIN)) {
+				title = lang.equalsIgnoreCase("fr") ? "Votre code OTP pour activer votre compte"
+						: "Your OTP Code to Activate Your Account";
+			} else if (otpPurpose.equals(OtpPurpose.UNMASK)) {
+				title = lang.equalsIgnoreCase("fr") ? "Votre OTP pour démasquer vos données"
+						: "Your OTP to Unmask Data";
+			}
 
-            String htmlContent = templateEngine.process("email/otp-email", context);
+            String htmlContent = "";
+            if(otpPurpose.equals(OtpPurpose.LOGIN)) {
+            	htmlContent = templateEngine.process("email/otp-email", context);
+            }else if(otpPurpose.equals(OtpPurpose.UNMASK)) {
+            	htmlContent = templateEngine.process("email/unMask-email", context);
+            }
+            
             CompletableFuture<MimeMessage> message = addInlineLogos(htmlContent, to, title);
             javaMailSender.send(message.get());
             log.info("OTP email sent successfully to: [{}]", Arrays.toString(to));

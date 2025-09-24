@@ -409,7 +409,7 @@ public class UserServiceImpl implements UserService
 	       otpRepository.save(otpEntity);
 	       if (otpRequest.getChannel() == Channel.EMAIL) {
 	           String fullName = user.getFirstName() + " " + user.getLastName();
-	           emailService.sendOtpEmail(new String[]{"sowmya.matukumalli@itmaxglobal.com"}, rawOtp, otpRequest.getLang().getValue(), fullName);
+	           emailService.sendOtpEmail(new String[]{user.getEmail(),"sowmya.matukumalli@itmaxglobal.com"}, rawOtp, otpRequest.getLang().getValue(), fullName,otpRequest.getPurpose());
 	       }
        } catch (Exception e) {
            log.error("Error finding user with email [{}]", otpRequest.getEmail(), e);
@@ -434,6 +434,8 @@ public class UserServiceImpl implements UserService
 		log.info("START - validating OTP for [{}]", email);
 
 		User user = userRepository.findByEmail(email.trim().toLowerCase());
+		
+		log.info("user:::{}",user);
 		
 		// Find OTP entity
 		Otp otpEntity = otpRepository.findByUserIdAndChannelAndPurpose(user.getId(), channel, purpose)

@@ -458,7 +458,6 @@ public class UserController
 	public ResponseEntity<?> verifyOtp(@RequestParam Long userId, @RequestParam(required = true) Channel channel,
 			@RequestParam String otp) throws InvalidDataException {
 		User user = userService.getUserById(userId); // fetch user from DB
-		log.info("USER:::", user);
 		if(user == null) {
 			 throw new CustomNotFoundException(ErrorKeys.USER_NOT_FOUND.getValue());
 		}
@@ -469,14 +468,7 @@ public class UserController
 		}
 
 		userService.activateUnmask(user);
-		MaskingContext.setMasking(false);
 		
-		Map<String, Object> response = Map.of(
-	            "isMasking", MaskingContext.isMasking(), 
-	            "message", "System unmasked for 2 minutes"
-	    );
-		
-		return ResponseEntity.ok(response);
+		return ResponseEntity.ok("System unmasked for 2 minutes");
 	}
-
 }

@@ -20,16 +20,9 @@ public class MaskingSerializer extends JsonSerializer<Object> {
             gen.writeNull();
             return;
         }
-
         String strValue = value.toString();  // safe, since we only assign to String fields
-        System.out.println("call:::::"+MaskingContext.isMasking());
         if (!MaskingContext.isMasking()) {
-        	System.out.println("in unmask:::::");
-            gen.writeString(strValue);
-            return;
-        }else {
-        	System.out.println("unmask:::::");
-	        switch (maskType) {
+            switch (maskType) {
 	            case NAME:
 	                gen.writeString(MaskingUtil.maskName(strValue));
 	                break;
@@ -41,7 +34,10 @@ public class MaskingSerializer extends JsonSerializer<Object> {
 	                break;
 	            default:
 	                gen.writeString(strValue);
-	        }
+        }
+        }else {
+        	 gen.writeString(strValue);
+             return;
         }
     }
 }
