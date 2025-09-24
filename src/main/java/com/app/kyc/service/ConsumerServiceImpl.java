@@ -157,9 +157,11 @@ public class ConsumerServiceImpl implements ConsumerService {
 							        + "-" + c.getAnomalies().get(0).getId();
 						
 
-                        String consistencyStatus = c.getIsConsistent() == true ? "Consistent" : "Inconsistent";
+                        String consistencyStatus = t.getIsConsistent() == true ? "Consistent" : "Inconsistent";
                         String inconsistentOn = c.getCreatedOn();
-                        String consistentOn = c.getConsistentOn() != null ? t.getConsistentOn() : "N/A";
+                        String consistentOn = t.getConsistentOn() != null ? t.getConsistentOn() : "N/A";
+
+
                         history.add(new ConsumerHistoryDto(consistencyStatus, note , inconsistentOn, consistentOn , formattedId));
                     }
                 }
