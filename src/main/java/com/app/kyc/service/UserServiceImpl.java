@@ -18,7 +18,6 @@ import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
 import javax.persistence.criteria.Predicate;
 import javax.persistence.criteria.Root;
-import javax.servlet.http.HttpServletResponse;
 
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.FilenameUtils;
@@ -28,16 +27,18 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.data.crossstore.ChangeSetPersister.NotFoundException;
 import org.springframework.data.domain.Page;
-import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.app.kyc.Masking.MaskingContext;
 import com.app.kyc.entity.Otp;
 import com.app.kyc.entity.Role;
 import com.app.kyc.entity.User;
+import com.app.kyc.entity.UserUnmaskSession;
 import com.app.kyc.enums.Channel;
 import com.app.kyc.enums.ErrorKeys;
 import com.app.kyc.enums.OtpPurpose;
@@ -48,6 +49,7 @@ import com.app.kyc.model.ServiceProviderStatus;
 import com.app.kyc.model.UserStatus;
 import com.app.kyc.repository.OtpRepository;
 import com.app.kyc.repository.UserRepository;
+import com.app.kyc.repository.UserUnmaskSessionRepository;
 import com.app.kyc.request.ChangePasswordRequestDTO;
 import com.app.kyc.request.ResetPasswordRequestDTO;
 import com.app.kyc.service.common.ErrorCode;
@@ -55,7 +57,6 @@ import com.app.kyc.service.exception.InvalidDataException;
 import com.app.kyc.service.storage.FileStorageService;
 import com.app.kyc.util.EmailUtil;
 import com.app.kyc.util.PaginationUtil;
-import com.app.kyc.web.controller.ConsumerController;
 import com.app.kyc.web.security.AuthRequest;
 import com.app.kyc.web.security.AuthResponse;
 import com.app.kyc.web.security.JWTUtil;
@@ -94,6 +95,9 @@ public class UserServiceImpl implements UserService
    
    @Autowired
    OtpRepository otpRepository;
+   
+   @Autowired
+   UserUnmaskSessionRepository sessionRepository;
 
    public User getUserById(Long id)
    {
@@ -384,14 +388,14 @@ public class UserServiceImpl implements UserService
    public void generateOtp(OtpRequest otpRequest) {
        User user;
        try {
-    	   if(!otpRequest.getEmail().isEmpty() && otpRequest.getEmail() !=null) {
+    	   
+    	   if(otpRequest.getEmail() != null) {
     		   user = userRepository.findByEmail(otpRequest.getEmail().trim().toLowerCase());
     	   }else {
-    		   user = userRepository.findById(otpRequest.getUserId()).orElseThrow(() -> new CustomNotFoundException("User not found"));
+    		   user = userRepository.findById(otpRequest.getUserId()).orElseThrow(() -> new CustomNotFoundException(ErrorKeys.USER_NOT_FOUND.getValue()));
     	   }
 	
 	       final String rawOtp;
-	   	   Long minute;
 	       if (otpRequest.getChannel() == Channel.EMAIL) {
 	           rawOtp = generateSecureOTP(user.getEmail());
 	       } else {
@@ -401,12 +405,7 @@ public class UserServiceImpl implements UserService
 	       Optional<Otp> otpOpt = otpRepository.findByUserIdAndChannelAndPurpose(user.getId(), otpRequest.getChannel(), otpRequest.getPurpose());
 	       Otp otpEntity = otpOpt.orElseGet(() -> OtpMapper.toEntity(otpRequest, user, hashOtp(rawOtp)));
 	       otpEntity.setOtpCode(hashOtp(rawOtp));
-	        if(otpRequest.getPurpose().equals(OtpPurpose.UNMASK)) {
-	        	minute = 2L;
-	        }else {
-	        	minute = 5L;
-	        }
-	       otpEntity.setExpiryDate(LocalDateTime.now().plusMinutes(minute));
+	       otpEntity.setExpiryDate(LocalDateTime.now().plusMinutes(5));
 	       otpRepository.save(otpEntity);
 	       if (otpRequest.getChannel() == Channel.EMAIL) {
 	           String fullName = user.getFirstName() + " " + user.getLastName();
@@ -456,5 +455,29 @@ public class UserServiceImpl implements UserService
 		return true;
 		
 	}
+	
+	@Override
+	public void activateUnmask(User user) {
+		UserUnmaskSession session = new UserUnmaskSession();
+		session.setUser(user);
+		session.setUnmaskStart(LocalDateTime.now());
+		session.setUnmaskExpiry(LocalDateTime.now().plusMinutes(2));
+		session.setActive(true);
+		sessionRepository.save(session);
+	}
 
+	public boolean isUnmasked(User user) {
+		return sessionRepository.existsByUserAndActiveTrueAndUnmaskExpiryAfter(user,LocalDateTime.now());
+	}
+
+	// Scheduler to deactivate expired sessions
+	@Scheduled(fixedRate = 60000) // every minute
+	public void expireSessions() {
+		List<UserUnmaskSession> expired = sessionRepository.findByActiveTrueAndUnmaskExpiryBefore(LocalDateTime.now());
+		for (UserUnmaskSession session : expired) {
+			session.setActive(false);
+			MaskingContext.clear();
+		}
+		sessionRepository.saveAll(expired);
+	}
 }

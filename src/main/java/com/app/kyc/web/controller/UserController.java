@@ -4,12 +4,16 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import com.app.kyc.model.OtpRequest;
 import com.app.kyc.model.VerifyEmailChangePasswordDTO;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -27,9 +31,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.app.kyc.Masking.MaskingContext;
 import com.app.kyc.entity.Otp;
 import com.app.kyc.entity.User;
 import com.app.kyc.enums.Channel;
+import com.app.kyc.enums.ErrorKeys;
 import com.app.kyc.enums.Lang;
 import com.app.kyc.enums.OtpPurpose;
 import com.app.kyc.exception.CustomNotFoundException;
@@ -37,6 +43,8 @@ import com.app.kyc.request.ChangePasswordRequestDTO;
 import com.app.kyc.request.ResetPasswordRequestDTO;
 import com.app.kyc.service.EmailService;
 import com.app.kyc.service.UserService;
+import com.app.kyc.service.UserServiceImpl;
+import com.app.kyc.service.common.ErrorCode;
 import com.app.kyc.service.exception.InvalidDataException;
 import com.app.kyc.web.security.AuthRequest;
 import com.app.kyc.web.security.AuthResponse;
@@ -48,6 +56,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 @RequestMapping("/users")
 public class UserController
 {
+	private static final Logger log = LoggerFactory.getLogger(UserController.class);
 
    @Autowired
    UserService userService;
@@ -444,5 +453,30 @@ public class UserController
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Something went wrong");
 		}
    }
+   
+	@PostMapping("/verifyUnmaskOTP")
+	public ResponseEntity<?> verifyOtp(@RequestParam Long userId, @RequestParam(required = true) Channel channel,
+			@RequestParam String otp) throws InvalidDataException {
+		User user = userService.getUserById(userId); // fetch user from DB
+		log.info("USER:::", user);
+		if(user == null) {
+			 throw new CustomNotFoundException(ErrorKeys.USER_NOT_FOUND.getValue());
+		}
+
+		boolean verified = userService.validateOtp(user.getEmail(), otp, channel, OtpPurpose.UNMASK);
+		if (!verified) {
+			throw new InvalidDataException(ErrorCode.OTP_INVALID.getMessage());
+		}
+
+		userService.activateUnmask(user);
+		MaskingContext.setMasking(false);
+		
+		Map<String, Object> response = Map.of(
+	            "isMasking", MaskingContext.isMasking(), 
+	            "message", "System unmasked for 2 minutes"
+	    );
+		
+		return ResponseEntity.ok(response);
+	}
 
 }

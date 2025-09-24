@@ -14,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import com.app.kyc.Masking.MaskingContext;
 import com.app.kyc.entity.Consumer;
 import com.app.kyc.entity.ConsumerService;
 import com.app.kyc.entity.User;
@@ -47,7 +48,7 @@ public class ConsumerController
    SecurityHelper securityHelper;
 
    @GetMapping("/{id}")
-   public ResponseEntity<?> getConsumerById(HttpServletRequest request, @PathVariable("id") Long id) throws SQLException
+   public ResponseEntity<?> getConsumerById(HttpServletRequest request, @PathVariable("id") Long id, @RequestParam(name = "isMask", required = false, defaultValue = "true") boolean isMask) throws SQLException
    {
       //log.info("ConsumerController/getConsumerById");
       try
@@ -57,9 +58,10 @@ public class ConsumerController
          roles.add("Compliance Admin");
          roles.add("KYC Admin");
          roles.add("SP User");
-         if(securityHelper.hasRole(request, roles))
+         if(securityHelper.hasRole(request, roles)) {
+        	MaskingContext.setMasking(isMask);
             return ResponseEntity.ok(consumerService.getConsumerById(id));
-         else
+         }else
             return ResponseEntity.ok("Not authorized");
       }
       catch(Exception e)

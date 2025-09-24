@@ -1,10 +1,10 @@
 package com.app.kyc.Masking;
 
+import java.io.IOException;
+
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
-
-import java.io.IOException;
 
 public class MaskingSerializer extends JsonSerializer<Object> {
 
@@ -22,19 +22,26 @@ public class MaskingSerializer extends JsonSerializer<Object> {
         }
 
         String strValue = value.toString();  // safe, since we only assign to String fields
-
-        switch (maskType) {
-            case NAME:
-                gen.writeString(MaskingUtil.maskName(strValue));
-                break;
-            case PHONE:
-                gen.writeString(MaskingUtil.maskPhone(strValue));
-                break;
-            case IDENTITY:
-                gen.writeString(MaskingUtil.maskIdentity(strValue));
-                break;
-            default:
-                gen.writeString(strValue);
+        System.out.println("call:::::"+MaskingContext.isMasking());
+        if (!MaskingContext.isMasking()) {
+        	System.out.println("in unmask:::::");
+            gen.writeString(strValue);
+            return;
+        }else {
+        	System.out.println("unmask:::::");
+	        switch (maskType) {
+	            case NAME:
+	                gen.writeString(MaskingUtil.maskName(strValue));
+	                break;
+	            case PHONE:
+	                gen.writeString(MaskingUtil.maskPhone(strValue));
+	                break;
+	            case IDENTITY:
+	                gen.writeString(MaskingUtil.maskIdentity(strValue));
+	                break;
+	            default:
+	                gen.writeString(strValue);
+	        }
         }
     }
 }

@@ -12,11 +12,9 @@ public class JacksonConfig {
     @Bean
     public ObjectMapper objectMapper() {
         ObjectMapper mapper = new ObjectMapper();
-
         SimpleModule module = new SimpleModule();
         module.setSerializerModifier(new MaskingBeanSerializerModifier());
         mapper.registerModule(module);
-
         return mapper;
     }
 }
