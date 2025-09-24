@@ -9,8 +9,11 @@ import org.springframework.web.multipart.MultipartFile;
 import com.app.kyc.entity.Otp;
 import com.app.kyc.entity.Role;
 import com.app.kyc.entity.User;
+import com.app.kyc.entity.UserConfig;
 import com.app.kyc.enums.Channel;
 import com.app.kyc.enums.OtpPurpose;
+import com.app.kyc.exception.CustomNotFoundException;
+import com.app.kyc.model.UserConfigRequest;
 import com.app.kyc.model.OtpRequest;
 import com.app.kyc.request.ChangePasswordRequestDTO;
 import com.app.kyc.request.ResetPasswordRequestDTO;
@@ -68,4 +71,8 @@ public interface UserService
    public void activateUnmask(User user);
    
    public boolean isUnmasked(User user);
+   
+   public void saveUserConfig(UserConfigRequest request) throws InvalidDataException;
+   
+   public Map<String, Object> getUserConfig(Long userId) throws InvalidDataException;
 }

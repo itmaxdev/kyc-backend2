@@ -9,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import com.app.kyc.model.UserConfigRequest;
 import com.app.kyc.model.OtpRequest;
 import com.app.kyc.model.VerifyEmailChangePasswordDTO;
 
@@ -34,6 +35,7 @@ import org.springframework.web.multipart.MultipartFile;
 import com.app.kyc.Masking.MaskingContext;
 import com.app.kyc.entity.Otp;
 import com.app.kyc.entity.User;
+import com.app.kyc.entity.UserConfig;
 import com.app.kyc.enums.Channel;
 import com.app.kyc.enums.ErrorKeys;
 import com.app.kyc.enums.Lang;
@@ -470,5 +472,32 @@ public class UserController
 		userService.activateUnmask(user);
 		
 		return ResponseEntity.ok("System unmasked for 2 minutes");
+	}
+	
+	@GetMapping("/getConfig")
+	public ResponseEntity<?> getConfig(@RequestParam Long userId) throws InvalidDataException {
+	    Map<String, Object> config = userService.getUserConfig(userId);
+	    return ResponseEntity.ok(config);
+	}
+	
+	@PostMapping("/saveConfig")
+	public ResponseEntity<?> saveConfig(@RequestBody UserConfigRequest configRequest) {
+		try {
+	        userService.saveUserConfig(configRequest);
+	        return ResponseEntity.ok(Map.of(
+	            "status", "success",
+	            "message", "Config saved successfully"
+	        ));
+	    } catch (CustomNotFoundException e) {
+	        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
+	            "status", "error",
+	            "message", e.getMessage()
+	        ));
+	    } catch (Exception e) {
+	        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of(
+	            "status", "error",
+	            "message", e.getMessage()
+	        ));
+	    }
 	}
 }
