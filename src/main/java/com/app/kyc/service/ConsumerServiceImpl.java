@@ -162,7 +162,16 @@ public class ConsumerServiceImpl implements ConsumerService {
                         String consistentOn = t.getConsistentOn() != null ? t.getConsistentOn() : "N/A";
 
 
-                        history.add(new ConsumerHistoryDto(consistencyStatus, note , inconsistentOn, consistentOn , formattedId));
+                        for(Anomaly anomaly:c.getAnomalies()){
+                            String anomalyStatus = anomaly.getStatus().getStatus();
+                            if(anomalyStatus.equalsIgnoreCase("Resolved Fully")){
+                                history.add(new ConsumerHistoryDto("true", note , inconsistentOn, consistentOn , formattedId));
+                            }else{
+                                history.add(new ConsumerHistoryDto(consistencyStatus, note , inconsistentOn, consistentOn , formattedId));
+                            }
+                        }
+
+
                     }
                 }
             }
