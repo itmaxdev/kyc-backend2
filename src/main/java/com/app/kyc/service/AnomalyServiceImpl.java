@@ -343,42 +343,58 @@ public class AnomalyServiceImpl implements AnomalyService
       }
 
       // ✅ Fetch anomaly tracking (deduplicate by status)
-      List<AnomalyTrackingDto> anomalyTracking = anomalyTrackingRepository.findDistinctByAnomalyIdOrderByCreatedOnDesc(id)
-              .stream()
-              .map(c -> {
-                 String finalNote;
-                 if (c.getNote() != null && !c.getNote().isBlank()) {
-                    finalNote = c.getNote();
-                 } else if (AnomalyStatus.REPORTED == c.getStatus()) {
-                    finalNote = "Anomaly flagged by " + c.getUpdateBy();
-                 } else if (AnomalyStatus.RESOLVED_PARTIALLY == c.getStatus()) {
-                    finalNote = "Anomaly Resolved Partially by " + c.getUpdateBy();
-                 } else if (AnomalyStatus.RESOLVED_FULLY == c.getStatus()) {
-                    finalNote = "Anomaly Resolved by " + c.getUpdateBy();
-                 } else {
-                    finalNote = "";
-                 }
+      List<AnomalyTrackingDto> anomalyTracking =
+              anomalyTrackingRepository.findDistinctByAnomalyIdOrderByCreatedOnDesc(id)
+                      .stream()
+                      .map(c -> {
+                         String finalNote;
+                         if (c.getNote() != null && !c.getNote().isBlank()) {
+                            finalNote = c.getNote();
+                         } else if (AnomalyStatus.REPORTED == c.getStatus()) {
+                            finalNote = "Anomaly flagged by " + c.getUpdateBy();
+                         } else if (AnomalyStatus.RESOLVED_PARTIALLY == c.getStatus()) {
+                            finalNote = "Anomaly Resolved Partially by " + c.getUpdateBy();
+                         } else if (AnomalyStatus.RESOLVED_FULLY == c.getStatus()) {
+                            finalNote = "Anomaly Resolved by " + c.getUpdateBy();
+                         } else {
+                            finalNote = "";
+                         }
 
-                 return new AnomalyTrackingDto(
-                         c.getId(),
-                         c.getCreatedOn(),
-                         c.getStatus(),
-                         finalNote,
-                         c.getAnomaly(),
-                         c.getUpdateBy(),
-                         c.getUpdateOn()
-                 );
-              })
-              // 🔹 Deduplicate: keep only one entry per status (latest, because of DESC order)
-              .collect(Collectors.collectingAndThen(
-                      Collectors.toMap(
-                              AnomalyTrackingDto::getStatus,
-                              dto -> dto,
-                              (existing, replacement) -> existing, // keep first occurrence
-                              LinkedHashMap::new
-                      ),
-                      m -> new ArrayList<>(m.values())
-              ));
+                         return new AnomalyTrackingDto(
+                                 c.getId(),
+                                 c.getCreatedOn(),
+                                 c.getStatus(),
+                                 finalNote,
+                                 c.getAnomaly(),
+                                 c.getUpdateBy(),
+                                 c.getUpdateOn()
+                         );
+                      })
+                      // 🔹 Deduplicate: keep only one entry per status (latest, because of DESC order)
+                      .collect(Collectors.collectingAndThen(
+                              Collectors.toMap(
+                                      AnomalyTrackingDto::getStatus,
+                                      dto -> dto,
+                                      (existing, replacement) -> existing,
+                                      LinkedHashMap::new
+                              ),
+                              m -> {
+                                 List<AnomalyTrackingDto> list = new ArrayList<>(m.values());
+
+                                 // 🔹 Apply post-filter
+                                 boolean hasFully = list.stream().anyMatch(d -> d.getStatus() == AnomalyStatus.RESOLVED_FULLY);
+                                 boolean hasPartially = list.stream().anyMatch(d -> d.getStatus() == AnomalyStatus.RESOLVED_PARTIALLY);
+
+                                 if (hasFully) {
+                                    list.removeIf(d -> d.getStatus() == AnomalyStatus.RESOLVED_PARTIALLY);
+                                 } else if (hasPartially) {
+                                    list.removeIf(d -> d.getStatus() == AnomalyStatus.RESOLVED_FULLY);
+                                 }
+
+                                 return list;
+                              }
+                      ));
+
 
       // ✅ Fetch consumers linked to anomaly
       // ✅ Fetch consumers linked to anomaly (deduplicate by consumerId, ignore duplicate notes)
