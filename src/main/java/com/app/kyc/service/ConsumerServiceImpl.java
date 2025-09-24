@@ -165,7 +165,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                         for(Anomaly anomaly:c.getAnomalies()){
                             String anomalyStatus = anomaly.getStatus().getStatus();
                             if(anomalyStatus.equalsIgnoreCase("Resolved Fully")){
-                                history.add(new ConsumerHistoryDto("true", note , inconsistentOn, consistentOn , formattedId));
+                                history.add(new ConsumerHistoryDto("Consistent", note , inconsistentOn, consistentOn , formattedId));
                             }else{
                                 history.add(new ConsumerHistoryDto(consistencyStatus, note , inconsistentOn, consistentOn , formattedId));
                             }
