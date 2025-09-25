@@ -450,7 +450,6 @@ public class UserServiceImpl implements UserService
 
 		User user = userRepository.findByEmail(email.trim().toLowerCase());
 		
-		log.info("user:::{}",user);
 		
 		// Find OTP entity
 		Otp otpEntity = otpRepository.findByUserIdAndChannelAndPurpose(user.getId(), channel, purpose)
