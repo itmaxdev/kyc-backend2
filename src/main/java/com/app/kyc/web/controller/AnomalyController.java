@@ -18,7 +18,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.app.kyc.Masking.MaskingContext;
 import com.app.kyc.entity.Anomaly;
+import com.app.kyc.entity.User;
 import com.app.kyc.model.AnomalyStatus;
 import com.app.kyc.request.UpdateAnomalyStatusRequest;
 import com.app.kyc.service.AnomalyService;
@@ -73,8 +75,19 @@ public class AnomalyController
          roles.add("SP Admin");
          roles.add("KYC Admin");
          roles.add("SP User");
-         if(securityHelper.hasRole(request, roles))
-            return ResponseEntity.ok(anomalyService.getAnomalyByIdWithDetails(id));
+         if(securityHelper.hasRole(request, roles)) {
+			 final String authorizationHeader = request.getHeader("Authorization");
+			 String userName = null;
+			 if(authorizationHeader != null && authorizationHeader.startsWith(("Bearer ")))
+			 {
+			    userName = securityHelper.getUserName(authorizationHeader.substring(7));
+			 }
+			 User user = userService.getUserByEmail(userName);
+			 boolean ismask = userService.isUnmasked(user);
+			 MaskingContext.setMasking(ismask);
+			 
+			 return ResponseEntity.ok(anomalyService.getAnomalyByIdWithDetails(id));
+         }
          else
             return ResponseEntity.ok("Not authorized");
       }

@@ -14,4 +14,5 @@ public class OtpRequest {
 	private OtpPurpose purpose;
 	private Lang lang;
 	private String email;
+	private Long userId;
 }

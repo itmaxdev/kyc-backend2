@@ -14,13 +14,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import com.app.kyc.Masking.MaskingContext;
 import com.app.kyc.entity.Consumer;
 import com.app.kyc.entity.ConsumerService;
 import com.app.kyc.entity.User;
 import com.app.kyc.service.ConsumerServiceService;
 import com.app.kyc.service.UserService;
 import com.app.kyc.web.security.SecurityHelper;
-
 
 import io.swagger.annotations.Api;
 
@@ -57,9 +57,19 @@ public class ConsumerController
          roles.add("Compliance Admin");
          roles.add("KYC Admin");
          roles.add("SP User");
-         if(securityHelper.hasRole(request, roles))
+         if(securityHelper.hasRole(request, roles)) {
+        	
+        	 final String authorizationHeader = request.getHeader("Authorization");
+             String userName = null;
+             if(authorizationHeader != null && authorizationHeader.startsWith(("Bearer ")))
+             {
+                userName = securityHelper.getUserName(authorizationHeader.substring(7));
+             }
+             User user = userService.getUserByEmail(userName);
+             boolean ismask = userService.isUnmasked(user);
+             MaskingContext.setMasking(ismask);
             return ResponseEntity.ok(consumerService.getConsumerById(id));
-         else
+         }else
             return ResponseEntity.ok("Not authorized");
       }
       catch(Exception e)
@@ -105,6 +115,15 @@ public class ConsumerController
          roles.add("SP User");
          if(securityHelper.hasRole(request, roles))
          {
+        	 final String authorizationHeader = request.getHeader("Authorization");
+             String userName = null;
+             if(authorizationHeader != null && authorizationHeader.startsWith(("Bearer ")))
+             {
+                userName = securityHelper.getUserName(authorizationHeader.substring(7));
+             }
+             User user = userService.getUserByEmail(userName);
+             boolean ismask = userService.isUnmasked(user);
+             MaskingContext.setMasking(ismask);
             Map<String, Object> consumers = consumerService.getAllConsumers(params);
             return ResponseEntity.ok(consumers);
          }
@@ -264,9 +283,18 @@ public class ConsumerController
          roles.add("SP User");
          if(securityHelper.hasRole(request, roles))
          {
-            Map<String, Object> consumers = consumerService.getAllFlaggedConsumers2(params);
-
-            return ResponseEntity.ok(consumers);
+			 final String authorizationHeader = request.getHeader("Authorization");
+			 String userName = null;
+			 if(authorizationHeader != null && authorizationHeader.startsWith(("Bearer ")))
+			 {
+			    userName = securityHelper.getUserName(authorizationHeader.substring(7));
+			 }
+			 User user = userService.getUserByEmail(userName);
+			 boolean ismask = userService.isUnmasked(user);
+			 MaskingContext.setMasking(ismask);
+			 
+			 Map<String, Object> consumers = consumerService.getAllFlaggedConsumers2(params);
+			 return ResponseEntity.ok(consumers);
          }
          else
             return ResponseEntity.ok("Not authorized");

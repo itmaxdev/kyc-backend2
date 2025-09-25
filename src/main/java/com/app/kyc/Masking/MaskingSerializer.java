@@ -1,10 +1,10 @@
 package com.app.kyc.Masking;
 
+import java.io.IOException;
+
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
-
-import java.io.IOException;
 
 public class MaskingSerializer extends JsonSerializer<Object> {
 
@@ -20,21 +20,24 @@ public class MaskingSerializer extends JsonSerializer<Object> {
             gen.writeNull();
             return;
         }
-
         String strValue = value.toString();  // safe, since we only assign to String fields
-
-        switch (maskType) {
-            case NAME:
-                gen.writeString(MaskingUtil.maskName(strValue));
-                break;
-            case PHONE:
-                gen.writeString(MaskingUtil.maskPhone(strValue));
-                break;
-            case IDENTITY:
-                gen.writeString(MaskingUtil.maskIdentity(strValue));
-                break;
-            default:
-                gen.writeString(strValue);
+        if (!MaskingContext.isMasking()) {
+            switch (maskType) {
+	            case NAME:
+	                gen.writeString(MaskingUtil.maskName(strValue));
+	                break;
+	            case PHONE:
+	                gen.writeString(MaskingUtil.maskPhone(strValue));
+	                break;
+	            case IDENTITY:
+	                gen.writeString(MaskingUtil.maskIdentity(strValue));
+	                break;
+	            default:
+	                gen.writeString(strValue);
+        }
+        }else {
+        	 gen.writeString(strValue);
+             return;
         }
     }
 }

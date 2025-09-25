@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -18,7 +19,6 @@ import javax.persistence.criteria.CriteriaBuilder;
 import javax.persistence.criteria.CriteriaQuery;
 import javax.persistence.criteria.Predicate;
 import javax.persistence.criteria.Root;
-import javax.servlet.http.HttpServletResponse;
 
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.FilenameUtils;
@@ -28,26 +28,33 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.data.crossstore.ChangeSetPersister.NotFoundException;
 import org.springframework.data.domain.Page;
-import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.app.kyc.Masking.MaskingContext;
 import com.app.kyc.entity.Otp;
 import com.app.kyc.entity.Role;
 import com.app.kyc.entity.User;
+import com.app.kyc.entity.UserConfig;
+import com.app.kyc.entity.UserUnmaskSession;
 import com.app.kyc.enums.Channel;
 import com.app.kyc.enums.ErrorKeys;
 import com.app.kyc.enums.OtpPurpose;
 import com.app.kyc.exception.CustomNotFoundException;
+import com.app.kyc.model.UserConfigRequest;
+import com.app.kyc.model.UserConfigResponse;
 import com.app.kyc.model.OtpMapper;
 import com.app.kyc.model.OtpRequest;
 import com.app.kyc.model.ServiceProviderStatus;
 import com.app.kyc.model.UserStatus;
 import com.app.kyc.repository.OtpRepository;
+import com.app.kyc.repository.UserConfigRepository;
 import com.app.kyc.repository.UserRepository;
+import com.app.kyc.repository.UserUnmaskSessionRepository;
 import com.app.kyc.request.ChangePasswordRequestDTO;
 import com.app.kyc.request.ResetPasswordRequestDTO;
 import com.app.kyc.service.common.ErrorCode;
@@ -55,7 +62,6 @@ import com.app.kyc.service.exception.InvalidDataException;
 import com.app.kyc.service.storage.FileStorageService;
 import com.app.kyc.util.EmailUtil;
 import com.app.kyc.util.PaginationUtil;
-import com.app.kyc.web.controller.ConsumerController;
 import com.app.kyc.web.security.AuthRequest;
 import com.app.kyc.web.security.AuthResponse;
 import com.app.kyc.web.security.JWTUtil;
@@ -94,6 +100,12 @@ public class UserServiceImpl implements UserService
    
    @Autowired
    OtpRepository otpRepository;
+   
+   @Autowired
+   UserUnmaskSessionRepository sessionRepository;
+   
+   @Autowired
+   UserConfigRepository userConfigRepository;
 
    public User getUserById(Long id)
    {
@@ -384,7 +396,12 @@ public class UserServiceImpl implements UserService
    public void generateOtp(OtpRequest otpRequest) {
        User user;
        try {
-           user = userRepository.findByEmail(otpRequest.getEmail().trim().toLowerCase());
+    	   
+    	   if(otpRequest.getEmail() != null) {
+    		   user = userRepository.findByEmail(otpRequest.getEmail().trim().toLowerCase());
+    	   }else {
+    		   user = userRepository.findById(otpRequest.getUserId()).orElseThrow(() -> new CustomNotFoundException(ErrorKeys.USER_NOT_FOUND.getValue()));
+    	   }
 	
 	       final String rawOtp;
 	       if (otpRequest.getChannel() == Channel.EMAIL) {
@@ -392,15 +409,22 @@ public class UserServiceImpl implements UserService
 	       } else {
 	           throw new CustomNotFoundException("Unsupported channel: " + otpRequest.getChannel());
 	       }
-	
+	       Long minute = 5L;
+	       if(otpRequest.getPurpose().equals(OtpPurpose.LOGIN)) {
+	    	   UserConfig userConfig = userConfigRepository.findByUserAndSettingKey(user,"LOGIN_OTP_MINUTE").orElseThrow(() -> new CustomNotFoundException(ErrorKeys.NOT_FOUND.getValue()));
+	    	   minute = userConfig.getSettingValue();
+	       }else if(otpRequest.getPurpose().equals(OtpPurpose.UNMASK)) {
+	    	   UserConfig userConfig = userConfigRepository.findByUserAndSettingKey(user,"UNMASK_OTP_MINUTE").orElseThrow(() -> new CustomNotFoundException(ErrorKeys.NOT_FOUND.getValue()));
+	    	   minute = userConfig.getSettingValue();
+	       }
 	       Optional<Otp> otpOpt = otpRepository.findByUserIdAndChannelAndPurpose(user.getId(), otpRequest.getChannel(), otpRequest.getPurpose());
 	       Otp otpEntity = otpOpt.orElseGet(() -> OtpMapper.toEntity(otpRequest, user, hashOtp(rawOtp)));
 	       otpEntity.setOtpCode(hashOtp(rawOtp));
-	       otpEntity.setExpiryDate(LocalDateTime.now().plusMinutes(5));
+	       otpEntity.setExpiryDate(LocalDateTime.now().plusMinutes(minute));
 	       otpRepository.save(otpEntity);
 	       if (otpRequest.getChannel() == Channel.EMAIL) {
 	           String fullName = user.getFirstName() + " " + user.getLastName();
-	           emailService.sendOtpEmail(new String[]{"sowmya.matukumalli@itmaxglobal.com"}, rawOtp, otpRequest.getLang().getValue(), fullName);
+	           emailService.sendOtpEmail(new String[]{user.getEmail(),"sowmya.matukumalli@itmaxglobal.com"}, rawOtp, otpRequest.getLang().getValue(), fullName,otpRequest.getPurpose());
 	       }
        } catch (Exception e) {
            log.error("Error finding user with email [{}]", otpRequest.getEmail(), e);
@@ -426,6 +450,8 @@ public class UserServiceImpl implements UserService
 
 		User user = userRepository.findByEmail(email.trim().toLowerCase());
 		
+		log.info("user:::{}",user);
+		
 		// Find OTP entity
 		Otp otpEntity = otpRepository.findByUserIdAndChannelAndPurpose(user.getId(), channel, purpose)
 				.orElseThrow(() -> new CustomNotFoundException("No OTP found for validation"));
@@ -445,6 +471,84 @@ public class UserServiceImpl implements UserService
 		log.info("OTP validated successfully for user {}", email);
 		return true;
 		
+	}
+	
+	@Override
+	public void activateUnmask(User user) {
+		UserConfig userConfig = userConfigRepository.findByUserAndSettingKey(user,"UNMASK_MINUTE").orElseThrow(() -> new CustomNotFoundException(ErrorKeys.NOT_FOUND.getValue()));
+		UserUnmaskSession session = new UserUnmaskSession();
+		session.setUser(user);
+		session.setUnmaskStart(LocalDateTime.now());
+		session.setUnmaskExpiry(LocalDateTime.now().plusMinutes(userConfig.getSettingValue()));
+		session.setActive(true);
+		sessionRepository.save(session);
+	}
+
+	public boolean isUnmasked(User user) {
+		return sessionRepository.existsByUserAndActiveTrueAndUnmaskExpiryAfter(user,LocalDateTime.now());
+	}
+
+	// Scheduler to deactivate expired sessions
+	@Scheduled(fixedRate = 60000) // every minute
+	public void expireSessions() {
+		List<UserUnmaskSession> expired = sessionRepository.findByActiveTrueAndUnmaskExpiryBefore(LocalDateTime.now());
+		for (UserUnmaskSession session : expired) {
+			session.setActive(false);
+			MaskingContext.clear();
+		}
+		sessionRepository.saveAll(expired);
+	}
+	
+	@Override
+	public Map<String, Object> getUserConfig(Long userId) throws InvalidDataException {
+	    User user = userRepository.findById(userId)
+	            .orElseThrow(() -> new CustomNotFoundException("User not found"));
+
+	    List<UserConfig> settings = userConfigRepository.findByUser(user);
+
+	    if (settings.isEmpty()) {
+	        return Map.of("data", Collections.emptyMap()); // empty map if no settings
+	    }
+
+	    // Convert list to Map<String, Long>
+	    Map<String, Long> configMap = new HashMap<>();
+	    for (UserConfig s : settings) {
+	        configMap.put(s.getSettingKey(), s.getSettingValue());
+	    }
+
+	    return Map.of("data", configMap);
+	}
+
+	
+	@Override
+	public void saveUserConfig(UserConfigRequest request) throws InvalidDataException{
+	    User user = userRepository.findById(request.getUserId())
+	            .orElseThrow(() -> new CustomNotFoundException("User not found"));
+
+	    Map<String, Long> settings = request.getSettings();
+
+	    for (Map.Entry<String, Long> entry : settings.entrySet()) {
+	        String key = entry.getKey();
+	        Long value = entry.getValue();
+
+	        // Check if setting already exists for this user
+	        UserConfig setting = userConfigRepository
+	                .findByUserAndSettingKey(user, key)
+	                .orElseGet(() -> {
+	                    UserConfig newSetting = new UserConfig();
+	                    newSetting.setUser(user);
+	                    newSetting.setSettingKey(key);
+	                    newSetting.setCreatedOn(new Date());
+	                    newSetting.setCreatedBy(user.getId());
+	                    return newSetting;
+	                });
+
+	        setting.setSettingValue(value);
+	        setting.setUpdatedOn(new Date());
+	        setting.setUpdatedBy(user.getId());
+
+	        userConfigRepository.save(setting);
+	    }
 	}
 
 }
