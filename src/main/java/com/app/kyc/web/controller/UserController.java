@@ -439,13 +439,13 @@ public class UserController
 		   	@RequestParam(required = true) Channel channel,
 	        @RequestParam(required = true) OtpPurpose purpose,
 	        @RequestParam(required = true) Lang lang,
-	        @RequestParam(required = true) Long userId) throws Exception
+	        @RequestParam(required = true) String userId) throws Exception
    {
 	   	OtpRequest otpRequest = new OtpRequest();
 	    otpRequest.setChannel(channel);
 	    otpRequest.setPurpose(purpose);
 	    otpRequest.setLang(lang);
-	    otpRequest.setUserId(userId);
+	    otpRequest.setUserId(Long.parseLong(userId));
 		try {
 			userService.generateOtp(otpRequest);
 			return ResponseEntity.ok("OTP sent successfully");
@@ -457,9 +457,9 @@ public class UserController
    }
    
 	@PostMapping("/verifyUnmaskOTP")
-	public ResponseEntity<?> verifyOtp(@RequestParam Long userId, @RequestParam(required = true) Channel channel,
+	public ResponseEntity<?> verifyOtp(@RequestParam String userId, @RequestParam(required = true) Channel channel,
 			@RequestParam String otp) throws InvalidDataException {
-		User user = userService.getUserById(userId); // fetch user from DB
+		User user = userService.getUserById(Long.parseLong(userId)); // fetch user from DB
 		if(user == null) {
 			 throw new CustomNotFoundException(ErrorKeys.USER_NOT_FOUND.getValue());
 		}
