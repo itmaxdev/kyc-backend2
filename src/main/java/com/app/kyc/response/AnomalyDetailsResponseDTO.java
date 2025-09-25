@@ -12,14 +12,19 @@ public class AnomalyDetailsResponseDTO {
    private long consistentCount;
    private long inconsistentCount;
 
+   private double partiallyResolvedPercentage;
+
+
    public AnomalyDetailsResponseDTO(AnomlyDto anomalyDto,
                                     List<AnomalyTrackingDto> anomalyTrackingDto,
                                     long consistentCount,
-                                    long inconsistentCount) {
+                                    long inconsistentCount,
+                                    double partiallyResolvedPercentage) {
       this.anomalyDto = anomalyDto;
       this.anomalyTrackingDto = anomalyTrackingDto;
       this.consistentCount = consistentCount;
       this.inconsistentCount = inconsistentCount;
+      this.partiallyResolvedPercentage=partiallyResolvedPercentage;
    }
 
    public AnomlyDto getAnomalyDto() {
@@ -53,4 +58,13 @@ public class AnomalyDetailsResponseDTO {
    public void setInconsistentCount(long inconsistentCount) {
       this.inconsistentCount = inconsistentCount;
    }
+
+   public double getPartiallyResolvedPercentage() {
+      return partiallyResolvedPercentage;
+   }
+
+   public void setPartiallyResolvedPercentage(double partiallyResolvedPercentage) {
+      this.partiallyResolvedPercentage = partiallyResolvedPercentage;
+   }
+
 }
