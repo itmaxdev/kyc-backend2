@@ -438,9 +438,6 @@ public class AnomalyServiceImpl implements AnomalyService
               .filter(t -> t.getStatus() == AnomalyStatus.RESOLVED_PARTIALLY)
               .count();
 
-      double partiallyResolvedPercentage = total > 0
-              ? (partialCount * 100.0) / total
-              : 0.0;
 
       anomlyDto.setConsumers(consumerDtos);
 
@@ -460,7 +457,7 @@ public class AnomalyServiceImpl implements AnomalyService
          }
       });
 
-      return new AnomalyDetailsResponseDTO(anomlyDto, anomalyTracking,consistentCount,inconsistentCount,partiallyResolvedPercentage);
+      return new AnomalyDetailsResponseDTO(anomlyDto, anomalyTracking, (int) consistentCount, (int) inconsistentCount);
    }
 
 
