@@ -411,10 +411,10 @@ public class UserServiceImpl implements UserService
 	       }
 	       Long minute = 5L;
 	       if(otpRequest.getPurpose().equals(OtpPurpose.LOGIN)) {
-	    	   UserConfig userConfig = userConfigRepository.findByUserAndSettingKey(user,"LOGIN_OTP_MINUTE").orElseThrow(() -> new CustomNotFoundException(ErrorKeys.NOT_FOUND.getValue()));
+	    	   UserConfig userConfig = userConfigRepository.findBySettingKey("LOGIN_OTP_MINUTE").orElseThrow(() -> new CustomNotFoundException(ErrorKeys.NOT_FOUND.getValue()));
 	    	   minute = userConfig.getSettingValue();
 	       }else if(otpRequest.getPurpose().equals(OtpPurpose.UNMASK)) {
-	    	   UserConfig userConfig = userConfigRepository.findByUserAndSettingKey(user,"UNMASK_OTP_MINUTE").orElseThrow(() -> new CustomNotFoundException(ErrorKeys.NOT_FOUND.getValue()));
+	    	   UserConfig userConfig = userConfigRepository.findBySettingKey("UNMASK_OTP_MINUTE").orElseThrow(() -> new CustomNotFoundException(ErrorKeys.NOT_FOUND.getValue()));
 	    	   minute = userConfig.getSettingValue();
 	       }
 	       Optional<Otp> otpOpt = otpRepository.findByUserIdAndChannelAndPurpose(user.getId(), otpRequest.getChannel(), otpRequest.getPurpose());
@@ -475,7 +475,7 @@ public class UserServiceImpl implements UserService
 	
 	@Override
 	public void activateUnmask(User user) {
-		UserConfig userConfig = userConfigRepository.findByUserAndSettingKey(user,"UNMASK_MINUTE").orElseThrow(() -> new CustomNotFoundException(ErrorKeys.NOT_FOUND.getValue()));
+		UserConfig userConfig = userConfigRepository.findBySettingKey("UNMASK_MINUTE").orElseThrow(() -> new CustomNotFoundException(ErrorKeys.NOT_FOUND.getValue()));
 		UserUnmaskSession session = new UserUnmaskSession();
 		session.setUser(user);
 		session.setUnmaskStart(LocalDateTime.now());
@@ -533,7 +533,7 @@ public class UserServiceImpl implements UserService
 
 	        // Check if setting already exists for this user
 	        UserConfig setting = userConfigRepository
-	                .findByUserAndSettingKey(user, key)
+	                .findBySettingKey(key)
 	                .orElseGet(() -> {
 	                    UserConfig newSetting = new UserConfig();
 	                    newSetting.setUser(user);
