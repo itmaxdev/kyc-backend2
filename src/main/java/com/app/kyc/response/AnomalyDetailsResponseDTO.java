@@ -5,28 +5,50 @@ import java.util.List;
 import com.app.kyc.model.AnomalyTrackingDto;
 import com.app.kyc.model.AnomlyDto;
 
-public class AnomalyDetailsResponseDTO {
 
+public class AnomalyDetailsResponseDTO {
    private AnomlyDto anomalyDto;
    private List<AnomalyTrackingDto> anomalyTrackingDto;
    private long consistentCount;
    private long inconsistentCount;
-
    private double partiallyResolvedPercentage;
 
-
-   public AnomalyDetailsResponseDTO(AnomlyDto anomalyDto,
-                                    List<AnomalyTrackingDto> anomalyTrackingDto,
-                                    long consistentCount,
-                                    long inconsistentCount,
-                                    double partiallyResolvedPercentage) {
+   // ✅ Constructor that calculates percentage automatically
+   public AnomalyDetailsResponseDTO(
+           AnomlyDto anomalyDto,
+           List<AnomalyTrackingDto> anomalyTrackingDto,
+           int consistentCount,
+           int inconsistentCount
+   ) {
       this.anomalyDto = anomalyDto;
       this.anomalyTrackingDto = anomalyTrackingDto;
       this.consistentCount = consistentCount;
       this.inconsistentCount = inconsistentCount;
-      this.partiallyResolvedPercentage=partiallyResolvedPercentage;
+
+      int totalCount = consistentCount + inconsistentCount;
+      if (totalCount > 0) {
+         this.partiallyResolvedPercentage = (consistentCount * 100.0) / totalCount;
+      } else {
+         this.partiallyResolvedPercentage = 0.0;
+      }
    }
 
+   // ✅ Overloaded constructor to accept percentage directly
+   public AnomalyDetailsResponseDTO(
+           AnomlyDto anomalyDto,
+           List<AnomalyTrackingDto> anomalyTrackingDto,
+           long consistentCount,
+           long inconsistentCount,
+           double partiallyResolvedPercentage
+   ) {
+      this.anomalyDto = anomalyDto;
+      this.anomalyTrackingDto = anomalyTrackingDto;
+      this.consistentCount = consistentCount;
+      this.inconsistentCount = inconsistentCount;
+      this.partiallyResolvedPercentage = partiallyResolvedPercentage;
+   }
+
+   // Getters & Setters
    public AnomlyDto getAnomalyDto() {
       return anomalyDto;
    }
@@ -59,6 +81,10 @@ public class AnomalyDetailsResponseDTO {
       this.inconsistentCount = inconsistentCount;
    }
 
+   public void setInconsistentCount(int inconsistentCount) {
+      this.inconsistentCount = inconsistentCount;
+   }
+
    public double getPartiallyResolvedPercentage() {
       return partiallyResolvedPercentage;
    }
@@ -66,5 +92,5 @@ public class AnomalyDetailsResponseDTO {
    public void setPartiallyResolvedPercentage(double partiallyResolvedPercentage) {
       this.partiallyResolvedPercentage = partiallyResolvedPercentage;
    }
-
 }
+
