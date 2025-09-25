@@ -11,3 +11,8 @@ CREATE TABLE `user_config_settings` (
   KEY `idx_user_setting` (`user_id`,`setting_key`),
   CONSTRAINT `fk_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+
+
+INSERT INTO `user_config_settings` VALUES (1, 'LOGIN_OTP_MINUTE', 10, '2025-09-24 12:18:08', 1, '2025-09-24 12:55:08', 1);
+INSERT INTO `user_config_settings` VALUES (1, 'UNMASK_OTP_MINUTE', 5, '2025-09-24 12:18:08', 1, '2025-09-24 12:55:08', 1);
+INSERT INTO `user_config_settings` VALUES (1, 'UNMASK_MINUTE', 2, '2025-09-24 12:18:08', 1, '2025-09-24 12:55:08', 1);
