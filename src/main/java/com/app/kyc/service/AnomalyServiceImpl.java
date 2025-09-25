@@ -427,7 +427,11 @@ public class AnomalyServiceImpl implements AnomalyService
               .stream()
               .collect(Collectors.toList());
 
+      long consistentCount = consumerDtos.stream()
+              .filter(c -> c.getConsistentOn() != null && !"N/A".equalsIgnoreCase(c.getConsistentOn()))
+              .count();
 
+      long inconsistentCount = consumerDtos.size() - consistentCount;
 
       anomlyDto.setConsumers(consumerDtos);
 
@@ -447,7 +451,7 @@ public class AnomalyServiceImpl implements AnomalyService
          }
       });
 
-      return new AnomalyDetailsResponseDTO(anomlyDto, anomalyTracking);
+      return new AnomalyDetailsResponseDTO(anomlyDto, anomalyTracking,consistentCount,inconsistentCount);
    }
 
 

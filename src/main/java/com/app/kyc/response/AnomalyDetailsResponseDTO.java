@@ -5,26 +5,29 @@ import java.util.List;
 import com.app.kyc.model.AnomalyTrackingDto;
 import com.app.kyc.model.AnomlyDto;
 
-public class AnomalyDetailsResponseDTO
-{
-   AnomlyDto anomalyDto;
+public class AnomalyDetailsResponseDTO {
 
-   List<AnomalyTrackingDto> anomalyTrackingDto;
+   private AnomlyDto anomalyDto;
+   private List<AnomalyTrackingDto> anomalyTrackingDto;
+   private long consistentCount;
+   private long inconsistentCount;
 
-   public AnomalyDetailsResponseDTO(AnomlyDto anomalyDto, List<AnomalyTrackingDto> anomalyTrackingDto)
-   {
+   public AnomalyDetailsResponseDTO(AnomlyDto anomalyDto,
+                                    List<AnomalyTrackingDto> anomalyTrackingDto,
+                                    long consistentCount,
+                                    long inconsistentCount) {
       this.anomalyDto = anomalyDto;
       this.anomalyTrackingDto = anomalyTrackingDto;
+      this.consistentCount = consistentCount;
+      this.inconsistentCount = inconsistentCount;
    }
 
-   public AnomlyDto getAnomaly()
-   {
+   public AnomlyDto getAnomalyDto() {
       return anomalyDto;
    }
 
-   public void setAnomaly(AnomlyDto anomaly)
-   {
-      this.anomalyDto = anomaly;
+   public void setAnomalyDto(AnomlyDto anomalyDto) {
+      this.anomalyDto = anomalyDto;
    }
 
    public List<AnomalyTrackingDto> getAnomalyTrackingDto() {
@@ -33,5 +36,21 @@ public class AnomalyDetailsResponseDTO
 
    public void setAnomalyTrackingDto(List<AnomalyTrackingDto> anomalyTrackingDto) {
       this.anomalyTrackingDto = anomalyTrackingDto;
+   }
+
+   public long getConsistentCount() {
+      return consistentCount;
+   }
+
+   public void setConsistentCount(long consistentCount) {
+      this.consistentCount = consistentCount;
+   }
+
+   public long getInconsistentCount() {
+      return inconsistentCount;
+   }
+
+   public void setInconsistentCount(long inconsistentCount) {
+      this.inconsistentCount = inconsistentCount;
    }
 }
