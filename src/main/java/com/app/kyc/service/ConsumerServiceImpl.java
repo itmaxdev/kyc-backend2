@@ -46,6 +46,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -284,9 +285,16 @@ public class ConsumerServiceImpl implements ConsumerService {
 			filterCount = consumerRepository.count(
 	                ConsumerSpecifications.withFilters(spId, searchText, null ,null)
 	        );
-			filterData = consumerRepository.findAll(ConsumerSpecifications.withFilters(spId, searchText, null, null),
-					pageable);
-		}
+			/*filterData = consumerRepository.findAll(ConsumerSpecifications.withFilters(spId, searchText, null, null),
+					pageable);*/
+
+            filterData = consumerRepository.findAll(
+                    ConsumerSpecifications.withFilters(spId, searchText, null, null),
+                    PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
+                            Sort.by(Sort.Direction.DESC, "isConsistent"))
+            );
+
+        }
 		
 		final List<ConsumersHasSubscriptionsResponseDTO> finalData = toDtoPage(dedup(filterData.getContent()));
 
