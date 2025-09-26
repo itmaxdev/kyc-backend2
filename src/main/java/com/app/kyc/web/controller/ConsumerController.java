@@ -317,7 +317,10 @@ public class ConsumerController
          try
          {
             List<String> roles = new ArrayList<String>();
-            roles.add("and ");
+            roles.add("Compliance Admin");
+            roles.add("SP Admin");
+            roles.add("KYC Admin");
+            roles.add("SP User");
             if(securityHelper.hasRole(request, roles)) {
                entityManager.createNativeQuery(
                                "DELETE FROM consumers_anomalies " +
