@@ -3,6 +3,7 @@ package com.app.kyc.service;
 import java.util.List;
 import java.util.Map;
 
+import com.app.kyc.model.AnomalyTypeDto;
 import com.app.kyc.model.DashboardObjectInterface;
 import org.springframework.data.crossstore.ChangeSetPersister.NotFoundException;
 
@@ -29,4 +30,6 @@ public interface AnomalyTypeService
   public  List<AnomalyType> findAll();
 
    List<DashboardObjectInterface> getAnomalyTypeCounts();
+
+    public List<AnomalyTypeDto> getAnomalyTypes();
 }

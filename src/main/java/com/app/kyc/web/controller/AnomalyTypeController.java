@@ -7,6 +7,7 @@ import java.util.Map;
 
 import javax.servlet.http.HttpServletRequest;
 
+import com.app.kyc.model.AnomalyTypeDto;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -49,6 +50,28 @@ public class AnomalyTypeController
       catch(Exception e)
       {
          //log.info(e.getMessage());
+         return ResponseEntity.ok(e.getMessage());
+      }
+   }
+
+   @GetMapping("/getAnomalyTypes")
+   public ResponseEntity<?> getAnomalyTypes(HttpServletRequest request) {
+
+      try
+      {
+         List<String> roles = new ArrayList<String>();
+         roles.add("Compliance Admin");
+         roles.add("KYC Admin");
+         if(securityHelper.hasRole(request, roles))
+         {
+            List<AnomalyTypeDto> anomalyTypes = anomalyTypeService.getAnomalyTypes();
+            return ResponseEntity.ok(anomalyTypes);
+         }
+         else
+            return ResponseEntity.ok("Not authorized");
+      }
+      catch(Exception e)
+      {
          return ResponseEntity.ok(e.getMessage());
       }
    }

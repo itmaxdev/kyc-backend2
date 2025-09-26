@@ -5,7 +5,9 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
+import com.app.kyc.model.AnomalyTypeDto;
 import com.app.kyc.model.DashboardObjectInterface;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.crossstore.ChangeSetPersister.NotFoundException;
@@ -56,6 +58,30 @@ public class AnomalyTypeServiceImpl implements AnomalyTypeService
 
    public List<DashboardObjectInterface> getAnomalyTypeCounts(){
       return anomalyTypeRepository.getAnomalyTypeCounts();
+   }
+
+   public List<AnomalyTypeDto> getAnomalyTypes() {
+      List<AnomalyType> types = anomalyTypeRepository.findAll();
+
+      return types.stream()
+              .map(type -> new AnomalyTypeDto(
+                      type.getName(),
+                      mapSeverity(type.getName())  // map business meaning
+              ))
+              .collect(Collectors.toList());
+   }
+
+
+   private String mapSeverity(String name) {
+      switch (name) {
+         case "Incomplete Data":
+         case "Duplicate Records":
+            return "Serious";
+         case "Exceeding Threshold":
+            return "Critical";
+         default:
+            return "Unknown";
+      }
    }
 
    @Override
