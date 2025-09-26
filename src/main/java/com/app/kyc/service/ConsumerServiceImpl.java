@@ -159,10 +159,21 @@ public class ConsumerServiceImpl implements ConsumerService {
                     		fullName = c.getFirstName() + " " + c.getMiddleName() + " " + c.getLastName();
                     	}
                     	String note =  fullName + " linked to ";
-                        String formattedId = c.getServiceProvider().getName()
+                        /*String formattedId = c.getServiceProvider().getName()
 							        + "-" + new SimpleDateFormat("ddMMyyyy").format(c.getAnomalies().get(0).getReportedOn()) 
 							        + "-" + c.getAnomalies().get(0).getId();
-						
+						*/
+
+                        String providerName = c.getServiceProvider().getName();
+
+                        String normalizedProvider = providerName != null
+                                ? providerName.substring(0,1).toUpperCase() + providerName.substring(1).toLowerCase()
+                                : "Unknown";
+
+                        String datePart = new SimpleDateFormat("ddMMyyyy").format(c.getAnomalies().get(0).getReportedOn());
+                        Long anomalyId = c.getAnomalies().get(0).getId();
+
+                        String formattedId = normalizedProvider + "-" + datePart + "-" + anomalyId;
 
                         String consistencyStatus = t.getIsConsistent() == true ? "Consistent" : "Inconsistent";
                         String inconsistentOn = c.getCreatedOn();
