@@ -425,6 +425,7 @@ public class AnomalyServiceImpl implements AnomalyService
               ))
               .values()
               .stream()
+              .sorted(Comparator.comparing(ConsumerDto::getIsConsistent))
               .collect(Collectors.toList());
 
       long consistentCount = consumerDtos.stream()
