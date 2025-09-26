@@ -1,5 +1,7 @@
 package com.app.kyc.response;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 
 import com.app.kyc.model.AnomalyTrackingDto;
@@ -25,9 +27,16 @@ public class AnomalyDetailsResponseDTO {
       this.consistentCount = consistentCount;
       this.inconsistentCount = inconsistentCount;
 
+
+
       int totalCount = consistentCount + inconsistentCount;
       if (totalCount > 0) {
-         this.partiallyResolvedPercentage = (consistentCount * 100.0) / totalCount;
+         //this.partiallyResolvedPercentage = (consistentCount * 100.0) / totalCount;
+         this.partiallyResolvedPercentage =
+                 BigDecimal.valueOf((consistentCount * 100.0) / totalCount)
+                         .setScale(2, RoundingMode.HALF_UP)
+                         .doubleValue();
+
       } else {
          this.partiallyResolvedPercentage = 0.0;
       }
