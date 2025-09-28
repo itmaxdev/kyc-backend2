@@ -123,7 +123,7 @@ public class ConsumerServiceImpl implements ConsumerService {
     }*/
 
 
-    /*public ConsumerDto getConsumerById(Long id) {
+    public ConsumerDto getConsumerById(Long id) {
         Optional<Consumer> consumer = consumerRepository.findByIdAndConsumerStatusIn(id, Arrays.asList(0, 1));
 
         if (!consumer.isPresent()) {
@@ -148,10 +148,10 @@ public class ConsumerServiceImpl implements ConsumerService {
                     		fullName = c.getFirstName() + " " + c.getMiddleName() + " " + c.getLastName();
                     	}
                     	String note =  fullName + " linked to ";
-                        *//*String formattedId = c.getServiceProvider().getName()
+                        /*String formattedId = c.getServiceProvider().getName()
 							        + "-" + new SimpleDateFormat("ddMMyyyy").format(c.getAnomalies().get(0).getReportedOn()) 
 							        + "-" + c.getAnomalies().get(0).getId();
-						*//*
+						*/
 
                         String providerName = c.getServiceProvider().getName();
 
@@ -182,26 +182,6 @@ public class ConsumerServiceImpl implements ConsumerService {
                     }
                 }
             }
-
-            dto.setConsumerHistory(history);
-
-            return dto;
-        }).orElse(null);
-    }*/
-
-
-    public ConsumerDto getConsumerById(Long id) {
-        Optional<Consumer> consumerOpt = consumerRepository.findByIdAndConsumerStatusIn(id, Arrays.asList(0, 1));
-
-        if (!consumerOpt.isPresent()) {
-            consumerOpt = consumerRepository.findById(id);
-        }
-
-        return consumerOpt.map(c -> {
-            ConsumerDto dto = new ConsumerDto(c, c.getAnomalies());
-            List<ConsumerHistoryDto> history = new ArrayList<>();
-
-            // ✅ Step 1: Generate vendorCode
             String providerName = c.getServiceProvider() != null ? c.getServiceProvider().getName() : "Unknown";
             List<Consumer> vendorConsumers = consumerRepository.findByServiceProviderId(c.getServiceProvider().getId());
 
@@ -217,55 +197,12 @@ public class ConsumerServiceImpl implements ConsumerService {
 
             String vendorCode = vendorCodeMap.get(c.getId());
 
-            // ✅ Step 2: Generate formattedId (original logic)
-            String normalizedProvider = providerName != null
-                    ? providerName.substring(0,1).toUpperCase() + providerName.substring(1).toLowerCase()
-                    : "Unknown";
-
-            String datePart = new SimpleDateFormat("ddMMyyyy").format(c.getAnomalies().get(0).getReportedOn());
-            Long anomalyId = c.getAnomalies().get(0).getId();
-            String formattedId = normalizedProvider + "-" + datePart + "-" + anomalyId;
-
-            // ✅ Step 3: Build history
-            if (c.getAnomalies() != null && !c.getAnomalies().isEmpty()) {
-                List<ConsumerTracking> trackings = consumerTrackingRepository.findByConsumerIdOrderByCreatedOnDesc(c.getId());
-
-                for (ConsumerTracking t : trackings) {
-                    if (t != null) {
-                        String fullName;
-                        if (!MaskingContext.isMasking()) {
-                            fullName = MaskingUtil.maskName(c.getFirstName()) + " " +
-                                    MaskingUtil.maskName(c.getMiddleName()) + " " +
-                                    MaskingUtil.maskName(c.getLastName());
-                        } else {
-                            fullName = c.getFirstName() + " " + c.getMiddleName() + " " + c.getLastName();
-                        }
-
-                        String note = fullName + " linked to ";
-
-                        String consistencyStatus = t.getIsConsistent() ? "Consistent" : "Inconsistent";
-                        String inconsistentOn = c.getCreatedOn();
-                        String consistentOn = t.getConsistentOn() != null ? t.getConsistentOn() : "N/A";
-
-                        for (Anomaly anomaly : c.getAnomalies()) {
-                            String anomalyStatus = anomaly.getStatus().getStatus();
-                            if (anomalyStatus.equalsIgnoreCase("Resolved Fully")) {
-                                history.add(new ConsumerHistoryDto("Consistent", note, inconsistentOn, consistentOn, formattedId, vendorCode));
-                            } else {
-                                history.add(new ConsumerHistoryDto(consistencyStatus, note, inconsistentOn, consistentOn, formattedId, vendorCode));
-                            }
-                        }
-                    }
-                }
-            }
-
+            System.out.println("Vendor code is: "+vendorCode);
             dto.setConsumerHistory(history);
+
             return dto;
         }).orElse(null);
     }
-
-
-
 
 
 
