@@ -77,6 +77,8 @@ public interface ConsumerRepository
 
     Page<Consumer> findByServiceProvider_Id(Long serviceProviderId, Pageable pageable);
 
+    List<Consumer> findByServiceProviderId(Long serviceProviderId);
+
     Consumer findByIdAndConsumerStatus(long id, int consumerStatus);
 
 

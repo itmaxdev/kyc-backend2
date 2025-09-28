@@ -1,5 +1,13 @@
 package com.app.kyc.model;
 
+
+import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+
+@Data
+@Getter
+@Setter
 public class ConsumerHistoryDto {
   
     private String status;
@@ -7,46 +15,17 @@ public class ConsumerHistoryDto {
     private String inConsistentOn;
     private String consistentOn;
     private String formattedId;
+
+	private String vendorCode;
     
-	public ConsumerHistoryDto(String status, String note, String inConsistentOn,String consistentOn,String formattedId) {
+	public ConsumerHistoryDto(String status, String note, String inConsistentOn,String consistentOn,String formattedId,String vendorCode) {
 		super();
 		this.status = status;
 		this.note = note;
 		this.inConsistentOn = inConsistentOn;
 		this.consistentOn = consistentOn;
 		this.formattedId = formattedId;
-	}
-	
-	public String getStatus() {
-		return status;
-	}
-	public void setStatus(String status) {
-		this.status = status;
-	}
-	public String getNote() {
-		return note;
-	}
-	public void setNote(String note) {
-		this.note = note;
-	}
-	public String getConsistentOn() {
-		return consistentOn;
-	}
-	public void setConsistentOn(String consistentOn) {
-		this.consistentOn = consistentOn;
-	}
-	public String getInConsistentOn() {
-		return inConsistentOn;
-	}
-	public void setInConsistentOn(String inConsistentOn) {
-		this.inConsistentOn = inConsistentOn;
+		this.vendorCode=vendorCode;
 	}
 
-	public String getFormattedId() {
-		return formattedId;
-	}
-
-	public void setFormattedId(String formattedId) {
-		this.formattedId = formattedId;
-	}
 }
