@@ -948,9 +948,12 @@ System.out.println("Get all flagged ");
             }
         }
 
-        // --------- RENUMBER FORMATTED IDS PER VENDOR/DAY ---------
+        // --------- RENUMBER FORMATTED IDS PER VENDOR/DAY WITH PAGINATION OFFSET ---------
         Map<String, AtomicInteger> vendorCounters = new HashMap<>();
         SimpleDateFormat df = new SimpleDateFormat("ddMMyyyy");
+
+        int pageNumber = pageable.getPageNumber();
+        int pageSize   = pageable.getPageSize();
 
         for (AnomlyDto dto : pageAnomaly) {
             if (dto.getReportedOn() == null) continue;
@@ -959,7 +962,8 @@ System.out.println("Get all flagged ");
             String date   = df.format(dto.getReportedOn());
             String key    = vendor + "-" + date;
 
-            vendorCounters.putIfAbsent(key, new AtomicInteger(0));
+            // Initialize counter at correct page offset per vendor
+            vendorCounters.putIfAbsent(key, new AtomicInteger(pageNumber * pageSize));
             int seq = vendorCounters.get(key).getAndIncrement();
 
             dto.setFormattedId(vendor + "-" + date + "-" + seq);
@@ -970,6 +974,7 @@ System.out.println("Get all flagged ");
         anomaliesWithCount.put("count", totalAnomaliesCount);
         return anomaliesWithCount;
     }
+
 
 
 
