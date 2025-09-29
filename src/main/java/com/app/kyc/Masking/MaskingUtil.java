@@ -6,7 +6,7 @@ public class MaskingUtil {
 
     // Mask String which you pass as string (keep first + rest masked)
     public static String maskName(String str) {
-        if (str == null || str.isEmpty()) return str;
+        if (str == null || str.isEmpty()) return "";
         
         return str.charAt(0) + "*".repeat(str.length() - 1);
     }
