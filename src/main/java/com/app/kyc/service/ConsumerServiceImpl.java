@@ -948,7 +948,6 @@ System.out.println("Get all flagged ");
             }
         }
 
-        // --------- RENUMBER FORMATTED IDS PER VENDOR/DAY WITH PAGINATION OFFSET ---------
         Map<String, AtomicInteger> vendorCounters = new HashMap<>();
         SimpleDateFormat df = new SimpleDateFormat("ddMMyyyy");
 
@@ -962,12 +961,13 @@ System.out.println("Get all flagged ");
             String date   = df.format(dto.getReportedOn());
             String key    = vendor + "-" + date;
 
-            // Initialize counter at correct page offset per vendor
-            vendorCounters.putIfAbsent(key, new AtomicInteger(pageNumber * pageSize));
+            // ✅ Initialize counter at correct offset, starting from 1
+            vendorCounters.putIfAbsent(key, new AtomicInteger(pageNumber * pageSize + 1));
             int seq = vendorCounters.get(key).getAndIncrement();
 
             dto.setFormattedId(vendor + "-" + date + "-" + seq);
         }
+
 
         Map<String, Object> anomaliesWithCount = new HashMap<>();
         anomaliesWithCount.put("data", pageAnomaly);
