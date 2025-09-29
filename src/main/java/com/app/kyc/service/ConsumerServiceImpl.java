@@ -136,50 +136,42 @@ public class ConsumerServiceImpl implements ConsumerService {
        
             List<ConsumerHistoryDto> history = new ArrayList<>();
 
-			// Only process if anomalies exist
-            if (c.getAnomalies() != null && !c.getAnomalies().isEmpty()) {
-                List<ConsumerTracking> trackings = consumerTrackingRepository.findByConsumerIdOrderByCreatedOnDesc(c.getId());
-                for (ConsumerTracking t : trackings) {
-                    if (t != null) {
-                    	String fullName = null;
-                    	if(!MaskingContext.isMasking()) {
-                    		fullName = MaskingUtil.maskName(c.getFirstName()) + " " + MaskingUtil.maskName(c.getMiddleName()) + " " + MaskingUtil.maskName(c.getLastName());
-                    	}else {
-                    		fullName = c.getFirstName() + " " + c.getMiddleName() + " " + c.getLastName();
-                    	}
-                    	String note =  fullName + " linked to ";
-                        /*String formattedId = c.getServiceProvider().getName()
-							        + "-" + new SimpleDateFormat("ddMMyyyy").format(c.getAnomalies().get(0).getReportedOn()) 
-							        + "-" + c.getAnomalies().get(0).getId();
-						*/
+            List<ConsumerTracking> trackings = consumerTrackingRepository.findByConsumerIdOrderByCreatedOnDesc(c.getId());
+            for (ConsumerTracking t : trackings) {
+                if (t != null) {
+                	String fullName = null;
+                	if(!MaskingContext.isMasking()) {
+                		fullName = MaskingUtil.maskName(c.getFirstName()) + " " + MaskingUtil.maskName(c.getMiddleName()) + " " + MaskingUtil.maskName(c.getLastName());
+                	}else {
+                		fullName = c.getFirstName() + " " + c.getMiddleName() + " " + c.getLastName();
+                	}
+					String note;
+					String providerName = c.getServiceProvider().getName();
+					String normalizedProvider = providerName != null
+							? providerName.substring(0, 1).toUpperCase() + providerName.substring(1).toLowerCase()
+							: "Unknown";
 
-                        String providerName = c.getServiceProvider().getName();
+					String datePart;
+					Long anomalyId;
 
-                        String normalizedProvider = providerName != null
-                                ? providerName.substring(0,1).toUpperCase() + providerName.substring(1).toLowerCase()
-                                : "Unknown";
+					String formattedId = null;
 
-                        String datePart = new SimpleDateFormat("ddMMyyyy").format(c.getAnomalies().get(0).getReportedOn());
-                        Long anomalyId = c.getAnomalies().get(0).getId();
-
-                        String formattedId = normalizedProvider + "-" + datePart + "-" + anomalyId;
-
-                        String consistencyStatus = t.getIsConsistent() == true ? "Consistent" : "Inconsistent";
-                        String inconsistentOn = c.getCreatedOn();
-                        String consistentOn = t.getConsistentOn() != null ? t.getConsistentOn() : "N/A";
-
-
-                        for(Anomaly anomaly:c.getAnomalies()){
-                            String anomalyStatus = anomaly.getStatus().getStatus();
-                            if(anomalyStatus.equalsIgnoreCase("Resolved Fully")){
-                                history.add(new ConsumerHistoryDto("Consistent", note , inconsistentOn, consistentOn , formattedId));
-                            }else{
-                                history.add(new ConsumerHistoryDto(consistencyStatus, note , inconsistentOn, consistentOn , formattedId));
-                            }
-                        }
-
-
-                    }
+					String consistencyStatus = t.getIsConsistent() == true ? "Consistent" : "Inconsistent";
+					String inconsistentOn = c.getCreatedOn();
+					String consistentOn = t.getConsistentOn() != null ? t.getConsistentOn() : "N/A";
+					if (c.getAnomalies().size() <= 0) {
+						note = fullName;
+					} else {
+						datePart = new SimpleDateFormat("ddMMyyyy").format(c.getAnomalies().get(0).getReportedOn());
+						anomalyId = c.getAnomalies().get(0).getId();
+						formattedId = normalizedProvider + "-" + datePart + "-" + anomalyId;
+						if (t.getIsConsistent() == true) {
+							note = fullName + " previously linked to ";
+						} else {
+							note = fullName + " linked to ";
+						}
+					}
+                    history.add(new ConsumerHistoryDto(consistencyStatus, note , inconsistentOn, consistentOn , formattedId));
                 }
             }
             String providerName = c.getServiceProvider() != null ? c.getServiceProvider().getName() : "Unknown";
@@ -1862,6 +1854,8 @@ System.out.println("Get all flagged ");
 
 
             //extracted(user);
+            
+            addConsumerHistory();
 
 
             long totalMs = (System.nanoTime() - t0) / 1_000_000;
@@ -1937,7 +1931,7 @@ System.out.println("Get all flagged ");
                     );
                     anomalyTrackingRepository.save(anomalyTracking);
                     System.out.println("consumer.getId() test one is: "+consumer.getId() + " consumer.getIsConsistent() test one is: "+consumer.getIsConsistent());
-                    consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),true,new Date()));
+                    
 
                     tempAnomaly.setStatus(AnomalyStatus.REPORTED);
                     tempAnomaly.addConsumer(consumer);
@@ -1982,10 +1976,6 @@ System.out.println("Get all flagged ");
                     tempCA.setNotes("Missing Mandatory Fields are: " + distinctErrors);
                     consumerAnomalyRepository.save(tempCA);
                     
-                    List<ConsumerTracking> consumerTracking = consumerTrackingRepository.findByConsumerId(consumer.getId());
-                    if(consumerTracking.size() <= 0) {
-                    	consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),"N/A",consumer.getIsConsistent(),new Date()));
-                    }
                 }
             }
         } else {
@@ -2011,10 +2001,6 @@ System.out.println("Get all flagged ");
             consumerAnomaly.setConsumer(consumer);
 
             consumerAnomalyRepository.save(consumerAnomaly);
-            List<ConsumerTracking> consumerTracking = consumerTrackingRepository.findByConsumerId(consumer.getId());
-            if(consumerTracking.size() <= 0) {
-            	consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),"N/A",consumer.getIsConsistent(),new Date()));
-            }
         }
 
         // 🔹 soft deleted old consumers
@@ -2052,7 +2038,6 @@ System.out.println("Get all flagged ");
                     anomalyTrackingRepository.save(anomalyTracking);
 
                     System.out.println("consumer.getId() test two is: "+consumer.getId() + " consumer.getIsConsistent() test two is: "+consumer.getIsConsistent());
-                    consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),true,new Date()));
                 }
                 if (anomaly.getStatus().getCode() == 0 || anomaly.getStatus().getCode() == 1 ||
                         anomaly.getStatus().getCode() == 2 || anomaly.getStatus().getCode() == 3) {
@@ -2076,7 +2061,6 @@ System.out.println("Get all flagged ");
                     consumerAnomalyRepository.save(tempConsumerAnomaly);
 
                     System.out.println("consumer.getId() test three is: "+consumer.getId() + " consumer.getIsConsistent() test three is: "+consumer.getIsConsistent());
-                    consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),"N/A",consumer.getIsConsistent(),new Date()));
                 }
             }
         }
@@ -2132,7 +2116,6 @@ System.out.println("Get all flagged ");
                                         anomaly.getUpdatedOn())
                         );
                         System.out.println("consumer.getId() test four is: "+consumer.getId() + " consumer.getIsConsistent() test four is: "+consumer.getIsConsistent());
-                        consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),true,new Date()));
                     }
                 }
             }
@@ -2623,7 +2606,6 @@ System.out.println("Get all flagged ");
                 link.setNotes(fullNote);
                 consumerAnomalyRepository.save(link);
                 System.out.println("consumer.getId() test five is: "+consumer.getId() + " consumer.getIsConsistent() test five is:  "+consumer.getIsConsistent());
-                consumerTrackingRepository.save(new ConsumerTracking(consumer.getId(),consumer.getServiceProvider(),"N/A",consumer.getIsConsistent(),new Date()));
             }
         } catch (DataIntegrityViolationException e) {
             log.warn("Duplicate anomaly link already exists for consumer={} anomaly={}. Ignoring insert.",
@@ -2866,5 +2848,65 @@ System.out.println("Get all flagged ");
         return consumer;
     }
 
+    
+    @Transactional
+    public void addConsumerHistory() {
+        List<Consumer> consumerList = consumerRepository.findAll();
+
+        if (consumerList.isEmpty()) {
+            log.info("No consumers found for consistency check");
+            return;
+        }
+
+        for (Consumer consumer : consumerList) {
+            try {
+                Optional<ConsumerTracking> latestOpt =
+                        consumerTrackingRepository.findTopByConsumerIdAndServiceProviderOrderByCreatedOnDesc(
+                                consumer.getId(), consumer.getServiceProvider()
+                        );
+
+                boolean isConsistent = Boolean.TRUE.equals(consumer.getIsConsistent());
+
+                if (latestOpt.isEmpty()) {
+                    // First time entry → insert directly
+                    ConsumerTracking newTracking = buildTracking(consumer, isConsistent);
+                    consumerTrackingRepository.save(newTracking);
+
+                } else {
+                    ConsumerTracking latest = latestOpt.get();
+
+                    if (isConsistent && !latest.getIsConsistent()) {
+                        //Consumer turned inconsistent → consistent → insert new record
+                        ConsumerTracking newTracking = buildTracking(consumer, true);
+                        consumerTrackingRepository.save(newTracking);
+
+                    } else if (!isConsistent && latest.getIsConsistent()) {
+                        //Consumer turned consistent → inconsistent → insert new record
+                        ConsumerTracking newTracking = buildTracking(consumer, false);
+                        consumerTrackingRepository.save(newTracking);
+
+                    } else {
+                        //No change
+                        log.debug("No change for consumer {} (still {})",
+                                consumer.getId(), isConsistent ? "consistent" : "inconsistent");
+                    }
+                }
+
+            } catch (Exception e) {
+                log.warn("Failed to process consumer {} (msisdn: {}): {}",
+                        consumer.getId(), consumer.getMsisdn(), e.getMessage(), e);
+            }
+        }
+    }
+    //Builder the Consumer Tracking object
+    private ConsumerTracking buildTracking(Consumer consumer, boolean isConsistent) {
+        ConsumerTracking tracking = new ConsumerTracking();
+        tracking.setConsumerId(consumer.getId());
+        tracking.setServiceProvider(consumer.getServiceProvider());
+        tracking.setConsistentOn(consumer.getConsistentOn());
+        tracking.setIsConsistent(isConsistent);
+        tracking.setCreatedOn(new Date());
+        return tracking;
+    }
 
 }
