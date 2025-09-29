@@ -932,19 +932,6 @@ System.out.println("Get all flagged ");
             int effected = effectedCountByAnomalyId.getOrDefault(dto.getId(), 0L).intValue();
             dto.setEffectedRecords(effected);
 
-            // ✅ Ensure vendorCode is set even if anomaly has no consumers
-            if (dto.getVendorCode() == null || dto.getVendorCode().isBlank()) {
-                anomalyRepository.findById(dto.getId()).ifPresent(anomaly -> {
-                    List<Consumer> cons = anomaly.getConsumers();
-                    if (cons != null && !cons.isEmpty()) {
-                        ServiceProvider sp = cons.get(0).getServiceProvider();
-                        if (sp != null) {
-                            dto.setVendorCode(sp.getName());  // fallback from ServiceProvider.name
-                        }
-                    }
-                });
-            }
-
             List<ConsumerDto> fromLinks = consumersByAnomalyId.get(dto.getId());
             if (dto.getConsumers() == null || dto.getConsumers().isEmpty()) {
                 if (fromLinks != null) dto.setConsumers(fromLinks);
@@ -961,11 +948,29 @@ System.out.println("Get all flagged ");
             }
         }
 
+        // --------- RENUMBER FORMATTED IDS PER VENDOR/DAY ---------
+        Map<String, AtomicInteger> vendorCounters = new HashMap<>();
+        SimpleDateFormat df = new SimpleDateFormat("ddMMyyyy");
+
+        for (AnomlyDto dto : pageAnomaly) {
+            if (dto.getReportedOn() == null) continue;
+
+            String vendor = (dto.getVendorCode() != null) ? dto.getVendorCode() : "UNKNOWN";
+            String date   = df.format(dto.getReportedOn());
+            String key    = vendor + "-" + date;
+
+            vendorCounters.putIfAbsent(key, new AtomicInteger(0));
+            int seq = vendorCounters.get(key).getAndIncrement();
+
+            dto.setFormattedId(vendor + "-" + date + "-" + seq);
+        }
+
         Map<String, Object> anomaliesWithCount = new HashMap<>();
         anomaliesWithCount.put("data", pageAnomaly);
         anomaliesWithCount.put("count", totalAnomaliesCount);
         return anomaliesWithCount;
     }
+
 
 
 
