@@ -948,11 +948,9 @@ System.out.println("Get all flagged ");
             }
         }
 
+        // --------- RENUMBER FORMATTED IDS PER VENDOR/DAY ---------
         Map<String, AtomicInteger> vendorCounters = new HashMap<>();
         SimpleDateFormat df = new SimpleDateFormat("ddMMyyyy");
-
-        int pageNumber = pageable.getPageNumber();
-        int pageSize   = pageable.getPageSize();
 
         for (AnomlyDto dto : pageAnomaly) {
             if (dto.getReportedOn() == null) continue;
@@ -961,12 +959,13 @@ System.out.println("Get all flagged ");
             String date   = df.format(dto.getReportedOn());
             String key    = vendor + "-" + date;
 
-            // ✅ Initialize counter at correct offset, starting from 1
-            vendorCounters.putIfAbsent(key, new AtomicInteger(pageNumber * pageSize + 1));
+            // ✅ Always start from 1 per vendor/date, increment continuously
+            vendorCounters.putIfAbsent(key, new AtomicInteger(1));
             int seq = vendorCounters.get(key).getAndIncrement();
 
             dto.setFormattedId(vendor + "-" + date + "-" + seq);
         }
+
 
 
         Map<String, Object> anomaliesWithCount = new HashMap<>();
