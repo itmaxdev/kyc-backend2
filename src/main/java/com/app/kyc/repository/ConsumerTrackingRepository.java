@@ -15,4 +15,7 @@ public interface ConsumerTrackingRepository extends JpaRepository<ConsumerTracki
 	List<ConsumerTracking> findByConsumerId(Long consumerId);
 	List<ConsumerTracking> findByConsumerIdOrderByCreatedOnDesc(Long consumerId);
 	Optional<ConsumerTracking> findTopByConsumerIdAndServiceProviderOrderByCreatedOnDesc(Long consumerId, ServiceProvider provider);
+	ConsumerTracking findFirstByConsumerIdAndIsConsistentTrueOrderByCreatedOnDesc(Long consumerId);
+	ConsumerTracking findFirstByConsumerIdAndIsConsistentFalseOrderByCreatedOnDesc(Long consumerId);
+
 }

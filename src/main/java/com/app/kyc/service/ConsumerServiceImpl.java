@@ -136,7 +136,17 @@ public class ConsumerServiceImpl implements ConsumerService {
        
             List<ConsumerHistoryDto> history = new ArrayList<>();
 
-            List<ConsumerTracking> trackings = consumerTrackingRepository.findByConsumerIdOrderByCreatedOnDesc(c.getId());
+           List<ConsumerTracking> trackings = new ArrayList<ConsumerTracking>();
+            
+            ConsumerTracking latestConsistent =
+                    consumerTrackingRepository.findFirstByConsumerIdAndIsConsistentTrueOrderByCreatedOnDesc(c.getId());
+
+            ConsumerTracking latestInconsistent =
+                    consumerTrackingRepository.findFirstByConsumerIdAndIsConsistentFalseOrderByCreatedOnDesc(c.getId());
+            
+            trackings.add(latestConsistent);
+            trackings.add(latestInconsistent);
+            
             for (ConsumerTracking t : trackings) {
                 if (t != null) {
                 	String fullName = null;
