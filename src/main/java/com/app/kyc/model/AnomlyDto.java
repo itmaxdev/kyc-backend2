@@ -30,22 +30,7 @@ public class AnomlyDto {
     private AnomalyType anomalyType;
     List<ConsumerDto> consumers = new ArrayList<ConsumerDto>();
 
-    public AnomlyDto(Long id, String note, AnomalyStatus status, AnomalyType anomalyType, List<Consumer> consumers, String updateBy, Date updatedOn, Date reportedOn) {
-        this.id = id;
-        this.note = note;
-        this.status = status;
-        this.anomalyType = anomalyType;
-        this.updateBy = updateBy;
-        this.updatedOn = updatedOn;
-        this.reportedOn = reportedOn;
-        if (consumers != null && consumers.size() > 0) {
 
-            this.consumers = consumers.stream()
-                    .map(c -> new ConsumerDto(c, null))
-                    .collect(Collectors.toList());
-        }
-
-    }
 
     public AnomlyDto(Anomaly anomaly) {
         this.id = anomaly.getId();
@@ -56,39 +41,58 @@ public class AnomlyDto {
         this.reportedBy = anomaly.getReportedBy();
         this.updatedOn = anomaly.getUpdatedOn();
         this.updateBy = anomaly.getUpdateBy();
-        List<Consumer> consumers = anomaly.getConsumers();
-        this.formattedId = anomaly.getConsumers().get(0).getServiceProvider().getName() + "-" + new SimpleDateFormat("ddMMyyyy").format(anomaly.getReportedOn()) + "-" + this.id;
-        if (consumers != null && consumers.size() > 0) {
 
+        List<Consumer> consumers = anomaly.getConsumers();
+        if (consumers != null && !consumers.isEmpty()) {
             this.consumers = consumers.stream()
-                    .filter(c -> c.getConsumerStatus() == 0)
+                    .filter(c -> c.getConsumerStatus() == 0)  // keep active only
                     .map(c -> new ConsumerDto(c, null))
                     .collect(Collectors.toList());
+
+            // ✅ Use vendorCode from first consumer instead of building formattedId
+            String vendorCode = this.consumers.get(0).getVendorCode();
+            if (vendorCode != null && !vendorCode.isBlank()) {
+                this.formattedId = vendorCode;
+            }
         }
     }
 
     //TODO Remove Extra Constructor
     public AnomlyDto(Anomaly anomaly, int temp) {
-        this.id = anomaly.getId();
-        this.note = anomaly.getNote();
-        this.status = anomaly.getStatus();
-        this.anomalyType = anomaly.getAnomalyType();
-        this.reportedOn = anomaly.getReportedOn();
-        this.reportedBy = anomaly.getReportedBy();
-        this.updatedOn = anomaly.getUpdatedOn();
-        this.updateBy = anomaly.getUpdateBy();
-        this.formattedId = anomaly.getConsumers().get(0).getServiceProvider().getName() + "/" + new SimpleDateFormat("dd-MM-yyyy").format(anomaly.getReportedOn()) + "/" + this.id;
-        List<Consumer> consumers = anomaly.getConsumers();
-        if (consumers != null && consumers.size() > 0) {
+        this(anomaly); // reuse main constructor
 
-            this.consumers = consumers.stream()
-                    .map(c -> new ConsumerDto(c, null))
-                    .collect(Collectors.toList());
+        // override formattedId if vendorCode not available
+        if (this.formattedId == null || this.formattedId.isBlank()) {
+            this.formattedId = anomaly.getConsumers().get(0).getServiceProvider().getName()
+                    + "_" + new SimpleDateFormat("ddMMyyyy").format(anomaly.getReportedOn())
+                    + "_" + this.id;
         }
     }
 
-    public AnomlyDto() {
+    public AnomlyDto(Long id, String note, AnomalyStatus status, AnomalyType anomalyType,
+                     List<Consumer> consumers, String updateBy, Date updatedOn, Date reportedOn) {
+        this.id = id;
+        this.note = note;
+        this.status = status;
+        this.anomalyType = anomalyType;
+        this.updateBy = updateBy;
+        this.updatedOn = updatedOn;
+        this.reportedOn = reportedOn;
+
+        if (consumers != null && !consumers.isEmpty()) {
+            this.consumers = consumers.stream()
+                    .map(c -> new ConsumerDto(c, null))
+                    .collect(Collectors.toList());
+
+            // ✅ VendorCode again wins
+            String vendorCode = this.consumers.get(0).getVendorCode();
+            if (vendorCode != null && !vendorCode.isBlank()) {
+                this.formattedId = vendorCode;
+            }
+        }
     }
+
+    public AnomlyDto() {}
 
     public Long getId() {
         return id;

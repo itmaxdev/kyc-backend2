@@ -127,6 +127,7 @@ public class FileProcessingService {
         long t0 = System.currentTimeMillis();
         log.info("ENTER processFile: {} | operator={}", filePath, operator);
 
+
         if (Files.notExists(filePath) || !Files.isRegularFile(filePath)) {
             log.warn("File not found or not a regular file: {}", filePath);
             return;
@@ -136,6 +137,12 @@ public class FileProcessingService {
                 .orElseThrow(() -> new IllegalArgumentException("Unknown operator: " + operator));
         Long spId = sp.getId();
         log.info("Resolved ServiceProvider id={}, name={}", spId, sp.getName());
+
+        ServiceProvider sp1 = serviceProviderRepository.findById(spId).orElse(null);
+        if (sp1 == null || sp1.isDeleted()) {
+            log.info("Skipping file processing for deleted service provider: {}", spId);
+            return; // Stop processing
+        }
 
         ProcessedFile fileLog = new ProcessedFile();
         fileLog.setFilename(filePath.getFileName().toString());
@@ -215,6 +222,14 @@ public class FileProcessingService {
         Long spId = sp.getId();
         log.info("Resolved ServiceProvider id={}, name={}", spId, sp.getName());
 
+
+        ServiceProvider sp1 = serviceProviderRepository.findById(spId).orElse(null);
+        if (sp1 == null || sp1.isDeleted()) {
+            log.info("Skipping file processing for deleted service provider: {}", spId);
+            return; // Stop processing
+        }
+
+
         ProcessedFile fileLog = new ProcessedFile();
         fileLog.setFilename(filePath.getFileName().toString());
         fileLog.setStatus(FileStatus.IN_PROGRESS);
@@ -283,10 +298,19 @@ public class FileProcessingService {
             return;
         }
 
+
         ServiceProvider sp = serviceProviderRepository.findByNameIgnoreCase(operator)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown operator: " + operator));
         Long spId = sp.getId();
         log.info("Resolved ServiceProvider id={}, name={}", spId, sp.getName());
+
+
+        ServiceProvider sp1 = serviceProviderRepository.findById(spId).orElse(null);
+        if (sp1 == null || sp1.isDeleted()) {
+            log.info("Skipping file processing for deleted service provider: {}", spId);
+            return; // Stop processing
+        }
+
 
         ProcessedFile fileLog = new ProcessedFile();
         fileLog.setFilename(filePath.getFileName().toString());
@@ -363,6 +387,13 @@ public class FileProcessingService {
                 .orElseThrow(() -> new IllegalArgumentException("Unknown operator: " + operator));
         Long spId = sp.getId();
         log.info("Resolved ServiceProvider id={}, name={}", spId, sp.getName());
+
+
+        ServiceProvider sp1 = serviceProviderRepository.findById(spId).orElse(null);
+        if (sp1 == null || sp1.isDeleted()) {
+            log.info("Skipping file processing for deleted service provider: {}", spId);
+            return; // Stop processing
+        }
 
         ProcessedFile fileLog = new ProcessedFile();
         fileLog.setFilename(filePath.getFileName().toString());
@@ -543,7 +574,7 @@ public class FileProcessingService {
                 vendorCounters.putIfAbsent(key, new AtomicInteger(1));
                 int seq = vendorCounters.get(key).getAndIncrement();
 
-                consumer.setVendorCode(vendor + "_" + date + "_" + seq);
+                consumer.setVendorCode(vendor + "-" + date + "-" + seq);
 
                 toSave.add(consumer);
 
@@ -646,7 +677,7 @@ public class FileProcessingService {
                 vendorCounters.putIfAbsent(key, new AtomicInteger(1));
                 int seq = vendorCounters.get(key).getAndIncrement();
 
-                consumer.setVendorCode(vendor + "_" + date + "_" + seq);
+                consumer.setVendorCode(vendor + "-" + date + "-" + seq);
 
 
                 toSave.add(consumer);
@@ -817,7 +848,7 @@ public class FileProcessingService {
                 vendorCounters.putIfAbsent(key, new AtomicInteger(1));
                 int seq = vendorCounters.get(key).getAndIncrement();
 
-                consumer.setVendorCode(vendor + "_" + date + "_" + seq);
+                consumer.setVendorCode(vendor + "-" + date + "-" + seq);
 
 
                 toSave.add(consumer);
@@ -953,7 +984,7 @@ public class FileProcessingService {
                 vendorCounters.putIfAbsent(key, new AtomicInteger(1));
                 int seq = vendorCounters.get(key).getAndIncrement();
 
-                consumer.setVendorCode(vendor + "_" + date + "_" + seq);
+                consumer.setVendorCode(vendor + "-" + date + "-" + seq);
 
                 toSave.add(consumer);
 

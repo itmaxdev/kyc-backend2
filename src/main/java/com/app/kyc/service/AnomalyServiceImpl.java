@@ -330,12 +330,11 @@ public class AnomalyServiceImpl implements AnomalyService
 
    @Override
    public AnomalyDetailsResponseDTO getAnomalyByIdWithDetails(Long id) {
-      // Safely fetch anomaly
+      // ✅ Safely fetch anomaly
       Anomaly anomaly = anomalyRepository.findById(id)
               .orElseThrow(() -> new RuntimeException("Anomaly not found with id: " + id));
 
-      //todo for test
-     AnomlyDto anomlyDto;
+      AnomlyDto anomlyDto;
       if (anomaly.getStatus().getCode() == 6) {
          anomlyDto = new AnomlyDto(anomaly, 0);
       } else {
@@ -360,12 +359,21 @@ public class AnomalyServiceImpl implements AnomalyService
                             finalNote = "";
                          }
 
+                         Anomaly anomalyEntity = c.getAnomaly();
+                         AnomlyDto anomalyDto = new AnomlyDto(anomalyEntity);
+                         if (anomalyDto.getConsumers() != null && !anomalyDto.getConsumers().isEmpty()) {
+                            String vendorCode = anomalyDto.getConsumers().get(0).getVendorCode();
+                            if (vendorCode != null && !vendorCode.isBlank()) {
+                               anomalyDto.setFormattedId(vendorCode);
+                            }
+                         }
+
                          return new AnomalyTrackingDto(
                                  c.getId(),
                                  c.getCreatedOn(),
                                  c.getStatus(),
                                  finalNote,
-                                 c.getAnomaly(),
+                                 anomalyEntity,
                                  c.getUpdateBy(),
                                  c.getUpdateOn()
                          );
@@ -381,7 +389,6 @@ public class AnomalyServiceImpl implements AnomalyService
                               m -> {
                                  List<AnomalyTrackingDto> list = new ArrayList<>(m.values());
 
-                                 // 🔹 Apply post-filter
                                  boolean hasFully = list.stream().anyMatch(d -> d.getStatus() == AnomalyStatus.RESOLVED_FULLY);
                                  boolean hasPartially = list.stream().anyMatch(d -> d.getStatus() == AnomalyStatus.RESOLVED_PARTIALLY);
 
@@ -395,22 +402,18 @@ public class AnomalyServiceImpl implements AnomalyService
                               }
                       ));
 
-
       // ✅ Fetch consumers linked to anomaly
-      // ✅ Fetch consumers linked to anomaly (deduplicate by consumerId, ignore duplicate notes)
       List<ConsumerDto> consumerDtos = consumerAnomalyRepository.findByAnomaly_Id(id)
               .stream()
               .collect(Collectors.toMap(
-                      ca -> ca.getConsumer().getId(),  // use consumerId as key
+                      ca -> ca.getConsumer().getId(),
                       ca -> {
                          ConsumerDto dto = new ConsumerDto(ca.getConsumer());
 
-                         // ✅ set notes if present
                          if (Objects.nonNull(ca.getNotes())) {
                             dto.setNotes(ca.getNotes());
                          }
 
-                         // ✅ handle consistentOn
                          String consistentOn = ca.getConsumer().getConsistentOn();
                          if (consistentOn == null || consistentOn.isBlank()) {
                             dto.setConsistentOn("N/A");
@@ -420,7 +423,7 @@ public class AnomalyServiceImpl implements AnomalyService
 
                          return dto;
                       },
-                      (existing, duplicate) -> existing, // keep the first occurrence
+                      (existing, duplicate) -> existing,
                       LinkedHashMap::new
               ))
               .values()
@@ -434,14 +437,15 @@ public class AnomalyServiceImpl implements AnomalyService
 
       long inconsistentCount = consumerDtos.size() - consistentCount;
 
-      long total = anomalyTracking.size();
-      long partialCount = anomalyTracking.stream()
-              .filter(t -> t.getStatus() == AnomalyStatus.RESOLVED_PARTIALLY)
-              .count();
-
+      // ✅ Override formattedId with vendorCode (main anomalyDto)
+      if (!consumerDtos.isEmpty()) {
+         String vendorCode = consumerDtos.get(0).getVendorCode();
+         if (vendorCode != null && !vendorCode.isBlank()) {
+            anomlyDto.setFormattedId(vendorCode);
+         }
+      }
 
       anomlyDto.setConsumers(consumerDtos);
-
 
       // ✅ Enrich tracking data with consumer notes (if anomaly type = 1)
       anomalyTracking.forEach(tracking -> {
@@ -460,6 +464,7 @@ public class AnomalyServiceImpl implements AnomalyService
 
       return new AnomalyDetailsResponseDTO(anomlyDto, anomalyTracking, (int) consistentCount, (int) inconsistentCount);
    }
+
 
 
 

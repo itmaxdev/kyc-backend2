@@ -7,6 +7,8 @@ import java.util.Map;
 
 import javax.servlet.http.HttpServletRequest;
 
+import com.app.kyc.repository.ServiceProviderRepository;
+import com.app.kyc.repository.ServiceRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -28,8 +30,7 @@ import com.app.kyc.web.security.SecurityHelper;
 
 @RestController
 @RequestMapping("/serviceProviders")
-public class ServiceProviderController
-{
+public class ServiceProviderController {
 
    @Autowired
    ServiceProviderService serviceProviderService;
@@ -40,62 +41,53 @@ public class ServiceProviderController
    @Autowired
    UserService userService;
 
+   @Autowired
+   ServiceProviderRepository serviceProviderRepository;
+
    @GetMapping("/{id}")
-   public ResponseEntity<?> getServiceProviderById(HttpServletRequest request, @PathVariable("id") Long id) throws SQLException
-   {
+   public ResponseEntity<?> getServiceProviderById(HttpServletRequest request, @PathVariable("id") Long id) throws SQLException {
       //log.info("ServiceProviderController/getServiceProviderById");
-      try
-      {
+      try {
          List<String> roles = new ArrayList<String>();
          roles.add("SP Admin");
-         if(securityHelper.hasRole(request, roles))
+         if (securityHelper.hasRole(request, roles))
             return ResponseEntity.ok(serviceProviderService.getServiceProviderById(id));
          else
             return ResponseEntity.ok("Not authorized");
-      }
-      catch(Exception e)
-      {
+      } catch (Exception e) {
          //log.info(e.getMessage());
          return ResponseEntity.ok(e.getMessage());
       }
    }
 
    @GetMapping("allInfo/{id}")
-   public ResponseEntity<?> getServiceProviderAllInfoById(HttpServletRequest request, @PathVariable("id") Long id) throws SQLException
-   {
+   public ResponseEntity<?> getServiceProviderAllInfoById(HttpServletRequest request, @PathVariable("id") Long id) throws SQLException {
       //log.info("ServiceProviderController/getServiceProviderById");
-      try
-      {
+      try {
          List<String> roles = new ArrayList<String>();
          roles.add("SP Admin");
          roles.add("Compliance Admin");
-         if(securityHelper.hasRole(request, roles))
+         if (securityHelper.hasRole(request, roles))
             return ResponseEntity.ok(serviceProviderService.getServiceProviderAllInfoById(id));
          else
             return ResponseEntity.ok("Not authorized");
-      }
-      catch(Exception e)
-      {
+      } catch (Exception e) {
          //log.info(e.getMessage());
          return ResponseEntity.ok(e.getMessage());
       }
    }
 
    @GetMapping("/getByName/{name}")
-   public ResponseEntity<?> getServiceProviderByName(HttpServletRequest request, @PathVariable("name") String name) throws SQLException
-   {
+   public ResponseEntity<?> getServiceProviderByName(HttpServletRequest request, @PathVariable("name") String name) throws SQLException {
       //log.info("ServiceProviderController/getServiceProviderByName");
-      try
-      {
+      try {
          List<String> roles = new ArrayList<String>();
          roles.add("SP Admin");
-         if(securityHelper.hasRole(request, roles))
+         if (securityHelper.hasRole(request, roles))
             return ResponseEntity.ok(serviceProviderService.getServiceProviderByName(name));
          else
             return ResponseEntity.ok("Not authorized");
-      }
-      catch(Exception e)
-      {
+      } catch (Exception e) {
          //log.info(e.getMessage());
          return ResponseEntity.ok(e.getMessage());
       }
@@ -150,174 +142,136 @@ public class ServiceProviderController
 
 
    @GetMapping("/getByUserIndustry/{userId}")
-   public ResponseEntity<?> getServiceProvidersByUserIndustry(HttpServletRequest request, @PathVariable("userId") Long userId) throws SQLException
-   {
+   public ResponseEntity<?> getServiceProvidersByUserIndustry(HttpServletRequest request, @PathVariable("userId") Long userId) throws SQLException {
       //log.info("ServiceProviderController/getAllServiceProviders");
-      try
-      {
+      try {
          List<String> roles = new ArrayList<String>();
          roles.add("SP Admin");
          roles.add("Compliance Admin");
          roles.add("KYC Admin");
-         if(securityHelper.hasRole(request, roles))
-         {
+         if (securityHelper.hasRole(request, roles)) {
             Map<String, Object> serviceProviders = serviceProviderService.getAllServiceProvidersByIndustry(userId);
             return ResponseEntity.ok(serviceProviders);
-         }
-         else
+         } else
             return ResponseEntity.ok("Not authorized");
-      }
-      catch(Exception e)
-      {
+      } catch (Exception e) {
          //log.info(e.getMessage());
          return ResponseEntity.ok(e.getMessage());
       }
    }
 
    @PostMapping("/add")
-   public ResponseEntity<?> addServiceProvider(HttpServletRequest request, @RequestBody ServiceProvider serviceProvider) throws SQLException
-   {
+   public ResponseEntity<?> addServiceProvider(HttpServletRequest request, @RequestBody ServiceProvider serviceProvider) throws SQLException {
       //log.info("ServiceProviderController/addServiceProvider");
-      try
-      {
+      try {
          List<String> roles = new ArrayList<String>();
          roles.add("SP Admin");
          roles.add("KYC Admin");
-         if(securityHelper.hasRole(request, roles))
-         {
-            if(serviceProviderService.getServiceProviderByName(serviceProvider.getName()) != null) return ResponseEntity.ok("Name already in use");
+         if (securityHelper.hasRole(request, roles)) {
+            if (serviceProviderService.getServiceProviderByName(serviceProvider.getName()) != null)
+               return ResponseEntity.ok("Name already in use");
             final String authorizationHeader = request.getHeader("Authorization");
             String userName = null;
-            if(authorizationHeader != null && authorizationHeader.startsWith(("Bearer ")))
-            {
+            if (authorizationHeader != null && authorizationHeader.startsWith(("Bearer "))) {
                userName = securityHelper.getUserName(authorizationHeader.substring(7));
             }
-            if(userName == null) return ResponseEntity.ok("Invalid user");
+            if (userName == null) return ResponseEntity.ok("Invalid user");
             serviceProvider.setCreatedBy(userService.getUserByEmail(userName).getId());
             serviceProviderService.addServiceProvider(serviceProvider);
             return ResponseEntity.ok(serviceProvider);
-         }
-         else
+         } else
             return ResponseEntity.ok("Not authorized");
-      }
-      catch(Exception e)
-      {
+      } catch (Exception e) {
          //log.info(e.getMessage());
          return ResponseEntity.ok(e.getMessage());
       }
    }
 
    @PutMapping("/update")
-   public ResponseEntity<?> updateServiceProvider(HttpServletRequest request, @RequestBody ServiceProvider serviceProvider) throws SQLException
-   {
+   public ResponseEntity<?> updateServiceProvider(HttpServletRequest request, @RequestBody ServiceProvider serviceProvider) throws SQLException {
       //log.info("ServiceProviderController/updateServiceProvider");
-      try
-      {
+      try {
          List<String> roles = new ArrayList<String>();
          roles.add("SP Admin");
          roles.add("KYC Admin");
-         if(securityHelper.hasRole(request, roles))
-         {
+         if (securityHelper.hasRole(request, roles)) {
             serviceProviderService.updateServiceProvider(serviceProvider);
             return ResponseEntity.ok("ServiceProvider updated successfully");
-         }
-         else
+         } else
             return ResponseEntity.ok("Not authorized");
-      }
-      catch(Exception e)
-      {
+      } catch (Exception e) {
          //log.info(e.getMessage());
          return ResponseEntity.ok(e.getMessage());
       }
    }
 
    @DeleteMapping("/deleteServiceProvider/{id}")
-   public ResponseEntity<?> deleteServiceProvider(HttpServletRequest request, @PathVariable("id") long id) throws SQLException
-   {
+   public ResponseEntity<?> deleteServiceProvider(HttpServletRequest request, @PathVariable("id") long id) throws SQLException {
       //log.info("ServiceProviderController/changePassword");
-      try
-      {
+      try {
          ServiceProvider serviceProvider = serviceProviderService.getServiceProviderById(id);
-         if(serviceProvider.getId() == null) return ResponseEntity.ok("ServiceProvider not found");
+         if (serviceProvider.getId() == null) return ResponseEntity.ok("ServiceProvider not found");
          List<String> roles = new ArrayList<String>();
          roles.add("SP Admin");
-         if(securityHelper.hasRole(request, roles))
-         {
+         if (securityHelper.hasRole(request, roles)) {
             serviceProviderService.deleteServiceProvider(id);
             return ResponseEntity.ok("ServiceProvider Deleted");
-         }
-         else
+         } else
             return ResponseEntity.ok("Not authorized");
 
-      }
-      catch(Exception e)
-      {
+      } catch (Exception e) {
          //log.info(e.getMessage());
          return ResponseEntity.ok(e.getMessage());
       }
    }
 
    @PatchMapping("/activate/{id}")
-   public ResponseEntity<?> activateServiceProvider(HttpServletRequest request, @PathVariable("id") Long id) throws SQLException
-   {
+   public ResponseEntity<?> activateServiceProvider(HttpServletRequest request, @PathVariable("id") Long id) throws SQLException {
       //log.info("ServiceController/activateService");
-      try
-      {
+      try {
          List<String> roles = new ArrayList<String>();
          roles.add("SP Admin");
          roles.add("Compliance Admin");
-         if(securityHelper.hasRole(request, roles))
-         {
+         if (securityHelper.hasRole(request, roles)) {
             String authTokenHeader = request.getHeader("Authorization");
             String jwt = "";
-            if(authTokenHeader != null && authTokenHeader.startsWith(("Bearer ")))
-            {
+            if (authTokenHeader != null && authTokenHeader.startsWith(("Bearer "))) {
                jwt = authTokenHeader.substring(7);
             }
             User user = userService.getUserByEmail(securityHelper.getUserName(jwt));
-            if(id == null || id <= 0 || id.toString() == "") return ResponseEntity.ok("id is Required");
-            if(user.getId() == 0) return ResponseEntity.ok("Invalid user");
+            if (id == null || id <= 0 || id.toString() == "") return ResponseEntity.ok("id is Required");
+            if (user.getId() == 0) return ResponseEntity.ok("Invalid user");
             serviceProviderService.activateService(id, user.getId());
             return ResponseEntity.ok("Service activated successfully");
-         }
-         else
+         } else
             return ResponseEntity.ok("Not authorized");
-      }
-      catch(Exception e)
-      {
+      } catch (Exception e) {
          //log.info(e.getMessage());
          return ResponseEntity.ok(e.getMessage());
       }
    }
 
    @PatchMapping("/deactivate/{id}")
-   public ResponseEntity<?> deactivateServiceProvider(HttpServletRequest request, @PathVariable("id") Long id) throws SQLException
-   {
+   public ResponseEntity<?> deactivateServiceProvider(HttpServletRequest request, @PathVariable("id") Long id) throws SQLException {
       //log.info("ServiceController/deactivateService");
-      try
-      {
+      try {
          List<String> roles = new ArrayList<String>();
          roles.add("SP Admin");
          roles.add("Compliance Admin");
-         if(securityHelper.hasRole(request, roles))
-         {
+         if (securityHelper.hasRole(request, roles)) {
             String authTokenHeader = request.getHeader("Authorization");
             String jwt = "";
-            if(authTokenHeader != null && authTokenHeader.startsWith(("Bearer ")))
-            {
+            if (authTokenHeader != null && authTokenHeader.startsWith(("Bearer "))) {
                jwt = authTokenHeader.substring(7);
             }
             User user = userService.getUserByEmail(securityHelper.getUserName(jwt));
-            if(id == null || id <= 0 || id.toString() == "") return ResponseEntity.ok("id is Required");
-            if(user.getId() == 0) return ResponseEntity.ok("Invalid user");
+            if (id == null || id <= 0 || id.toString() == "") return ResponseEntity.ok("id is Required");
+            if (user.getId() == 0) return ResponseEntity.ok("Invalid user");
             serviceProviderService.deactivateService(id);
             return ResponseEntity.ok("Service deactivated successfully");
-         }
-         else
+         } else
             return ResponseEntity.ok("Not authorized");
-      }
-      catch(Exception e)
-      {
+      } catch (Exception e) {
          //log.info(e.getMessage());
          return ResponseEntity.ok(e.getMessage());
       }
@@ -325,31 +279,47 @@ public class ServiceProviderController
 
 
    @PostMapping("/deleteData/{serviceProviderId}")
-   public ResponseEntity<?> loadConsumers(HttpServletRequest request, @PathVariable("serviceProviderId") Long serviceProviderId) throws SQLException
-   {
+   public ResponseEntity<?> loadConsumers(HttpServletRequest request, @PathVariable("serviceProviderId") Long serviceProviderId) throws SQLException {
       //log.info("UserController/addUser");
-      try
-      {
+      try {
          List<String> roles = new ArrayList<String>();
          roles.add("SP Admin");
          roles.add("Compliance Admin");
          roles.add("KYC Admin");
-         if(securityHelper.hasRole(request, roles))
-         {
+         if (securityHelper.hasRole(request, roles)) {
             final String authorizationHeader = request.getHeader("Authorization");
             String userName = null;
-            if(authorizationHeader != null && authorizationHeader.startsWith(("Bearer ")))
-            {
+            if (authorizationHeader != null && authorizationHeader.startsWith(("Bearer "))) {
                userName = securityHelper.getUserName(authorizationHeader.substring(7));
             }
             serviceProviderService.deleteData(serviceProviderId);
             return ResponseEntity.ok("all data data deleted");
-         }
-         else
+         } else
             return ResponseEntity.ok("Not authorized");
+      } catch (Exception e) {
+         //log.info(e.getMessage());
+         return ResponseEntity.ok(e.getMessage());
       }
-      catch(Exception e)
-      {
+   }
+
+
+   @DeleteMapping("/{id}/soft-delete")
+   public ResponseEntity<?> softDeleteServiceProvider(HttpServletRequest request,@PathVariable Long id) {
+      try {
+         List<String> roles = new ArrayList<String>();
+         roles.add("KYC Admin");
+         if (securityHelper.hasRole(request, roles)) {
+
+            ServiceProvider sp = serviceProviderRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Service provider not found"));
+
+            sp.setDeleted(true);
+            serviceProviderRepository.save(sp);
+
+            return ResponseEntity.ok("Service provider soft deleted successfully");
+         } else
+            return ResponseEntity.ok("Not authorized");
+      } catch (Exception e) {
          //log.info(e.getMessage());
          return ResponseEntity.ok(e.getMessage());
       }
