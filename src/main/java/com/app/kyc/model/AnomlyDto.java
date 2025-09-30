@@ -1,9 +1,6 @@
 package com.app.kyc.model;
 
-import com.app.kyc.entity.Anomaly;
-import com.app.kyc.entity.AnomalyType;
-import com.app.kyc.entity.Consumer;
-import com.app.kyc.entity.User;
+import com.app.kyc.entity.*;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -16,6 +13,10 @@ public class AnomlyDto {
     @Getter
     @Setter
     private String formattedId;
+
+    @Getter
+    @Setter
+    private String vendorCode;
     private String note;
     private Date reportedOn;
     private User reportedBy;
@@ -56,10 +57,19 @@ public class AnomlyDto {
         this.reportedBy = anomaly.getReportedBy();
         this.updatedOn = anomaly.getUpdatedOn();
         this.updateBy = anomaly.getUpdateBy();
-        List<Consumer> consumers = anomaly.getConsumers();
-        this.formattedId = anomaly.getConsumers().get(0).getServiceProvider().getName() + "-" + new SimpleDateFormat("ddMMyyyy").format(anomaly.getReportedOn()) + "-" + this.id;
-        if (consumers != null && consumers.size() > 0) {
 
+        List<Consumer> consumers = anomaly.getConsumers();
+
+        if (consumers != null && !consumers.isEmpty()) {
+            ServiceProvider sp = consumers.get(0).getServiceProvider();
+            if (sp != null) {
+                // ✅ Set vendorCode from ServiceProvider.name
+                this.vendorCode = sp.getName();
+
+                this.formattedId = this.vendorCode + "-"
+                        + new SimpleDateFormat("ddMMyyyy").format(anomaly.getReportedOn())
+                        + "-" + this.id;
+            }
             this.consumers = consumers.stream()
                     .filter(c -> c.getConsumerStatus() == 0)
                     .map(c -> new ConsumerDto(c, null))
@@ -77,15 +87,26 @@ public class AnomlyDto {
         this.reportedBy = anomaly.getReportedBy();
         this.updatedOn = anomaly.getUpdatedOn();
         this.updateBy = anomaly.getUpdateBy();
-        this.formattedId = anomaly.getConsumers().get(0).getServiceProvider().getName() + "/" + new SimpleDateFormat("dd-MM-yyyy").format(anomaly.getReportedOn()) + "/" + this.id;
-        List<Consumer> consumers = anomaly.getConsumers();
-        if (consumers != null && consumers.size() > 0) {
 
+        List<Consumer> consumers = anomaly.getConsumers();
+
+        if (consumers != null && !consumers.isEmpty()) {
+            ServiceProvider sp = consumers.get(0).getServiceProvider();
+            if (sp != null) {
+                // ✅ Set vendorCode from ServiceProvider.name
+                this.vendorCode = sp.getName();
+
+                this.formattedId = this.vendorCode + "/"
+                        + new SimpleDateFormat("dd-MM-yyyy").format(anomaly.getReportedOn())
+                        + "/" + this.id;
+            }
             this.consumers = consumers.stream()
                     .map(c -> new ConsumerDto(c, null))
                     .collect(Collectors.toList());
         }
     }
+
+
 
     public AnomlyDto() {
     }

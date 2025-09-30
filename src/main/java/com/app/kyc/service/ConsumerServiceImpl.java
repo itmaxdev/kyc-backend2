@@ -777,7 +777,7 @@ System.out.println("Get all flagged ");
         return anomaliesWithCount;
     }*/
 
-    @Override
+    @Transactional(readOnly = true)
     public Map<String, Object> getAllFlaggedConsumers2(String params)
             throws JsonMappingException, JsonProcessingException {
 
@@ -788,7 +788,7 @@ System.out.println("Get all flagged ");
 
         final List<Integer> consumerStatus = new ArrayList<>();
         final List<AnomalyStatus> anomalyStatus = new ArrayList<>();
-        final List<AnomalyStatus> resolutionStatus = new ArrayList<AnomalyStatus>();
+        final List<AnomalyStatus> resolutionStatus = new ArrayList<>();
         List<AnomlyDto> pageAnomaly;
         long totalAnomaliesCount;
 
@@ -796,25 +796,26 @@ System.out.println("Get all flagged ");
                 && pagination.getFilter() != null
                 && (pagination.getFilter().getServiceProviderID() == null
                 || pagination.getFilter().getServiceProviderID() == -1);
-        
+
         final boolean isResolved = pagination != null
                 && pagination.getFilter() != null
                 && Boolean.TRUE.equals(pagination.getFilter().getIsResolved());
-        
-        final String searchText = Optional.ofNullable(pagination)              
-                .map(Pagination::getFilter)                            
-                .map(f -> f.getSearchText())                          
-                .map(String::trim)                                     
-                .map(String::toLowerCase)                              
+
+        final String searchText = Optional.ofNullable(pagination)
+                .map(Pagination::getFilter)
+                .map(f -> f.getSearchText())
+                .map(String::trim)
+                .map(String::toLowerCase)
                 .orElse(null);
-        
+
         if (noSpFilter) {
             if (isResolved) {
                 consumerStatus.add(1);
                 anomalyStatus.add(AnomalyStatus.RESOLVED_FULLY);
 
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumerStatus(pageable, consumerStatus, anomalyStatus, pagination.getFilter().getAnomalyType(),searchText);
+                        anomalyRepository.findAllByConsumerStatus(pageable, consumerStatus, anomalyStatus,
+                                pagination.getFilter().getAnomalyType(), searchText);
 
                 pageAnomaly = anomalyData.stream()
                         .map(a -> new AnomlyDto(a, 0))
@@ -826,7 +827,8 @@ System.out.println("Get all flagged ");
                 resolutionStatus.addAll(this.setResolution(pagination.getFilter().getResolution()));
 
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumersAll(pageable, anomalyStatus, pagination.getFilter().getAnomalyType(),resolutionStatus,searchText);
+                        anomalyRepository.findAllByConsumersAll(pageable, anomalyStatus,
+                                pagination.getFilter().getAnomalyType(), resolutionStatus, searchText);
 
                 pageAnomaly = anomalyData.stream()
                         .map(AnomlyDto::new)
@@ -836,11 +838,11 @@ System.out.println("Get all flagged ");
         } else {
             final Long spId = pagination.getFilter().getServiceProviderID();
             List<Long> spIds;
-            
-            if(spId != 0) {
-            	spIds = Arrays.asList(spId);
-            }else {
-            	spIds = serviceProviderRepository.findAll()
+
+            if (spId != 0) {
+                spIds = Arrays.asList(spId);
+            } else {
+                spIds = serviceProviderRepository.findAll()
                         .stream()
                         .map(ServiceProvider::getId)
                         .collect(Collectors.toList());
@@ -850,7 +852,8 @@ System.out.println("Get all flagged ");
                 anomalyStatus.add(AnomalyStatus.RESOLVED_FULLY);
 
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus, spIds, anomalyStatus, pagination.getFilter().getAnomalyType(),resolutionStatus,searchText);
+                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus,
+                                spIds, anomalyStatus, pagination.getFilter().getAnomalyType(), resolutionStatus, searchText);
 
                 pageAnomaly = anomalyData.stream()
                         .map(a -> new AnomlyDto(a, 0))
@@ -863,7 +866,9 @@ System.out.println("Get all flagged ");
                 anomalyStatus.addAll(this.setStatusList(pagination.getFilter().getAnomalyStatus()));
                 resolutionStatus.addAll(this.setResolution(pagination.getFilter().getResolution()));
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus, spIds, anomalyStatus, pagination.getFilter().getAnomalyType(),resolutionStatus,searchText);
+                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus,
+                                spIds, anomalyStatus, pagination.getFilter().getAnomalyType(), resolutionStatus, searchText);
+
                 pageAnomaly = anomalyData.stream()
                         .map(AnomlyDto::new)
                         .collect(Collectors.toList());
@@ -879,17 +884,13 @@ System.out.println("Get all flagged ");
         }
 
         // --------- HYDRATE CONSUMERS VIA ConsumerAnomaly ---------
-        System.out.println("Test is Resolved 5"+isResolved);
-        // 1) Collect anomaly ids from the page
         List<Long> anomalyIds = pageAnomaly.stream()
                 .map(AnomlyDto::getId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
-        // 2) Bulk load all ConsumerAnomaly links (with Consumer fetched)
         List<ConsumerAnomaly> links = consumerAnomalyRepository.findAllByAnomalyIdInFetchConsumer(anomalyIds);
 
-        // 3) Build maps
         Map<Long, List<ConsumerDto>> consumersByAnomalyId = links.stream()
                 .collect(Collectors.groupingBy(
                         ca -> ca.getAnomaly().getId(),
@@ -900,31 +901,22 @@ System.out.println("Get all flagged ");
                                     if (cd.getLastName()  == null) cd.setLastName("");
                                     if (ca.getNotes() != null) cd.setNotes(ca.getNotes());
                                     return cd;
-                                }, Collectors.toSet()),   // first deduplicate
-                                set -> new ArrayList<>(set)  // then convert back to List
+                                }, Collectors.toSet()),
+                                set -> new ArrayList<>(set)
                         )
                 ));
-
-
-        /*// NEW: counts per anomalyId -> effectedRecords
-        Map<Long, Long> effectedCountByAnomalyId = links.stream()
-                .collect(Collectors.groupingBy(
-                        ca -> ca.getAnomaly().getId(),
-                        Collectors.counting()
-                ));*/
 
         Map<Long, Long> effectedCountByAnomalyId = links.stream()
                 .collect(Collectors.groupingBy(
                         ca -> ca.getAnomaly().getId(),
                         Collectors.mapping(
-                                ca -> ca.getConsumer().getId(), // extract consumerId
+                                ca -> ca.getConsumer().getId(),
                                 Collectors.collectingAndThen(
                                         Collectors.toSet(),
                                         set -> (long) set.size()
                                 )
                         )
                 ));
-
 
         Map<Long, Map<Long, String>> notesByAnomalyThenConsumer = new HashMap<>();
         for (ConsumerAnomaly ca : links) {
@@ -936,14 +928,12 @@ System.out.println("Get all flagged ");
                     .put(cId, ca.getNotes());
         }
 
-        // 4) Patch each AnomlyDto (+ set effectedRecords)
+        // --------- PATCH DTOs ---------
         for (AnomlyDto dto : pageAnomaly) {
-            // set effectedRecords (default 0)
             int effected = effectedCountByAnomalyId.getOrDefault(dto.getId(), 0L).intValue();
-            dto.setEffectedRecords(effected);    // NEW
+            dto.setEffectedRecords(effected);
 
             List<ConsumerDto> fromLinks = consumersByAnomalyId.get(dto.getId());
-
             if (dto.getConsumers() == null || dto.getConsumers().isEmpty()) {
                 if (fromLinks != null) dto.setConsumers(fromLinks);
             } else {
@@ -959,13 +949,35 @@ System.out.println("Get all flagged ");
             }
         }
 
-        pageAnomaly.forEach(System.out::println);
+        // --------- RENUMBER FORMATTED IDS PER VENDOR/DAY ---------
+        Map<String, AtomicInteger> vendorCounters = new HashMap<>();
+        SimpleDateFormat df = new SimpleDateFormat("ddMMyyyy");
+
+        for (AnomlyDto dto : pageAnomaly) {
+            if (dto.getReportedOn() == null) continue;
+
+            String vendor = (dto.getVendorCode() != null) ? dto.getVendorCode() : "UNKNOWN";
+            String date   = df.format(dto.getReportedOn());
+            String key    = vendor + "-" + date;
+
+            // ✅ Always start from 1 per vendor/date, increment continuously
+            vendorCounters.putIfAbsent(key, new AtomicInteger(1));
+            int seq = vendorCounters.get(key).getAndIncrement();
+
+            dto.setFormattedId(vendor + "-" + date + "-" + seq);
+        }
+
+
 
         Map<String, Object> anomaliesWithCount = new HashMap<>();
         anomaliesWithCount.put("data", pageAnomaly);
         anomaliesWithCount.put("count", totalAnomaliesCount);
         return anomaliesWithCount;
     }
+
+
+
+
 
 
     public List<List<String>> loadConsumers(Long serviceProviderId, User user) {
