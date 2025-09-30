@@ -123,85 +123,81 @@ public class ConsumerServiceImpl implements ConsumerService {
     }*/
 
 
+    @Override
     public ConsumerDto getConsumerById(Long id) {
         Optional<Consumer> consumer = consumerRepository.findByIdAndConsumerStatusIn(id, Arrays.asList(0, 1));
 
         if (!consumer.isPresent()) {
             consumer = consumerRepository.findById(id);
         }
-        
+
         return consumer.map(c -> {
             // existing anomalies
             ConsumerDto dto = new ConsumerDto(c, c.getAnomalies());
-       
-            List<ConsumerHistoryDto> history = new ArrayList<>();
 
-           List<ConsumerTracking> trackings = new ArrayList<ConsumerTracking>();
-            
+            List<ConsumerHistoryDto> history = new ArrayList<>();
+            List<ConsumerTracking> trackings = new ArrayList<>();
+
             ConsumerTracking latestConsistent =
                     consumerTrackingRepository.findFirstByConsumerIdAndIsConsistentTrueOrderByCreatedOnDesc(c.getId());
 
             ConsumerTracking latestInconsistent =
                     consumerTrackingRepository.findFirstByConsumerIdAndIsConsistentFalseOrderByCreatedOnDesc(c.getId());
-            
+
             trackings.add(latestConsistent);
             trackings.add(latestInconsistent);
-            
+
             for (ConsumerTracking t : trackings) {
                 if (t != null) {
-                	String fullName = null;
-                	if(!MaskingContext.isMasking()) {
-                		fullName = MaskingUtil.maskName(c.getFirstName()) + " " + MaskingUtil.maskName(c.getMiddleName()) + " " + MaskingUtil.maskName(c.getLastName());
-                	}else {
-                		fullName = c.getFirstName() + " " + c.getMiddleName() + " " + c.getLastName();
-                	}
-					String note;
-					String providerName = c.getServiceProvider().getName();
-					String normalizedProvider = providerName != null
-							? providerName.substring(0, 1).toUpperCase() + providerName.substring(1).toLowerCase()
-							: "Unknown";
+                    String fullName;
+                    if (!MaskingContext.isMasking()) {
+                        fullName = MaskingUtil.maskName(c.getFirstName()) + " "
+                                + MaskingUtil.maskName(c.getMiddleName()) + " "
+                                + MaskingUtil.maskName(c.getLastName());
+                    } else {
+                        fullName = c.getFirstName() + " " + c.getMiddleName() + " " + c.getLastName();
+                    }
 
-					String datePart;
-					Long anomalyId;
+                    String note;
+                    String providerName = c.getServiceProvider() != null ? c.getServiceProvider().getName() : "Unknown";
+                    String normalizedProvider = providerName != null
+                            ? providerName.substring(0, 1).toUpperCase() + providerName.substring(1).toLowerCase()
+                            : "Unknown";
 
-					String formattedId;
+                    String datePart;
+                    Long anomalyId;
+                    String formattedId;
 
-					String consistencyStatus = t.getIsConsistent() == true ? "Consistent" : "Inconsistent";
-					String inconsistentOn = c.getCreatedOn();
-					String consistentOn = t.getConsistentOn() != null ? t.getConsistentOn() : "N/A";
-					if (c.getAnomalies().size() <= 0) {
-						formattedId = normalizedProvider;
-						note = fullName + " belonging to ";
-					} else {
-						datePart = new SimpleDateFormat("ddMMyyyy").format(c.getAnomalies().get(0).getReportedOn());
-						anomalyId = c.getAnomalies().get(0).getId();
-						formattedId = normalizedProvider + "-" + datePart + "-" + anomalyId;
-						if (t.getIsConsistent() == true) {
-							note = fullName + " previously linked to anomaly ";
-						} else {
-							note = fullName + " linked to anomaly ";
-						}
-					}
-                    history.add(new ConsumerHistoryDto(consistencyStatus, note , inconsistentOn, consistentOn , formattedId));
+                    String consistencyStatus = t.getIsConsistent() ? "Consistent" : "Inconsistent";
+                    String inconsistentOn = c.getCreatedOn();
+                    String consistentOn = t.getConsistentOn() != null ? t.getConsistentOn() : "N/A";
+
+                    if (c.getAnomalies().isEmpty()) {
+                        formattedId = normalizedProvider;
+                        note = fullName + " belonging to ";
+                    } else {
+                        datePart = new SimpleDateFormat("ddMMyyyy").format(c.getAnomalies().get(0).getReportedOn());
+                        anomalyId = c.getAnomalies().get(0).getId();
+                        formattedId = normalizedProvider + "-" + datePart + "-" + anomalyId;
+                        if (t.getIsConsistent()) {
+                            note = fullName + " previously linked to anomaly ";
+                        } else {
+                            note = fullName + " linked to anomaly ";
+                        }
+                    }
+
+                    history.add(new ConsumerHistoryDto(consistencyStatus, note, inconsistentOn, consistentOn, formattedId));
                 }
             }
-            String providerName = c.getServiceProvider() != null ? c.getServiceProvider().getName() : "Unknown";
-            List<Consumer> vendorConsumers = consumerRepository.findByServiceProviderId(c.getServiceProvider().getId());
 
-            Map<Long, String> vendorCodeMap = new HashMap<>();
-            AtomicInteger counter = new AtomicInteger(0);
-            vendorConsumers.stream()
-                    .sorted(Comparator.comparing(Consumer::getId)) // or createdOn if that's load order
-                    .forEach(vc -> {
-                        int seq = counter.incrementAndGet();
-                        String vendorCode = providerName + " " + String.format("%03d", seq);
-                        vendorCodeMap.put(vc.getId(), vendorCode);
-                    });
+            // ✅ Get vendorCode directly from consumer table (no more recalculation)
+            String vendorCode = c.getVendorCode();
+            System.out.println("Vendor code is: " + vendorCode);
 
-            String vendorCode = vendorCodeMap.get(c.getId());
-
-            System.out.println("Vendor code is: "+vendorCode);
             dto.setConsumerHistory(history);
+
+            // make sure dto exposes vendorCode from entity
+            dto.setVendorCode(vendorCode);
 
             return dto;
         }).orElse(null);
@@ -256,23 +252,6 @@ public class ConsumerServiceImpl implements ConsumerService {
             inconsistentCount = consumerRepository.countByIsConsistentFalse();
         }
 
-        // ===== Fetch THREE independent pages =====
-        // A) ALL
-//        final Page<Consumer> allPage = (spId != null)
-//                ? consumerRepository.findByServiceProvider_Id(spId, pageable)
-//                : consumerRepository.findAll(pageable);
-
-        // B) CONSISTENT
-//        final Page<Consumer> consistentPage = (spId != null)
-//                ? consumerRepository.findByIsConsistentTrueAndConsumerStatusInAndServiceProvider_Id(pageable, allowedStatuses, spId)
-//                : consumerRepository.findByIsConsistentTrueAndConsumerStatusIn(pageable, allowedStatuses);
-
-        // C) INCONSISTENT
-//        final Page<Consumer> inconsistentPage = (spId != null)
-//                ? consumerRepository.findByIsConsistentFalseAndConsumerStatusInAndServiceProvider_Id(pageable, allowedStatuses, spId)
-//                : consumerRepository.findByIsConsistentFalseAndConsumerStatusIn(pageable, allowedStatuses);
-        
-     
 		final Page<Consumer> filterData;
 		long filterCount;
 		if ("CONSISTENT".equals(type)) {
@@ -291,8 +270,6 @@ public class ConsumerServiceImpl implements ConsumerService {
 			filterCount = consumerRepository.count(
 	                ConsumerSpecifications.withFilters(spId, searchText, null ,null)
 	        );
-			/*filterData = consumerRepository.findAll(ConsumerSpecifications.withFilters(spId, searchText, null, null),
-					pageable);*/
 
             filterData = consumerRepository.findAll(
                     ConsumerSpecifications.withFilters(spId, searchText, null, null),
@@ -304,25 +281,12 @@ public class ConsumerServiceImpl implements ConsumerService {
 		
 		final List<ConsumersHasSubscriptionsResponseDTO> finalData = toDtoPage(dedup(filterData.getContent()));
 
-        // Map each slice independently (with de-dup just in case)
-//        final List<ConsumersHasSubscriptionsResponseDTO> allData          = toDtoPage(dedup(allPage.getContent()));
-//        final List<ConsumersHasSubscriptionsResponseDTO> consistentData   = toDtoPage(dedup(consistentPage.getContent()));
-//        final List<ConsumersHasSubscriptionsResponseDTO> inconsistentData = toDtoPage(dedup(inconsistentPage.getContent()));
-
-        // "data" shaped by filter.type
-//        final List<ConsumersHasSubscriptionsResponseDTO> dataBucket =
-//                "CONSISTENT".equals(type)   ? consistentData :
-//                        "INCONSISTENT".equals(type) ? inconsistentData :
-//                                allData;
-
         Map<String, Object> resp = new HashMap<>();
         resp.put("count", allCount);
         resp.put("consistentCount", consistentCount);
         resp.put("inconsistentCount", inconsistentCount);
         resp.put("filterCount", filterCount);
         resp.put("data", finalData);               // page of ALL / CONSISTENT / INCONSISTENT based on type
-        //resp.put("consistentData", consistentData); // always a consistent page
-        //resp.put("inconsistentData", inconsistentData); // always an inconsistent page
         return resp;
     }
 
@@ -824,7 +788,8 @@ System.out.println("Get all flagged ");
                 anomalyStatus.add(AnomalyStatus.RESOLVED_FULLY);
 
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumerStatus(pageable, consumerStatus, anomalyStatus,
+                        anomalyRepository.findAllByConsumerStatus(
+                                pageable, consumerStatus, anomalyStatus,
                                 pagination.getFilter().getAnomalyType(), searchText);
 
                 pageAnomaly = anomalyData.stream()
@@ -837,7 +802,8 @@ System.out.println("Get all flagged ");
                 resolutionStatus.addAll(this.setResolution(pagination.getFilter().getResolution()));
 
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumersAll(pageable, anomalyStatus,
+                        anomalyRepository.findAllByConsumersAll(
+                                pageable, anomalyStatus,
                                 pagination.getFilter().getAnomalyType(), resolutionStatus, searchText);
 
                 pageAnomaly = anomalyData.stream()
@@ -857,13 +823,16 @@ System.out.println("Get all flagged ");
                         .map(ServiceProvider::getId)
                         .collect(Collectors.toList());
             }
+
             if (isResolved) {
                 consumerStatus.add(1);
                 anomalyStatus.add(AnomalyStatus.RESOLVED_FULLY);
 
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus,
-                                spIds, anomalyStatus, pagination.getFilter().getAnomalyType(), resolutionStatus, searchText);
+                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(
+                                pageable, consumerStatus, spIds,
+                                anomalyStatus, pagination.getFilter().getAnomalyType(),
+                                resolutionStatus, searchText);
 
                 pageAnomaly = anomalyData.stream()
                         .map(a -> new AnomlyDto(a, 0))
@@ -875,9 +844,12 @@ System.out.println("Get all flagged ");
                 consumerStatus.add(1);
                 anomalyStatus.addAll(this.setStatusList(pagination.getFilter().getAnomalyStatus()));
                 resolutionStatus.addAll(this.setResolution(pagination.getFilter().getResolution()));
+
                 Page<Anomaly> anomalyData =
-                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(pageable, consumerStatus,
-                                spIds, anomalyStatus, pagination.getFilter().getAnomalyType(), resolutionStatus, searchText);
+                        anomalyRepository.findAllByConsumerStatusAndServiceProviderId(
+                                pageable, consumerStatus, spIds,
+                                anomalyStatus, pagination.getFilter().getAnomalyType(),
+                                resolutionStatus, searchText);
 
                 pageAnomaly = anomalyData.stream()
                         .map(AnomlyDto::new)
@@ -959,31 +931,36 @@ System.out.println("Get all flagged ");
             }
         }
 
-        // --------- RENUMBER FORMATTED IDS PER VENDOR/DAY ---------
+        // --------- RENUMBER FORMATTED IDS PER VENDOR/DAY (using consumer.vendorCode) ---------
         Map<String, AtomicInteger> vendorCounters = new HashMap<>();
         SimpleDateFormat df = new SimpleDateFormat("ddMMyyyy");
 
         for (AnomlyDto dto : pageAnomaly) {
             if (dto.getReportedOn() == null) continue;
 
-            String vendor = (dto.getVendorCode() != null) ? dto.getVendorCode() : "UNKNOWN";
-            String date   = df.format(dto.getReportedOn());
-            String key    = vendor + "-" + date;
+            // ✅ Use the vendorCode from the first consumer in the anomaly
+            String vendor = "UNKNOWN";
+            if (dto.getConsumers() != null && !dto.getConsumers().isEmpty()) {
+                vendor = dto.getConsumers().get(0).getVendorCode() != null
+                        ? dto.getConsumers().get(0).getVendorCode()
+                        : "UNKNOWN";
+            }
 
-            // ✅ Always start from 1 per vendor/date, increment continuously
+            String date = df.format(dto.getReportedOn());
+            String key  = vendor + "-" + date;
+
             vendorCounters.putIfAbsent(key, new AtomicInteger(1));
             int seq = vendorCounters.get(key).getAndIncrement();
 
             dto.setFormattedId(vendor + "-" + date + "-" + seq);
         }
 
-
-
         Map<String, Object> anomaliesWithCount = new HashMap<>();
         anomaliesWithCount.put("data", pageAnomaly);
         anomaliesWithCount.put("count", totalAnomaliesCount);
         return anomaliesWithCount;
     }
+
 
 
 
