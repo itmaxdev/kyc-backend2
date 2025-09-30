@@ -40,12 +40,14 @@ import java.nio.file.*;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 
@@ -487,7 +489,6 @@ public class FileProcessingService {
     // remove the old private updateConsistencyFlag(Consumer) from FileProcessingService
 
     // ✅ Ingest method now delegates to ConsumerServiceImpl
-    @Transactional(rollbackFor = Exception.class)
     protected int ingestFileTxVodacom(Path workingCopy, Long spId, char sep, Charset cs) throws Exception {
         final Timestamp nowTs = new Timestamp(System.currentTimeMillis());
         int total = 0;
@@ -495,6 +496,10 @@ public class FileProcessingService {
         // 🔹 Consumers to update/save
         List<Consumer> toSave = new ArrayList<>();
         List<Consumer> duplicatesToSoftDelete = new ArrayList<>();
+
+        // 🔹 Track per-vendor/date counters
+        Map<String, AtomicInteger> vendorCounters = new HashMap<>();
+        SimpleDateFormat df = new SimpleDateFormat("ddMMyyyy");
 
         try (InputStream in = Files.newInputStream(workingCopy);
              Reader reader = new InputStreamReader(in, cs);
@@ -530,6 +535,16 @@ public class FileProcessingService {
                 // 🔹 Update consistency flag
                 consumerServiceImpl.updateConsistencyFlag(consumer);
 
+                // ✅ Assign vendorCode (per vendor/date, sequential)
+                String vendor = getServiceProviderName(spId); // helper method or fetch from DB
+                String date   = df.format(nowTs);
+                String key    = vendor + "-" + date;
+
+                vendorCounters.putIfAbsent(key, new AtomicInteger(1));
+                int seq = vendorCounters.get(key).getAndIncrement();
+
+                consumer.setVendorCode(vendor + "_" + date + "_" + seq);
+
                 toSave.add(consumer);
 
                 // 🔹 Batch flush
@@ -555,6 +570,7 @@ public class FileProcessingService {
 
 
 
+
     @Transactional(rollbackFor = Exception.class)
     protected int ingestFileTxAirtel(Path workingCopy, Long spId, char sep, Charset cs) throws Exception {
         final Timestamp nowTs = new Timestamp(System.currentTimeMillis());
@@ -563,6 +579,9 @@ public class FileProcessingService {
         // 🔹 Collect active and soft-deleted consumers
         List<Consumer> toSave = new ArrayList<>();
         List<Consumer> duplicatesToSoftDelete = new ArrayList<>();
+        // 🔹 Track per-vendor/date counters
+        Map<String, AtomicInteger> vendorCounters = new HashMap<>();
+        SimpleDateFormat df = new SimpleDateFormat("ddMMyyyy");
 
         try (InputStream in = Files.newInputStream(workingCopy);
              Reader reader = new InputStreamReader(in, cs);
@@ -618,6 +637,17 @@ public class FileProcessingService {
                 } else {
                     consumer.setConsistentOn("N/A");
                 }
+
+                //  Assign vendorCode (per vendor/date, sequential)
+                String vendor = getServiceProviderName(spId); // helper method or fetch from DB
+                String date   = df.format(nowTs);
+                String key    = vendor + "-" + date;
+
+                vendorCounters.putIfAbsent(key, new AtomicInteger(1));
+                int seq = vendorCounters.get(key).getAndIncrement();
+
+                consumer.setVendorCode(vendor + "_" + date + "_" + seq);
+
 
                 toSave.add(consumer);
 
@@ -679,6 +709,10 @@ public class FileProcessingService {
     protected int ingestFileTxOrange(Path workingCopy, Long spId, char sep, Charset cs) throws Exception {
         final Timestamp nowTs = new Timestamp(System.currentTimeMillis());
         int total = 0;
+
+        // 🔹 Track per-vendor/date counters
+        Map<String, AtomicInteger> vendorCounters = new HashMap<>();
+        SimpleDateFormat df = new SimpleDateFormat("ddMMyyyy");
 
         try (InputStream in = Files.newInputStream(workingCopy);
              Reader reader = new InputStreamReader(in, cs);
@@ -775,6 +809,17 @@ public class FileProcessingService {
                     consumer.setConsistentOn("N/A");
                 }
 
+                //  Assign vendorCode (per vendor/date, sequential)
+                String vendor = getServiceProviderName(spId); // helper method or fetch from DB
+                String date   = df.format(nowTs);
+                String key    = vendor + "-" + date;
+
+                vendorCounters.putIfAbsent(key, new AtomicInteger(1));
+                int seq = vendorCounters.get(key).getAndIncrement();
+
+                consumer.setVendorCode(vendor + "_" + date + "_" + seq);
+
+
                 toSave.add(consumer);
 
                 // 🔹 Batch flush
@@ -801,6 +846,9 @@ public class FileProcessingService {
     protected int ingestFileTxAfricell(Path workingCopy, Long spId, char sep, Charset cs) throws Exception {
         final Timestamp nowTs = new Timestamp(System.currentTimeMillis());
         int total = 0;
+        // 🔹 Track per-vendor/date counters
+        Map<String, AtomicInteger> vendorCounters = new HashMap<>();
+        SimpleDateFormat df = new SimpleDateFormat("ddMMyyyy");
 
         try (InputStream in = Files.newInputStream(workingCopy);
              Reader reader = new InputStreamReader(in, cs);
@@ -896,6 +944,16 @@ public class FileProcessingService {
                 } else {
                     consumer.setConsistentOn("N/A");
                 }
+
+                //  Assign vendorCode (per vendor/date, sequential)
+                String vendor = getServiceProviderName(spId); // helper method or fetch from DB
+                String date   = df.format(nowTs);
+                String key    = vendor + "-" + date;
+
+                vendorCounters.putIfAbsent(key, new AtomicInteger(1));
+                int seq = vendorCounters.get(key).getAndIncrement();
+
+                consumer.setVendorCode(vendor + "_" + date + "_" + seq);
 
                 toSave.add(consumer);
 
@@ -1419,6 +1477,13 @@ public class FileProcessingService {
         t = t.trim();
         return t.isEmpty() ? null : t;
     }
+
+    private String getServiceProviderName(Long spId) {
+        return serviceProviderRepository.findById(spId)
+                .map(ServiceProvider::getName)
+                .orElse("UNKNOWN");
+    }
+
 
     private String join(String sep, String... parts) {
         StringBuilder sb = new StringBuilder();

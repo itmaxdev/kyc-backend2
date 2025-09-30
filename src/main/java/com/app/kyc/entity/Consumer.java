@@ -48,6 +48,8 @@ public class Consumer {
     private int consumerStatus;
     @Column(name = "consistent_on")
     private String consistentOn;
+    @Column(name = "vendor_code")
+    private String vendorCode;
 
     @Column(name = "vodacom_transaction_id", unique = true, nullable = true, length = 200)
     private String vodacomTransactionId;
