@@ -136,7 +136,17 @@ public class ConsumerServiceImpl implements ConsumerService {
        
             List<ConsumerHistoryDto> history = new ArrayList<>();
 
-            List<ConsumerTracking> trackings = consumerTrackingRepository.findByConsumerIdOrderByCreatedOnDesc(c.getId());
+           List<ConsumerTracking> trackings = new ArrayList<ConsumerTracking>();
+            
+            ConsumerTracking latestConsistent =
+                    consumerTrackingRepository.findFirstByConsumerIdAndIsConsistentTrueOrderByCreatedOnDesc(c.getId());
+
+            ConsumerTracking latestInconsistent =
+                    consumerTrackingRepository.findFirstByConsumerIdAndIsConsistentFalseOrderByCreatedOnDesc(c.getId());
+            
+            trackings.add(latestConsistent);
+            trackings.add(latestInconsistent);
+            
             for (ConsumerTracking t : trackings) {
                 if (t != null) {
                 	String fullName = null;
@@ -154,21 +164,22 @@ public class ConsumerServiceImpl implements ConsumerService {
 					String datePart;
 					Long anomalyId;
 
-					String formattedId = null;
+					String formattedId;
 
 					String consistencyStatus = t.getIsConsistent() == true ? "Consistent" : "Inconsistent";
 					String inconsistentOn = c.getCreatedOn();
 					String consistentOn = t.getConsistentOn() != null ? t.getConsistentOn() : "N/A";
 					if (c.getAnomalies().size() <= 0) {
-						note = fullName;
+						formattedId = normalizedProvider;
+						note = fullName + " belonging to ";
 					} else {
 						datePart = new SimpleDateFormat("ddMMyyyy").format(c.getAnomalies().get(0).getReportedOn());
 						anomalyId = c.getAnomalies().get(0).getId();
 						formattedId = normalizedProvider + "-" + datePart + "-" + anomalyId;
 						if (t.getIsConsistent() == true) {
-							note = fullName + " previously linked to ";
+							note = fullName + " previously linked to anomaly ";
 						} else {
-							note = fullName + " linked to ";
+							note = fullName + " linked to anomaly ";
 						}
 					}
                     history.add(new ConsumerHistoryDto(consistencyStatus, note , inconsistentOn, consistentOn , formattedId));
