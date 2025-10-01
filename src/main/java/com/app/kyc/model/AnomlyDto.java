@@ -13,22 +13,40 @@ import java.util.stream.Collectors;
 
 public class AnomlyDto {
     private Long id;
-
     @Getter
     @Setter
     private String formattedId;
-
     private String note;
     private Date reportedOn;
     private User reportedBy;
+
     private Date updatedOn;
+
     private String updateBy;
+
     private Integer effectedRecords;
+
     private AnomalyStatus status;
     private AnomalyType anomalyType;
-    private List<ConsumerDto> consumers = new ArrayList<>();
+    List<ConsumerDto> consumers = new ArrayList<ConsumerDto>();
 
-    // ✅ Main constructor
+    public AnomlyDto(Long id, String note, AnomalyStatus status, AnomalyType anomalyType, List<Consumer> consumers, String updateBy, Date updatedOn, Date reportedOn) {
+        this.id = id;
+        this.note = note;
+        this.status = status;
+        this.anomalyType = anomalyType;
+        this.updateBy = updateBy;
+        this.updatedOn = updatedOn;
+        this.reportedOn = reportedOn;
+        if (consumers != null && consumers.size() > 0) {
+
+            this.consumers = consumers.stream()
+                    .map(c -> new ConsumerDto(c, null))
+                    .collect(Collectors.toList());
+        }
+
+    }
+
     public AnomlyDto(Anomaly anomaly) {
         this.id = anomaly.getId();
         this.note = anomaly.getNote();
@@ -38,81 +56,40 @@ public class AnomlyDto {
         this.reportedBy = anomaly.getReportedBy();
         this.updatedOn = anomaly.getUpdatedOn();
         this.updateBy = anomaly.getUpdateBy();
-
         List<Consumer> consumers = anomaly.getConsumers();
+        this.formattedId = anomaly.getConsumers().get(0).getServiceProvider().getName() + "-" + new SimpleDateFormat("ddMMyyyy").format(anomaly.getReportedOn()) + "-" + this.id;
+        if (consumers != null && consumers.size() > 0) {
 
-        if (consumers != null && !consumers.isEmpty()) {
             this.consumers = consumers.stream()
-                    .filter(c -> c.getConsumerStatus() == 0) // keep active only
+                    .filter(c -> c.getConsumerStatus() == 0)
                     .map(c -> new ConsumerDto(c, null))
                     .collect(Collectors.toList());
-
-            // ✅ Prefer vendorCode
-            String vendorCode = this.consumers.get(0).getVendorCode();
-            if (vendorCode != null && !vendorCode.isBlank()) {
-                this.formattedId = vendorCode;
-            } else {
-                // fallback
-                this.formattedId = consumers.get(0).getServiceProvider().getName()
-                        + "_" + new SimpleDateFormat("ddMMyyyy").format(anomaly.getReportedOn())
-                        + "_" + this.id;
-            }
-        } else {
-            // ✅ fallback when no consumers exist
-            this.consumers = new ArrayList<>();
-            this.formattedId = "ANOMALY_" + this.id;
         }
     }
 
-    // ✅ Special constructor (status=6 case)
+    //TODO Remove Extra Constructor
     public AnomlyDto(Anomaly anomaly, int temp) {
-        this(anomaly); // reuse main constructor
-
-        // Only override if vendorCode not available
+        this.id = anomaly.getId();
+        this.note = anomaly.getNote();
+        this.status = anomaly.getStatus();
+        this.anomalyType = anomaly.getAnomalyType();
+        this.reportedOn = anomaly.getReportedOn();
+        this.reportedBy = anomaly.getReportedBy();
+        this.updatedOn = anomaly.getUpdatedOn();
+        this.updateBy = anomaly.getUpdateBy();
+        this.formattedId = anomaly.getConsumers().get(0).getServiceProvider().getName() + "/" + new SimpleDateFormat("dd-MM-yyyy").format(anomaly.getReportedOn()) + "/" + this.id;
         List<Consumer> consumers = anomaly.getConsumers();
-        if ((this.formattedId == null || this.formattedId.isBlank())
-                && consumers != null && !consumers.isEmpty()) {
-            this.formattedId = consumers.get(0).getServiceProvider().getName()
-                    + "_" + new SimpleDateFormat("ddMMyyyy").format(anomaly.getReportedOn())
-                    + "_" + this.id;
-        } else if (this.formattedId == null || this.formattedId.isBlank()) {
-            this.formattedId = "ANOMALY_" + this.id;
-        }
-    }
+        if (consumers != null && consumers.size() > 0) {
 
-    // ✅ Another constructor for manual building
-    public AnomlyDto(Long id, String note, AnomalyStatus status, AnomalyType anomalyType,
-                     List<Consumer> consumers, String updateBy, Date updatedOn, Date reportedOn) {
-        this.id = id;
-        this.note = note;
-        this.status = status;
-        this.anomalyType = anomalyType;
-        this.updateBy = updateBy;
-        this.updatedOn = updatedOn;
-        this.reportedOn = reportedOn;
-
-        if (consumers != null && !consumers.isEmpty()) {
             this.consumers = consumers.stream()
                     .map(c -> new ConsumerDto(c, null))
                     .collect(Collectors.toList());
-
-            String vendorCode = this.consumers.get(0).getVendorCode();
-            if (vendorCode != null && !vendorCode.isBlank()) {
-                this.formattedId = vendorCode;
-            } else {
-                this.formattedId = consumers.get(0).getServiceProvider().getName()
-                        + "_" + new SimpleDateFormat("ddMMyyyy").format(reportedOn)
-                        + "_" + this.id;
-            }
-        } else {
-            this.formattedId = "ANOMALY_" + this.id;
         }
     }
 
     public AnomlyDto() {
     }
 
-    // Getters & Setters
     public Long getId() {
         return id;
     }
