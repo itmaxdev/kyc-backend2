@@ -13,25 +13,22 @@ import java.util.stream.Collectors;
 
 public class AnomlyDto {
     private Long id;
+
     @Getter
     @Setter
     private String formattedId;
+
     private String note;
     private Date reportedOn;
     private User reportedBy;
-
     private Date updatedOn;
-
     private String updateBy;
-
     private Integer effectedRecords;
-
     private AnomalyStatus status;
     private AnomalyType anomalyType;
-    List<ConsumerDto> consumers = new ArrayList<ConsumerDto>();
+    private List<ConsumerDto> consumers = new ArrayList<>();
 
-
-
+    // ✅ Main constructor
     public AnomlyDto(Anomaly anomaly) {
         this.id = anomaly.getId();
         this.note = anomaly.getNote();
@@ -43,20 +40,21 @@ public class AnomlyDto {
         this.updateBy = anomaly.getUpdateBy();
 
         List<Consumer> consumers = anomaly.getConsumers();
+
         if (consumers != null && !consumers.isEmpty()) {
             this.consumers = consumers.stream()
-                    .filter(c -> c.getConsumerStatus() == 0)  // keep active only
+                    .filter(c -> c.getConsumerStatus() == 0) // keep active only
                     .map(c -> new ConsumerDto(c, null))
                     .collect(Collectors.toList());
 
-            // ✅ Use vendorCode from first consumer if available
+            // ✅ Prefer vendorCode
             String vendorCode = this.consumers.get(0).getVendorCode();
             if (vendorCode != null && !vendorCode.isBlank()) {
                 this.formattedId = vendorCode;
             } else {
-                // fallback if vendorCode missing
+                // fallback
                 this.formattedId = consumers.get(0).getServiceProvider().getName()
-                        + "_" + new java.text.SimpleDateFormat("ddMMyyyy").format(anomaly.getReportedOn())
+                        + "_" + new SimpleDateFormat("ddMMyyyy").format(anomaly.getReportedOn())
                         + "_" + this.id;
             }
         } else {
@@ -66,19 +64,23 @@ public class AnomlyDto {
         }
     }
 
-
-    //TODO Remove Extra Constructor
+    // ✅ Special constructor (status=6 case)
     public AnomlyDto(Anomaly anomaly, int temp) {
         this(anomaly); // reuse main constructor
 
-        // override formattedId if vendorCode not available
-        if (this.formattedId == null || this.formattedId.isBlank()) {
-            this.formattedId = anomaly.getConsumers().get(0).getServiceProvider().getName()
+        // Only override if vendorCode not available
+        List<Consumer> consumers = anomaly.getConsumers();
+        if ((this.formattedId == null || this.formattedId.isBlank())
+                && consumers != null && !consumers.isEmpty()) {
+            this.formattedId = consumers.get(0).getServiceProvider().getName()
                     + "_" + new SimpleDateFormat("ddMMyyyy").format(anomaly.getReportedOn())
                     + "_" + this.id;
+        } else if (this.formattedId == null || this.formattedId.isBlank()) {
+            this.formattedId = "ANOMALY_" + this.id;
         }
     }
 
+    // ✅ Another constructor for manual building
     public AnomlyDto(Long id, String note, AnomalyStatus status, AnomalyType anomalyType,
                      List<Consumer> consumers, String updateBy, Date updatedOn, Date reportedOn) {
         this.id = id;
@@ -94,16 +96,23 @@ public class AnomlyDto {
                     .map(c -> new ConsumerDto(c, null))
                     .collect(Collectors.toList());
 
-            // ✅ VendorCode again wins
             String vendorCode = this.consumers.get(0).getVendorCode();
             if (vendorCode != null && !vendorCode.isBlank()) {
                 this.formattedId = vendorCode;
+            } else {
+                this.formattedId = consumers.get(0).getServiceProvider().getName()
+                        + "_" + new SimpleDateFormat("ddMMyyyy").format(reportedOn)
+                        + "_" + this.id;
             }
+        } else {
+            this.formattedId = "ANOMALY_" + this.id;
         }
     }
 
-    public AnomlyDto() {}
+    public AnomlyDto() {
+    }
 
+    // Getters & Setters
     public Long getId() {
         return id;
     }
