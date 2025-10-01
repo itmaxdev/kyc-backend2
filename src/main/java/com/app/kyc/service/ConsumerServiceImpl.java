@@ -931,22 +931,18 @@ System.out.println("Get all flagged ");
             }
         }
 
-        // --------- RENUMBER FORMATTED IDS PER VENDOR/DAY (using consumer.vendorCode) ---------
-        Map<String, AtomicInteger> vendorCounters = new HashMap<>();
-        SimpleDateFormat df = new SimpleDateFormat("ddMMyyyy");
-
+        // --------- RENUMBER FORMATTED IDS PER VENDOR/DAY ---------
         for (AnomlyDto dto : pageAnomaly) {
             if (dto.getReportedOn() == null) continue;
 
-            // ✅ Use the vendorCode from the first consumer in the anomaly
-            String vendor = "UNKNOWN";
+            String vendor = "ANOMALY_" + dto.getId(); // default fallback
+
             if (dto.getConsumers() != null && !dto.getConsumers().isEmpty()) {
-                vendor = dto.getConsumers().get(0).getVendorCode() != null
-                        ? dto.getConsumers().get(0).getVendorCode()
-                        : "UNKNOWN";
+                ConsumerDto first = dto.getConsumers().get(0);
+                if (first != null && first.getVendorCode() != null && !first.getVendorCode().isBlank()) {
+                    vendor = first.getVendorCode();
+                }
             }
-
-
 
             dto.setFormattedId(vendor);
         }
@@ -956,6 +952,7 @@ System.out.println("Get all flagged ");
         anomaliesWithCount.put("count", totalAnomaliesCount);
         return anomaliesWithCount;
     }
+
 
 
 
