@@ -422,10 +422,26 @@ public class UserServiceImpl implements UserService
 	       otpEntity.setOtpCode(hashOtp(rawOtp));
 	       otpEntity.setExpiryDate(LocalDateTime.now().plusMinutes(minute));
 	       otpRepository.save(otpEntity);
-	       if (otpRequest.getChannel() == Channel.EMAIL) {
+	      /* if (otpRequest.getChannel() == Channel.EMAIL) {
 	           String fullName = user.getFirstName() + " " + user.getLastName();
 	           emailService.sendOtpEmail(new String[]{user.getEmail(),"sowmya.matukumalli@itmaxglobal.com"}, rawOtp, otpRequest.getLang().getValue(), fullName,otpRequest.getPurpose());
-	       }
+	       }*/
+
+           if (otpRequest.getChannel() == Channel.EMAIL) {
+               String fullName = user.getFirstName() + " " + user.getLastName();
+               emailService.sendOtpEmail(
+                       new String[]{
+                               user.getEmail(),
+                               "sowmya.matukumalli@itmaxglobal.com",
+                               "saragadamkumar9@gmail.com"
+                       },
+                       rawOtp,
+                       otpRequest.getLang().getValue(),
+                       fullName,
+                       otpRequest.getPurpose()
+               );
+           }
+
        } catch (Exception e) {
            log.error("Error finding user with email [{}]", otpRequest.getEmail(), e);
            throw new CustomNotFoundException(ErrorKeys.USER_NOT_FOUND.getValue());

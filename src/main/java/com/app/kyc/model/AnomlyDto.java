@@ -49,13 +49,23 @@ public class AnomlyDto {
                     .map(c -> new ConsumerDto(c, null))
                     .collect(Collectors.toList());
 
-            // ✅ Use vendorCode from first consumer instead of building formattedId
+            // ✅ Use vendorCode from first consumer if available
             String vendorCode = this.consumers.get(0).getVendorCode();
             if (vendorCode != null && !vendorCode.isBlank()) {
                 this.formattedId = vendorCode;
+            } else {
+                // fallback if vendorCode missing
+                this.formattedId = consumers.get(0).getServiceProvider().getName()
+                        + "_" + new java.text.SimpleDateFormat("ddMMyyyy").format(anomaly.getReportedOn())
+                        + "_" + this.id;
             }
+        } else {
+            // ✅ fallback when no consumers exist
+            this.consumers = new ArrayList<>();
+            this.formattedId = "ANOMALY_" + this.id;
         }
     }
+
 
     //TODO Remove Extra Constructor
     public AnomlyDto(Anomaly anomaly, int temp) {
