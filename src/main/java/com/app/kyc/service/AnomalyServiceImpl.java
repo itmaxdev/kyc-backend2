@@ -361,11 +361,15 @@ public class AnomalyServiceImpl implements AnomalyService
 
                          Anomaly anomalyEntity = c.getAnomaly();
                          AnomlyDto anomalyDto = new AnomlyDto(anomalyEntity);
+
+                         // ✅ Safe vendorCode check
                          if (anomalyDto.getConsumers() != null && !anomalyDto.getConsumers().isEmpty()) {
                             String vendorCode = anomalyDto.getConsumers().get(0).getVendorCode();
                             if (vendorCode != null && !vendorCode.isBlank()) {
                                anomalyDto.setFormattedId(vendorCode);
                             }
+                         } else {
+                            anomalyDto.setFormattedId("ANOMALY_" + anomalyDto.getId());
                          }
 
                          return new AnomalyTrackingDto(
@@ -378,7 +382,7 @@ public class AnomalyServiceImpl implements AnomalyService
                                  c.getUpdateOn()
                          );
                       })
-                      // 🔹 Deduplicate: keep only one entry per status (latest, because of DESC order)
+                      // 🔹 Deduplicate by status
                       .collect(Collectors.collectingAndThen(
                               Collectors.toMap(
                                       AnomalyTrackingDto::getStatus,
@@ -415,11 +419,7 @@ public class AnomalyServiceImpl implements AnomalyService
                          }
 
                          String consistentOn = ca.getConsumer().getConsistentOn();
-                         if (consistentOn == null || consistentOn.isBlank()) {
-                            dto.setConsistentOn("N/A");
-                         } else {
-                            dto.setConsistentOn(consistentOn);
-                         }
+                         dto.setConsistentOn((consistentOn == null || consistentOn.isBlank()) ? "N/A" : consistentOn);
 
                          return dto;
                       },
@@ -437,19 +437,24 @@ public class AnomalyServiceImpl implements AnomalyService
 
       long inconsistentCount = consumerDtos.size() - consistentCount;
 
-      // ✅ Override formattedId with vendorCode (main anomalyDto)
+      // ✅ Override formattedId safely
       if (!consumerDtos.isEmpty()) {
          String vendorCode = consumerDtos.get(0).getVendorCode();
          if (vendorCode != null && !vendorCode.isBlank()) {
             anomlyDto.setFormattedId(vendorCode);
+         } else {
+            anomlyDto.setFormattedId("ANOMALY_" + anomlyDto.getId());
          }
+      } else {
+         anomlyDto.setFormattedId("ANOMALY_" + anomlyDto.getId());
       }
 
       anomlyDto.setConsumers(consumerDtos);
 
       // ✅ Enrich tracking data with consumer notes (if anomaly type = 1)
       anomalyTracking.forEach(tracking -> {
-         if (tracking.getAnomlyDto().getAnomalyType().getId() == 1) {
+         if (tracking.getAnomlyDto() != null && tracking.getAnomlyDto().getAnomalyType() != null
+                 && tracking.getAnomlyDto().getAnomalyType().getId() == 1) {
             anomlyDto.getConsumers().forEach(consumer -> {
                List<ConsumerAnomaly> temp = consumerAnomalyRepository
                        .findByAnomaly_IdAndConsumer_Id(id, consumer.getId());
@@ -462,8 +467,10 @@ public class AnomalyServiceImpl implements AnomalyService
          }
       });
 
-      return new AnomalyDetailsResponseDTO(anomlyDto, anomalyTracking, (int) consistentCount, (int) inconsistentCount);
+      return new AnomalyDetailsResponseDTO(anomlyDto, anomalyTracking,
+              (int) consistentCount, (int) inconsistentCount);
    }
+
 
 
 
