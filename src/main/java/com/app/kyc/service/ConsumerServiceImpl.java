@@ -946,13 +946,9 @@ System.out.println("Get all flagged ");
                         : "UNKNOWN";
             }
 
-            String date = df.format(dto.getReportedOn());
-            String key  = vendor + "-" + date;
 
-            vendorCounters.putIfAbsent(key, new AtomicInteger(1));
-            int seq = vendorCounters.get(key).getAndIncrement();
 
-            dto.setFormattedId(vendor + "-" + date + "-" + seq);
+            dto.setFormattedId(vendor);
         }
 
         Map<String, Object> anomaliesWithCount = new HashMap<>();
