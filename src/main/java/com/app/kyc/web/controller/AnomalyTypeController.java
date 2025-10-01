@@ -10,14 +10,7 @@ import javax.servlet.http.HttpServletRequest;
 import com.app.kyc.model.AnomalyTypeDto;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import com.app.kyc.entity.AnomalyType;
 import com.app.kyc.service.AnomalyTypeService;
@@ -155,6 +148,32 @@ public class AnomalyTypeController
          //log.info(e.getMessage());
          return ResponseEntity.ok(e.getMessage());
       }
+   }
+
+
+   @DeleteMapping("/{id}/soft-delete")
+   public ResponseEntity<String> softDelete(HttpServletRequest request,@PathVariable Long id) {
+      try
+      {
+         List<String> roles = new ArrayList<String>();
+         roles.add("Compliance Admin");
+         if(securityHelper.hasRole(request, roles)) {
+            anomalyTypeService.softDeleteAnomalyType(id);
+            return ResponseEntity.ok("AnomalyType " + id + " marked as deleted");
+         } else
+            return ResponseEntity.ok("Not authorized");
+         }
+      catch(Exception e)
+         {
+            //log.info(e.getMessage());
+            return ResponseEntity.ok(e.getMessage());
+         }
+   }
+
+   // ✅ Fetch only active anomaly types
+   @GetMapping
+   public ResponseEntity<List<AnomalyType>> getAllActive() {
+      return ResponseEntity.ok(anomalyTypeService.getAllActiveAnomalyTypes());
    }
 
 }

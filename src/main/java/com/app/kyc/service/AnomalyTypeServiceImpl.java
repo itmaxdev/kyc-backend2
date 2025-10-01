@@ -256,4 +256,16 @@ public class AnomalyTypeServiceImpl implements AnomalyTypeService
       }
    }
 
+
+   public void softDeleteAnomalyType(Long id) {
+      AnomalyType anomalyType = anomalyTypeRepository.findById(id)
+              .orElseThrow(() -> new RuntimeException("AnomalyType not found with id: " + id));
+
+      anomalyType.setDeleted(true);  // ✅ mark deleted
+      anomalyTypeRepository.save(anomalyType);
+   }
+
+   public List<AnomalyType> getAllActiveAnomalyTypes() {
+      return anomalyTypeRepository.findByDeletedFalse();
+   }
 }

@@ -32,4 +32,10 @@ public interface AnomalyTypeService
    List<DashboardObjectInterface> getAnomalyTypeCounts();
 
     public List<AnomalyTypeDto> getAnomalyTypes();
+
+    public void softDeleteAnomalyType(Long id);
+
+    public List<AnomalyType> getAllActiveAnomalyTypes();
+
+
 }

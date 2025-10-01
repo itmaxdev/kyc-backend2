@@ -952,7 +952,7 @@ System.out.println("Get all flagged ");
             vendorCounters.putIfAbsent(key, new AtomicInteger(1));
             int seq = vendorCounters.get(key).getAndIncrement();
 
-            dto.setFormattedId(vendor + "-" + date + "-" + seq);
+            dto.setFormattedId(vendor);
         }
 
         Map<String, Object> anomaliesWithCount = new HashMap<>();
