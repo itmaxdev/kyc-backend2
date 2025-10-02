@@ -35,6 +35,7 @@ public class AnomalyTypeController
       {
          List<String> roles = new ArrayList<String>();
          roles.add("Compliance Admin");
+         roles.add("KYC Admin");
          if(securityHelper.hasRole(request, roles))
             return ResponseEntity.ok(anomalyTypeService.getAnomalyTypeById(id));
          else
@@ -77,6 +78,7 @@ public class AnomalyTypeController
       {
          List<String> roles = new ArrayList<String>();
          roles.add("Compliance Admin");
+         roles.add("KYC Admin");
          if(securityHelper.hasRole(request, roles))
          {
             Map<String, Object> anomalyTypes = anomalyTypeService.getAllAnomalyTypes(params);
@@ -100,6 +102,7 @@ public class AnomalyTypeController
       {
          List<String> roles = new ArrayList<String>();
          roles.add("Compliance Admin");
+         roles.add("KYC Admin");
          if(securityHelper.hasRole(request, roles))
          {
             final String authorizationHeader = request.getHeader("Authorization");
@@ -129,6 +132,7 @@ public class AnomalyTypeController
       {
          List<String> roles = new ArrayList<String>();
          roles.add("Compliance Admin");
+         roles.add("KYC Admin");
          if(securityHelper.hasRole(request, roles))
          {
             final String authorizationHeader = request.getHeader("Authorization");
@@ -156,7 +160,7 @@ public class AnomalyTypeController
       try
       {
          List<String> roles = new ArrayList<String>();
-         roles.add("Compliance Admin");
+         roles.add("KYC Admin");
          if(securityHelper.hasRole(request, roles)) {
             anomalyTypeService.softDeleteAnomalyType(id);
             return ResponseEntity.ok("AnomalyType " + id + " marked as deleted");
