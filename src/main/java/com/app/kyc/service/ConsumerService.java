@@ -72,4 +72,8 @@ public interface ConsumerService
     // List<Object[]> getConsumersPerOperatorBreakdown();*/
    
    List<Object[]> getConsumersbyServiceProvider(Collection<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd);
+
+   Map<String, Object> getConsumersByServiceProvider(Long spId);
+
+
 }

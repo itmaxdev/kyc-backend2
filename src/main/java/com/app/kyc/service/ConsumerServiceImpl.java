@@ -2378,7 +2378,8 @@ System.out.println("Get all flagged ");
     public List<Object[]> getConsumersbyServiceProvider (Collection<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd){
        return consumerRepository.getConsumersByServiceProvider(serviceProviderIds, createdOnStart, createdOnEnd);
     }
-    
+
+
     public List<AnomalyStatus> setStatusList(AnomalyStatus status){
     	List<AnomalyStatus>  anomalyStatus = new ArrayList<AnomalyStatus>();
     	if (status != null) {
@@ -2908,5 +2909,26 @@ System.out.println("Get all flagged ");
         tracking.setCreatedOn(new Date());
         return tracking;
     }
+
+
+    @Override
+    public Map<String, Object> getConsumersByServiceProvider(Long spId) {
+        // Fetch all consumers for the given service provider
+        List<Consumer> consumers = consumerRepository.findByServiceProviderId(spId);
+
+        // Map entity to DTO
+        List<ConsumerDto> consumerDtos = consumers.stream()
+                .map(ConsumerDto::new)
+                .collect(Collectors.toList());
+
+        // Prepare structured response
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("serviceProviderId", spId);
+        response.put("totalConsumers", consumerDtos.size());
+        response.put("consumers", consumerDtos);
+
+        return response;
+    }
+
 
 }

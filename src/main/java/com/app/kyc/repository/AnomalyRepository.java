@@ -190,4 +190,8 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
 
     long countByStatusNotIn(List<AnomalyStatus> statuses);
 
+
+	@Query("SELECT a FROM Anomaly a WHERE a.consumersService.service.serviceProvider.id = :spId")
+	List<Anomaly> findByServiceProviderId(@Param("spId") Long spId);
+
 }

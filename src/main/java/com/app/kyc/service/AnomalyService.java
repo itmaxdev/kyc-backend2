@@ -67,4 +67,7 @@ public interface AnomalyService
    List<Object[]> countByAnomalyType();
    
    List<Object[]> getResolutionMetrics(Long industryId, List<Long> serviceProviderIds, Date startDate, Date endDate);
+
+   Map<String, Object> getAnomaliesByServiceProvider(Long spId);
+
 }

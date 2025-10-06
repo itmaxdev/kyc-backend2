@@ -1,15 +1,15 @@
 package com.app.kyc.web.controller;
 
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import javax.servlet.http.HttpServletRequest;
 
 import com.app.kyc.repository.ServiceProviderRepository;
 import com.app.kyc.repository.ServiceRepository;
+import com.app.kyc.service.AnomalyService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -41,6 +41,8 @@ public class ServiceProviderController {
    @Autowired
    UserService userService;
 
+   @Autowired
+   AnomalyService anomalyService;
    @Autowired
    ServiceProviderRepository serviceProviderRepository;
 
@@ -324,5 +326,26 @@ public class ServiceProviderController {
          return ResponseEntity.ok(e.getMessage());
       }
    }
+
+   @GetMapping("/{spId}/anomalies")
+   public ResponseEntity<?> getAnomaliesByServiceProvider(HttpServletRequest request, @PathVariable Long spId) {
+      try {
+         List<String> allowedRoles = Arrays.asList("Compliance Admin");
+
+         if (securityHelper.hasRole(request, allowedRoles)) {
+            Map<String, Object> response = anomalyService.getAnomaliesByServiceProvider(spId);
+            return ResponseEntity.ok(response);
+         } else {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Collections.singletonMap("message", "Not authorized"));
+         }
+
+      } catch (Exception e) {
+         // log.error("Error fetching anomalies for service provider {}: {}", spId, e.getMessage());
+         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                 .body(Collections.singletonMap("error", "Failed to fetch anomalies: " + e.getMessage()));
+      }
+   }
+
 
 }

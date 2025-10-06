@@ -1,9 +1,7 @@
 package com.app.kyc.web.controller;
 
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 import javax.persistence.EntityManager;
 import javax.servlet.http.HttpServletRequest;
@@ -354,4 +352,26 @@ public class ConsumerController
                     .body("Failed to delete data: " + e.getMessage());
          }
       }
+
+
+   @GetMapping("/{spId}/consumers")
+   public ResponseEntity<?> getConsumersByServiceProvider(HttpServletRequest request, @PathVariable Long spId) {
+      try {
+         List<String> allowedRoles = Arrays.asList("Compliance Admin");
+
+         if (securityHelper.hasRole(request, allowedRoles)) {
+            Map<String, Object> response = consumerService.getConsumersByServiceProvider(spId);
+            return ResponseEntity.ok(response);
+         } else {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Collections.singletonMap("message", "Not authorized"));
+         }
+
+      } catch (Exception e) {
+         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                 .body(Collections.singletonMap("error", "Failed to fetch consumers: " + e.getMessage()));
+      }
+   }
+
+
 }

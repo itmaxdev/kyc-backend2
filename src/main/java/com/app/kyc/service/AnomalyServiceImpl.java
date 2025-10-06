@@ -5,8 +5,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 
 import com.app.kyc.entity.Anomaly;
@@ -547,4 +546,21 @@ public class AnomalyServiceImpl implements AnomalyService
 			return "QUARTER"; // long ranges → quarterly
 		}
 	}
+
+   public Map<String, Object> getAnomaliesByServiceProvider(Long spId) {
+      List<Anomaly> anomalies = anomalyRepository.findByServiceProviderId(spId);
+
+      List<AnomlyDto> anomalyDtos = anomalies.stream()
+              .map(AnomlyDto::new)
+              .collect(Collectors.toList());
+
+      Map<String, Object> response = new LinkedHashMap<>();
+      response.put("serviceProviderId", spId);
+      response.put("totalAnomalies", anomalyDtos.size());
+      response.put("anomalies", anomalyDtos);
+
+      return response;
+   }
+
+
 }
