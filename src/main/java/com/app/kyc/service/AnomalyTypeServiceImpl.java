@@ -76,7 +76,6 @@ public class AnomalyTypeServiceImpl implements AnomalyTypeService
       switch (name) {
          case "Incomplete Data":
          case "Duplicate Records":
-            return "Serious";
          case "Exceeding Threshold":
             return "Critical";
          default:
