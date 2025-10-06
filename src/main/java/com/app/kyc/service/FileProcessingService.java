@@ -1290,7 +1290,8 @@ public class FileProcessingService {
                 log.info("Starting checkConsumer for operator {}", sp.getName());
                 // Scope reduction: only that operator’s consumers
                 List<Consumer> list = consumerRepository.findAllByServiceProvider_Id(spId);
-                User user = userService.getUserByEmail("system@test.com");
+                //User user = userService.getUserByEmail("system@test.com");
+                User user = userService.getUserByEmail("cadmin@test.com");
                 consumerServiceImpl.checkConsumer(list, user, sp);
                 log.info("Finished checkConsumer for operator {}", sp.getName());
             } catch (Exception ex) {
