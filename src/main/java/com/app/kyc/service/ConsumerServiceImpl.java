@@ -186,12 +186,14 @@ public class ConsumerServiceImpl implements ConsumerService {
                         }
                     }
 
-                    history.add(new ConsumerHistoryDto(consistencyStatus, note, inconsistentOn, consistentOn, formattedId));
+                    String vendorCode = c.getVendorCode();
+                    System.out.println("Vendor code is: " + vendorCode);
+                    history.add(new ConsumerHistoryDto(consistencyStatus, note, inconsistentOn, consistentOn, vendorCode));
                 }
             }
 
             // ✅ Get vendorCode directly from consumer table (no more recalculation)
-            String vendorCode = c.getVendorCode();
+           String vendorCode = c.getVendorCode();
             System.out.println("Vendor code is: " + vendorCode);
 
             dto.setConsumerHistory(history);
