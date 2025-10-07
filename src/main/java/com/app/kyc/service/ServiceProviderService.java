@@ -47,4 +47,5 @@ public interface ServiceProviderService
 
    List<DashboardObjectInterface> findColorsByServiceProviderIds(List<Long> serviceProviderIds);
 
+   ServiceProvider createServiceProvider(ServiceProvider sp);
 }

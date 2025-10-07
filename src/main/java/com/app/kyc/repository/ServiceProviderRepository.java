@@ -42,4 +42,5 @@ public interface ServiceProviderRepository extends JpaRepository<ServiceProvider
    Page<ServiceProvider> findAllByStatus(ServiceProviderStatus status, Pageable pageabl);  // only active ones
 
 
+   boolean existsByNameIgnoreCase(String name);
 }

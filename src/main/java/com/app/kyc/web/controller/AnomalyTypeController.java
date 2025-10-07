@@ -9,6 +9,7 @@ import javax.servlet.http.HttpServletRequest;
 
 import com.app.kyc.model.AnomalyTypeDto;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -178,6 +179,31 @@ public class AnomalyTypeController
    @GetMapping
    public ResponseEntity<List<AnomalyType>> getAllActive() {
       return ResponseEntity.ok(anomalyTypeService.getAllActiveAnomalyTypes());
+   }
+
+
+   @PostMapping("/createAnomalyType")
+   public ResponseEntity<?> createAnomalyType(@RequestBody AnomalyType anomalyType,
+                                              HttpServletRequest request) {
+      try {
+         List<String> roles = new ArrayList<>();
+         roles.add("KYC Admin");
+
+         if (securityHelper.hasRole(request, roles)) {
+            AnomalyType saved = anomalyTypeService.createAnomalyType(anomalyType);
+            return new ResponseEntity<>(saved, HttpStatus.CREATED);
+         } else {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("Access denied: You do not have permission to create anomaly types.");
+         }
+
+      } catch (RuntimeException ex) {
+         return ResponseEntity.badRequest().body(ex.getMessage());
+      } catch (Exception e) {
+         // log.error("Unexpected error while creating anomaly type", e);
+         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                 .body("An unexpected error occurred: " + e.getMessage());
+      }
    }
 
 }

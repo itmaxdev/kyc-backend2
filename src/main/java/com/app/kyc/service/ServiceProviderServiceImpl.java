@@ -286,4 +286,15 @@ public class ServiceProviderServiceImpl implements ServiceProviderService
       return serviceProvidersWithCount;
    }
 
+
+   public ServiceProvider createServiceProvider(ServiceProvider sp) {
+
+      if (serviceProviderRepository.existsByNameIgnoreCase(sp.getName())) {
+         throw new RuntimeException("Service Provider with name '" + sp.getName() + "' already exists!");
+      }
+
+      sp.setCreatedOn(new Date());
+      sp.setDeleted(false);
+      return serviceProviderRepository.save(sp);
+   }
 }

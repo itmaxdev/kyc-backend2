@@ -37,5 +37,5 @@ public interface AnomalyTypeService
 
     public List<AnomalyType> getAllActiveAnomalyTypes();
 
-
+    AnomalyType createAnomalyType(AnomalyType anomalyType);
 }

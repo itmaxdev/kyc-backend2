@@ -32,4 +32,6 @@ public interface AnomalyTypeRepository extends JpaRepository<AnomalyType, Long>
 
    List<AnomalyType> findByDeletedFalse();
 
+   boolean existsByNameIgnoreCase(String name);
+
 }

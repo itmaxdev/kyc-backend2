@@ -348,4 +348,27 @@ public class ServiceProviderController {
    }
 
 
+   @PostMapping("/createServiceProvider")
+   public ResponseEntity<?> createServiceProvider(@RequestBody ServiceProvider sp,
+                                                  HttpServletRequest request) {
+      try {
+         List<String> roles = new ArrayList<>();
+         roles.add("KYC Admin");
+
+         if (securityHelper.hasRole(request, roles)) {
+            ServiceProvider saved = serviceProviderService.createServiceProvider(sp);
+            return new ResponseEntity<>(saved, HttpStatus.CREATED);
+         } else {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body("Access denied: You do not have permission to create Service Providers.");
+         }
+
+      } catch (RuntimeException ex) {
+         return ResponseEntity.badRequest().body(ex.getMessage());
+      } catch (Exception e) {
+         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                 .body("Unexpected error: " + e.getMessage());
+      }
+   }
+
 }

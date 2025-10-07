@@ -267,4 +267,16 @@ public class AnomalyTypeServiceImpl implements AnomalyTypeService
    public List<AnomalyType> getAllActiveAnomalyTypes() {
       return anomalyTypeRepository.findByDeletedFalse();
    }
+
+   public AnomalyType createAnomalyType(AnomalyType anomalyType) {
+      // Check if name already exists (optional but safe)
+      if (anomalyTypeRepository.existsByNameIgnoreCase(anomalyType.getName())) {
+         throw new RuntimeException("Anomaly Type with the same name already exists!");
+      }
+
+      anomalyType.setCreatedOn(new Date());
+      anomalyType.setDeleted(false);
+
+      return anomalyTypeRepository.save(anomalyType);
+   }
 }
