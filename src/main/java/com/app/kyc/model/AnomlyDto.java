@@ -28,6 +28,9 @@ public class AnomlyDto {
 
     private AnomalyStatus status;
     private AnomalyType anomalyType;
+
+    @Getter @Setter
+    private String anomalyFormattedId;
     List<ConsumerDto> consumers = new ArrayList<ConsumerDto>();
 
     public AnomlyDto(Long id, String note, AnomalyStatus status, AnomalyType anomalyType, List<Consumer> consumers, String updateBy, Date updatedOn, Date reportedOn) {
@@ -77,6 +80,7 @@ public class AnomlyDto {
         this.reportedBy = anomaly.getReportedBy();
         this.updatedOn = anomaly.getUpdatedOn();
         this.updateBy = anomaly.getUpdateBy();
+        this.anomalyFormattedId = anomaly.getAnomalyFormattedId();
         this.formattedId = anomaly.getConsumers().get(0).getServiceProvider().getName() + "/" + new SimpleDateFormat("dd-MM-yyyy").format(anomaly.getReportedOn()) + "/" + this.id;
         List<Consumer> consumers = anomaly.getConsumers();
         if (consumers != null && consumers.size() > 0) {

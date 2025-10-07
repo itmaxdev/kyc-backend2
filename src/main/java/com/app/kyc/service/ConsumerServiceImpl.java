@@ -795,7 +795,13 @@ System.out.println("Get all flagged ");
                                 pagination.getFilter().getAnomalyType(), searchText);
 
                 pageAnomaly = anomalyData.stream()
-                        .map(a -> new AnomlyDto(a, 0))
+                        .map(a -> {
+                            AnomlyDto d = new AnomlyDto(a, 0);
+                            String fid = a.getAnomalyFormattedId();
+                            if (fid == null || fid.isBlank()) fid = a.getFormattedId();
+                            if (fid != null && !fid.isBlank()) d.setFormattedId(fid);
+                            return d;
+                        })
                         .collect(Collectors.toList());
                 totalAnomaliesCount = anomalyData.getTotalElements();
 
@@ -809,7 +815,13 @@ System.out.println("Get all flagged ");
                                 pagination.getFilter().getAnomalyType(), resolutionStatus, searchText);
 
                 pageAnomaly = anomalyData.stream()
-                        .map(AnomlyDto::new)
+                        .map(a -> {
+                            AnomlyDto d = new AnomlyDto(a);
+                            String fid = a.getAnomalyFormattedId();
+                            if (fid == null || fid.isBlank()) fid = a.getFormattedId();
+                            if (fid != null && !fid.isBlank()) d.setFormattedId(fid);
+                            return d;
+                        })
                         .collect(Collectors.toList());
                 totalAnomaliesCount = anomalyData.getTotalElements();
             }
@@ -837,7 +849,13 @@ System.out.println("Get all flagged ");
                                 resolutionStatus, searchText);
 
                 pageAnomaly = anomalyData.stream()
-                        .map(a -> new AnomlyDto(a, 0))
+                        .map(a -> {
+                            AnomlyDto d = new AnomlyDto(a, 0);
+                            String fid = a.getAnomalyFormattedId();
+                            if (fid == null || fid.isBlank()) fid = a.getFormattedId();
+                            if (fid != null && !fid.isBlank()) d.setFormattedId(fid);
+                            return d;
+                        })
                         .collect(Collectors.toList());
                 totalAnomaliesCount = anomalyData.getTotalElements();
 
@@ -854,7 +872,13 @@ System.out.println("Get all flagged ");
                                 resolutionStatus, searchText);
 
                 pageAnomaly = anomalyData.stream()
-                        .map(AnomlyDto::new)
+                        .map(a -> {
+                            AnomlyDto d = new AnomlyDto(a);
+                            String fid = a.getAnomalyFormattedId();
+                            if (fid == null || fid.isBlank()) fid = a.getFormattedId();
+                            if (fid != null && !fid.isBlank()) d.setFormattedId(fid);
+                            return d;
+                        })
                         .collect(Collectors.toList());
                 totalAnomaliesCount = anomalyData.getTotalElements();
             }
@@ -933,29 +957,7 @@ System.out.println("Get all flagged ");
             }
         }
 
-        // --------- RENUMBER FORMATTED IDS PER VENDOR/DAY (using consumer.vendorCode) ---------
-        Map<String, AtomicInteger> vendorCounters = new HashMap<>();
-        SimpleDateFormat df = new SimpleDateFormat("ddMMyyyy");
-
-        for (AnomlyDto dto : pageAnomaly) {
-            if (dto.getReportedOn() == null) continue;
-
-            // ✅ Use the vendorCode from the first consumer in the anomaly
-            String vendor = "UNKNOWN";
-            if (dto.getConsumers() != null && !dto.getConsumers().isEmpty()) {
-                vendor = dto.getConsumers().get(0).getVendorCode() != null
-                        ? dto.getConsumers().get(0).getVendorCode()
-                        : "UNKNOWN";
-            }
-
-            String date = df.format(dto.getReportedOn());
-            String key  = vendor + "-" + date;
-
-            vendorCounters.putIfAbsent(key, new AtomicInteger(1));
-            int seq = vendorCounters.get(key).getAndIncrement();
-
-            dto.setFormattedId(vendor);
-        }
+        // ✅ Removed: vendor/day re-numbering. We now strictly use DB value (anomaly_formatted_id).
 
         Map<String, Object> anomaliesWithCount = new HashMap<>();
         anomaliesWithCount.put("data", pageAnomaly);
