@@ -32,6 +32,7 @@ import com.app.kyc.response.AnomalyHasSubscriptionsResponseDTO;
 import com.app.kyc.util.PaginationUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AnomalyServiceImpl implements AnomalyService
@@ -327,27 +328,41 @@ public class AnomalyServiceImpl implements AnomalyService
       return new AnomalyDetailsResponseDTO(anomlyDto, anomalyTracking);
    }*/
 
-   @Override
+
+   // Add this helper inside the same service class
+   private static String maskLongNumbers(String text) {
+      if (text == null || text.isBlank()) return text;
+      // Match standalone runs of 6+ digits; keep last 5
+      java.util.regex.Pattern p = java.util.regex.Pattern.compile("(?<!\\d)(\\d{6,})(?!\\d)");
+      java.util.regex.Matcher m = p.matcher(text);
+      StringBuffer sb = new StringBuffer();
+      while (m.find()) {
+         String digits = m.group(1);
+         int keep = Math.min(5, digits.length());
+         String repl = "*".repeat(digits.length() - keep) + digits.substring(digits.length() - keep);
+         m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(repl));
+      }
+      m.appendTail(sb);
+      return sb.toString();
+   }
+
+
+   @Transactional(readOnly = true)
    public AnomalyDetailsResponseDTO getAnomalyByIdWithDetails(Long id) {
-      // ✅ Safely fetch anomaly
       Anomaly anomaly = anomalyRepository.findById(id)
               .orElseThrow(() -> new RuntimeException("Anomaly not found with id: " + id));
 
-      AnomlyDto anomlyDto;
-      if (anomaly.getStatus().getCode() == 6) {
-         anomlyDto = new AnomlyDto(anomaly, 0);
-      } else {
-         anomlyDto = new AnomlyDto(anomaly);
-      }
+      AnomlyDto anomlyDto = (anomaly.getStatus().getCode() == 6)
+              ? new AnomlyDto(anomaly, 0)
+              : new AnomlyDto(anomaly);
 
-      // ✅ Fetch anomaly tracking (deduplicate by status)
+      // ---- Tracking (mask only the note text) ----
       List<AnomalyTrackingDto> anomalyTracking =
-              anomalyTrackingRepository.findDistinctByAnomalyIdOrderByCreatedOnDesc(id)
-                      .stream()
+              anomalyTrackingRepository.findDistinctByAnomalyIdOrderByCreatedOnDesc(id).stream()
                       .map(c -> {
                          String finalNote;
                          if (c.getNote() != null && !c.getNote().isBlank()) {
-                            finalNote = c.getNote();
+                            finalNote = maskNoteByType(c.getNote());          // << apply rule-based masking
                          } else if (AnomalyStatus.REPORTED == c.getStatus()) {
                             finalNote = "Anomaly flagged by " + c.getUpdateBy();
                          } else if (AnomalyStatus.RESOLVED_PARTIALLY == c.getStatus()) {
@@ -361,7 +376,6 @@ public class AnomalyServiceImpl implements AnomalyService
                          Anomaly anomalyEntity = c.getAnomaly();
                          AnomlyDto anomalyDto = new AnomlyDto(anomalyEntity);
 
-                         // ✅ Safe vendorCode check
                          if (anomalyDto.getConsumers() != null && !anomalyDto.getConsumers().isEmpty()) {
                             String vendorCode = anomalyDto.getConsumers().get(0).getVendorCode();
                             if (vendorCode != null && !vendorCode.isBlank()) {
@@ -375,13 +389,12 @@ public class AnomalyServiceImpl implements AnomalyService
                                  c.getId(),
                                  c.getCreatedOn(),
                                  c.getStatus(),
-                                 finalNote,
+                                 finalNote,                  // masked (per type) if original note present
                                  anomalyEntity,
                                  c.getUpdateBy(),
                                  c.getUpdateOn()
                          );
                       })
-                      // 🔹 Deduplicate by status
                       .collect(Collectors.collectingAndThen(
                               Collectors.toMap(
                                       AnomalyTrackingDto::getStatus,
@@ -391,83 +404,100 @@ public class AnomalyServiceImpl implements AnomalyService
                               ),
                               m -> {
                                  List<AnomalyTrackingDto> list = new ArrayList<>(m.values());
-
                                  boolean hasFully = list.stream().anyMatch(d -> d.getStatus() == AnomalyStatus.RESOLVED_FULLY);
                                  boolean hasPartially = list.stream().anyMatch(d -> d.getStatus() == AnomalyStatus.RESOLVED_PARTIALLY);
-
                                  if (hasFully) {
                                     list.removeIf(d -> d.getStatus() == AnomalyStatus.RESOLVED_PARTIALLY);
                                  } else if (hasPartially) {
                                     list.removeIf(d -> d.getStatus() == AnomalyStatus.RESOLVED_FULLY);
                                  }
-
                                  return list;
                               }
                       ));
 
-      // ✅ Fetch consumers linked to anomaly
-      List<ConsumerDto> consumerDtos = consumerAnomalyRepository.findByAnomaly_Id(id)
-              .stream()
+      // ---- Consumers (left unchanged per your request) ----
+      List<ConsumerDto> consumerDtos = consumerAnomalyRepository.findByAnomaly_Id(id).stream()
               .collect(Collectors.toMap(
                       ca -> ca.getConsumer().getId(),
                       ca -> {
                          ConsumerDto dto = new ConsumerDto(ca.getConsumer());
-
                          if (Objects.nonNull(ca.getNotes())) {
-                            dto.setNotes(ca.getNotes());
+                            dto.setNotes(ca.getNotes());      // no masking here now
                          }
-
                          String consistentOn = ca.getConsumer().getConsistentOn();
                          dto.setConsistentOn((consistentOn == null || consistentOn.isBlank()) ? "N/A" : consistentOn);
-
                          return dto;
                       },
                       (existing, duplicate) -> existing,
                       LinkedHashMap::new
               ))
-              .values()
-              .stream()
+              .values().stream()
               .sorted(Comparator.comparing(ConsumerDto::getIsConsistent))
               .collect(Collectors.toList());
 
       long consistentCount = consumerDtos.stream()
               .filter(c -> c.getConsistentOn() != null && !"N/A".equalsIgnoreCase(c.getConsistentOn()))
               .count();
-
       long inconsistentCount = consumerDtos.size() - consistentCount;
 
-      // ✅ Override formattedId safely
+      // ---- formattedId override (unchanged logic) ----
       if (!consumerDtos.isEmpty()) {
-         String vendorCode = consumerDtos.get(0).getVendorCode();
-         if (vendorCode != null && !vendorCode.isBlank()) {
-            anomlyDto.setFormattedId(vendorCode);
-         } else {
-            anomlyDto.setFormattedId("ANOMALY_" + anomlyDto.getId());
-         }
+         String vendorCode = anomaly.getAnomalyFormattedId();
+         anomlyDto.setFormattedId(
+                 (vendorCode != null && !vendorCode.isBlank()) ? vendorCode : "ANOMALY_" + anomlyDto.getId()
+         );
       } else {
          anomlyDto.setFormattedId("ANOMALY_" + anomlyDto.getId());
       }
-
       anomlyDto.setConsumers(consumerDtos);
 
-      // ✅ Enrich tracking data with consumer notes (if anomaly type = 1)
-      anomalyTracking.forEach(tracking -> {
-         if (tracking.getAnomlyDto() != null && tracking.getAnomlyDto().getAnomalyType() != null
-                 && tracking.getAnomlyDto().getAnomalyType().getId() == 1) {
-            anomlyDto.getConsumers().forEach(consumer -> {
-               List<ConsumerAnomaly> temp = consumerAnomalyRepository
-                       .findByAnomaly_IdAndConsumer_Id(id, consumer.getId());
-               temp.forEach(t -> {
-                  if (Objects.nonNull(t.getNotes())) {
-                     consumer.setNotes(t.getNotes());
-                  }
-               });
-            });
-         }
-      });
+      // ---- If DTO carries a note, mask per type ----
+      if (anomlyDto.getNote() != null && !anomlyDto.getNote().isBlank()) {
+         anomlyDto.setNote(maskNoteByType(anomlyDto.getNote()));   // << apply rule-based masking
+      }
 
       return new AnomalyDetailsResponseDTO(anomlyDto, anomalyTracking,
               (int) consistentCount, (int) inconsistentCount);
+   }
+
+
+   // Add inside the same service class
+   private static String maskNoteByType(String note) {
+      if (note == null || note.isBlank()) return note;
+
+      String trimmed = note.trim();
+
+      // Helper to replace all digit runs >= 6 in the given text using a transformer
+      java.util.function.Function<String, String> maskAllDigitRuns =
+              (text) -> {
+                 java.util.regex.Pattern p = java.util.regex.Pattern.compile("(?<!\\d)(\\d{6,})(?!\\d)");
+                 java.util.regex.Matcher m = p.matcher(text);
+                 StringBuffer sb = new StringBuffer();
+                 while (m.find()) {
+                    String digits = m.group(1);
+                    String repl;
+                    if (trimmed.startsWith("Exceeding Anomaly")) {
+                       // Rule 1: keep first 7 digits, then ****
+                       int keep = Math.min(7, digits.length());
+                       repl = digits.substring(0, keep) + "****";
+                    } else if (trimmed.startsWith("Duplicate Anomaly")) {
+                       // Rule 2: keep last 5 digits, mask the rest
+                       int keep = Math.min(5, digits.length());
+                       repl = "*".repeat(Math.max(0, digits.length() - keep)) + digits.substring(digits.length() - keep);
+                    } else {
+                       // No masking for other note types
+                       repl = digits;
+                    }
+                    m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(repl));
+                 }
+                 m.appendTail(sb);
+                 return sb.toString();
+              };
+
+      if (trimmed.startsWith("Exceeding Anomaly") || trimmed.startsWith("Duplicate Anomaly")) {
+         return maskAllDigitRuns.apply(note);
+      }
+      return note; // leave as is for other note types
    }
 
 
