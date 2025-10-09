@@ -186,7 +186,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                         }
                     }
 
-                    String vendorCode = c.getVendorCode();
+                    String vendorCode =  c.getAnomalies().get(0).getAnomalyFormattedId();
                     System.out.println("Vendor code is: " + vendorCode);
                     history.add(new ConsumerHistoryDto(consistencyStatus, note, inconsistentOn, consistentOn, vendorCode));
                 }

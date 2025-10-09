@@ -476,13 +476,13 @@ public class AnomalyServiceImpl implements AnomalyService
                  while (m.find()) {
                     String digits = m.group(1);
                     String repl;
-                    if (trimmed.startsWith("Exceeding Anomaly")) {
+                    if (trimmed.startsWith("Duplicate Anomaly")) {
                        // Rule 1: keep first 7 digits, then ****
-                       int keep = Math.min(7, digits.length());
-                       repl = digits.substring(0, keep) + "****";
-                    } else if (trimmed.startsWith("Duplicate Anomaly")) {
-                       // Rule 2: keep last 5 digits, mask the rest
                        int keep = Math.min(5, digits.length());
+                       repl = digits.substring(0, keep) + "****";
+                    } else if (trimmed.startsWith("Exceeding Anomaly")) {
+                       // Rule 2: keep last 5 digits, mask the rest
+                       int keep = Math.min(4, digits.length());
                        repl = "*".repeat(Math.max(0, digits.length() - keep)) + digits.substring(digits.length() - keep);
                     } else {
                        // No masking for other note types
