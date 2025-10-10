@@ -125,84 +125,142 @@ public class ConsumerServiceImpl implements ConsumerService {
 
     @Override
     public ConsumerDto getConsumerById(Long id) {
-        Optional<Consumer> consumer = consumerRepository.findByIdAndConsumerStatusIn(id, Arrays.asList(0, 1));
+        try {
+            Optional<Consumer> consumerOpt =
+                    consumerRepository.findByIdAndConsumerStatusIn(id, Arrays.asList(0, 1));
 
-        if (!consumer.isPresent()) {
-            consumer = consumerRepository.findById(id);
-        }
+            if (!consumerOpt.isPresent()) {
+                consumerOpt = consumerRepository.findById(id);
+            }
 
-        return consumer.map(c -> {
-            // existing anomalies
-            ConsumerDto dto = new ConsumerDto(c, c.getAnomalies());
+            if (!consumerOpt.isPresent()) {
+                log.warn("getConsumerById: no consumer found for id={}", id);
+                return null;
+            }
+
+            final Consumer c = consumerOpt.get();
+            final List<Anomaly> anomalies = Optional.ofNullable(c.getAnomalies())
+                    .orElse(Collections.emptyList());
+            final Optional<Anomaly> firstAnomalyOpt = anomalies.stream().findFirst();
+
+            ConsumerDto dto = new ConsumerDto(c, anomalies);
 
             List<ConsumerHistoryDto> history = new ArrayList<>();
             List<ConsumerTracking> trackings = new ArrayList<>();
 
-            ConsumerTracking latestConsistent =
-                    consumerTrackingRepository.findFirstByConsumerIdAndIsConsistentTrueOrderByCreatedOnDesc(c.getId());
+            try {
+                ConsumerTracking latestConsistent =
+                        consumerTrackingRepository.findFirstByConsumerIdAndIsConsistentTrueOrderByCreatedOnDesc(c.getId());
+                ConsumerTracking latestInconsistent =
+                        consumerTrackingRepository.findFirstByConsumerIdAndIsConsistentFalseOrderByCreatedOnDesc(c.getId());
+                if (latestConsistent != null)   trackings.add(latestConsistent);
+                if (latestInconsistent != null) trackings.add(latestInconsistent);
+            } catch (Exception e) {
+                log.error("Failed fetching trackings for consumer id={}", c.getId(), e);
+            }
 
-            ConsumerTracking latestInconsistent =
-                    consumerTrackingRepository.findFirstByConsumerIdAndIsConsistentFalseOrderByCreatedOnDesc(c.getId());
+            final String safe = "";
+            final String firstName  = Optional.ofNullable(c.getFirstName()).orElse(safe);
+            final String middleName = Optional.ofNullable(c.getMiddleName()).orElse(safe);
+            final String lastName   = Optional.ofNullable(c.getLastName()).orElse(safe);
 
-            trackings.add(latestConsistent);
-            trackings.add(latestInconsistent);
+            String fullName;
+            try {
+                if (!MaskingContext.isMasking()) {
+                    fullName = (MaskingUtil.maskName(firstName) + " "
+                            + MaskingUtil.maskName(middleName) + " "
+                            + MaskingUtil.maskName(lastName)).trim();
+                } else {
+                    fullName = (firstName + " " + middleName + " " + lastName).trim();
+                }
+                fullName = fullName.replaceAll("\\s{2,}", " ");
+            } catch (Exception e) {
+                log.warn("Masking failed for consumer id={}, using raw names", c.getId(), e);
+                fullName = (firstName + " " + middleName + " " + lastName).trim().replaceAll("\\s{2,}", " ");
+            }
+
+            String providerName = Optional.ofNullable(c.getServiceProvider())
+                    .map(ServiceProvider::getName)
+                    .orElse("Unknown");
+            String normalizedProvider = "Unknown";
+            try {
+                normalizedProvider = providerName.substring(0, 1).toUpperCase()
+                        + providerName.substring(1).toLowerCase();
+            } catch (Exception e) {
+                // keep "Unknown"
+            }
+
+            // Build history entries (guard each loop with try/catch so one bad record doesn't break all)
+            final SimpleDateFormat df = new SimpleDateFormat("ddMMyyyy");
 
             for (ConsumerTracking t : trackings) {
-                if (t != null) {
-                    String fullName;
-                    if (!MaskingContext.isMasking()) {
-                        fullName = MaskingUtil.maskName(c.getFirstName()) + " "
-                                + MaskingUtil.maskName(c.getMiddleName()) + " "
-                                + MaskingUtil.maskName(c.getLastName());
-                    } else {
-                        fullName = c.getFirstName() + " " + c.getMiddleName() + " " + c.getLastName();
-                    }
+                try {
+                    boolean isConsistent = Boolean.TRUE.equals(t.getIsConsistent());
+                    String consistencyStatus = isConsistent ? "Consistent" : "Inconsistent";
+
+                    // Treat these as strings; fall back to "N/A"
+                    String inconsistentOn = Optional.ofNullable(c.getCreatedOn())
+                            .filter(s -> !s.isBlank()).orElse("N/A");
+                    String consistentOn = Optional.ofNullable(t.getConsistentOn())
+                            .map(Object::toString).filter(s -> !s.isBlank()).orElse("N/A");
 
                     String note;
-                    String providerName = c.getServiceProvider() != null ? c.getServiceProvider().getName() : "Unknown";
-                    String normalizedProvider = providerName != null
-                            ? providerName.substring(0, 1).toUpperCase() + providerName.substring(1).toLowerCase()
-                            : "Unknown";
+                    String vendorCodeForHistory;
 
-                    String datePart;
-                    Long anomalyId;
-                    String formattedId;
-
-                    String consistencyStatus = t.getIsConsistent() ? "Consistent" : "Inconsistent";
-                    String inconsistentOn = c.getCreatedOn();
-                    String consistentOn = t.getConsistentOn() != null ? t.getConsistentOn() : "N/A";
-
-                    if (c.getAnomalies().isEmpty()) {
-                        formattedId = normalizedProvider;
-                        note = fullName + " belonging to ";
+                    if (!firstAnomalyOpt.isPresent()) {
+                        // No anomalies
+                        note = fullName + " belonging to " + normalizedProvider;
+                        vendorCodeForHistory = Optional.ofNullable(c.getVendorCode()).orElse("");
                     } else {
-                        datePart = new SimpleDateFormat("ddMMyyyy").format(c.getAnomalies().get(0).getReportedOn());
-                        anomalyId = c.getAnomalies().get(0).getId();
-                        formattedId = normalizedProvider + "-" + datePart + "-" + anomalyId;
-                        if (t.getIsConsistent()) {
-                            note = fullName + " previously linked to anomaly ";
-                        } else {
-                            note = fullName + " linked to anomaly ";
+                        Anomaly first = firstAnomalyOpt.get();
+
+                        // datePart: try formatting if it's a java.util.Date; else use toString
+                        String datePart;
+                        try {
+                            Date r = first.getReportedOn();
+                            datePart = (r != null) ? df.format(r) : "NODATE";
+                        } catch (Exception e) {
+                            datePart = Optional.ofNullable(first.getReportedOn())
+                                    .map(Object::toString).orElse("NODATE");
                         }
+
+                        Long anomalyId = Optional.ofNullable(first.getId()).orElse(0L);
+                        String formattedId = normalizedProvider + "-" + datePart + "-" + anomalyId;
+
+                        note = fullName + (isConsistent ? " previously linked to anomaly " : " linked to anomaly ")
+                                + formattedId;
+
+                        vendorCodeForHistory = Optional.ofNullable(first.getAnomalyFormattedId())
+                                .filter(v -> !v.isBlank())
+                                .orElse(Optional.ofNullable(c.getVendorCode()).orElse(""));
                     }
 
-                    String vendorCode =  c.getAnomalies().get(0).getAnomalyFormattedId();
-                    System.out.println("Vendor code is: " + vendorCode);
-                    history.add(new ConsumerHistoryDto(consistencyStatus, note, inconsistentOn, consistentOn, vendorCode));
+                    history.add(new ConsumerHistoryDto(
+                            consistencyStatus, note, inconsistentOn, consistentOn, vendorCodeForHistory));
+
+                } catch (Exception perTrackEx) {
+                    log.error("Error building history for consumer id={}, tracking id={}",
+                            c.getId(),
+                            Optional.ofNullable(t.getId()).orElse(null),
+                            perTrackEx);
                 }
             }
 
-            // ✅ Get vendorCode directly from consumer table (no more recalculation)
-           String vendorCode = c.getVendorCode();
-            System.out.println("Vendor code is: " + vendorCode);
+            // Prefer consumer.vendorCode, else first anomaly’s anomalyFormattedId, else ""
+            String dtoVendorCode = Optional.ofNullable(c.getVendorCode())
+                    .filter(v -> !v.isBlank())
+                    .orElse(firstAnomalyOpt.map(Anomaly::getAnomalyFormattedId).orElse(""));
 
             dto.setConsumerHistory(history);
-
-            // make sure dto exposes vendorCode from entity
-            dto.setVendorCode(vendorCode);
+            dto.setVendorCode(dtoVendorCode);
 
             return dto;
-        }).orElse(null);
+
+        } catch (Exception e) {
+            log.error("getConsumerById failed for id={}", id, e);
+            // choose your fallback: return null or a minimal DTO
+            return null;
+        }
     }
 
 
