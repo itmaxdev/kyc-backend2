@@ -128,11 +128,9 @@ public class ConsumerServiceImpl implements ConsumerService {
         try {
             Optional<Consumer> consumerOpt =
                     consumerRepository.findByIdAndConsumerStatusIn(id, Arrays.asList(0, 1));
-
             if (!consumerOpt.isPresent()) {
                 consumerOpt = consumerRepository.findById(id);
             }
-
             if (!consumerOpt.isPresent()) {
                 log.warn("getConsumerById: no consumer found for id={}", id);
                 return null;
@@ -142,12 +140,26 @@ public class ConsumerServiceImpl implements ConsumerService {
             final List<Anomaly> anomalies = Optional.ofNullable(c.getAnomalies())
                     .orElse(Collections.emptyList());
             final Optional<Anomaly> firstAnomalyOpt = anomalies.stream().findFirst();
+            final AnomalyType primaryAnomalyType = firstAnomalyOpt.map(Anomaly::getAnomalyType).orElse(null);
 
+            // Build DTO (includes anomalies list)
             ConsumerDto dto = new ConsumerDto(c, anomalies);
 
+            // --- Mask notes inside dto.getAnomlies() based on each anomaly's type ---
+            if (dto.getAnomlies() != null) {
+                for (AnomlyDto a : dto.getAnomlies()) {
+                    if (a == null) continue;
+                    String note = a.getNote();
+                    AnomalyType type = a.getAnomalyType(); // may be null
+                    if (note != null && !note.isBlank()) {
+                        a.setNote(maskNoteByType(note, type));
+                    }
+                }
+            }
+
+            // Build history from latest consistent & inconsistent trackings
             List<ConsumerHistoryDto> history = new ArrayList<>();
             List<ConsumerTracking> trackings = new ArrayList<>();
-
             try {
                 ConsumerTracking latestConsistent =
                         consumerTrackingRepository.findFirstByConsumerIdAndIsConsistentTrueOrderByCreatedOnDesc(c.getId());
@@ -186,19 +198,14 @@ public class ConsumerServiceImpl implements ConsumerService {
             try {
                 normalizedProvider = providerName.substring(0, 1).toUpperCase()
                         + providerName.substring(1).toLowerCase();
-            } catch (Exception e) {
-                // keep "Unknown"
-            }
-
-            // Build history entries (guard each loop with try/catch so one bad record doesn't break all)
-            final SimpleDateFormat df = new SimpleDateFormat("ddMMyyyy");
+            } catch (Exception ignore) {}
 
             for (ConsumerTracking t : trackings) {
                 try {
                     boolean isConsistent = Boolean.TRUE.equals(t.getIsConsistent());
                     String consistencyStatus = isConsistent ? "Consistent" : "Inconsistent";
 
-                    // Treat these as strings; fall back to "N/A"
+                    // These are Strings already in your model
                     String inconsistentOn = Optional.ofNullable(c.getCreatedOn())
                             .filter(s -> !s.isBlank()).orElse("N/A");
                     String consistentOn = Optional.ofNullable(t.getConsistentOn())
@@ -208,21 +215,13 @@ public class ConsumerServiceImpl implements ConsumerService {
                     String vendorCodeForHistory;
 
                     if (!firstAnomalyOpt.isPresent()) {
-                        // No anomalies
                         note = fullName + " belonging to " + normalizedProvider;
                         vendorCodeForHistory = Optional.ofNullable(c.getVendorCode()).orElse("");
                     } else {
                         Anomaly first = firstAnomalyOpt.get();
 
-                        // datePart: try formatting if it's a java.util.Date; else use toString
-                        String datePart;
-                        try {
-                            Date r = first.getReportedOn();
-                            datePart = (r != null) ? df.format(r) : "NODATE";
-                        } catch (Exception e) {
-                            datePart = Optional.ofNullable(first.getReportedOn())
-                                    .map(Object::toString).orElse("NODATE");
-                        }
+                        String datePart = Optional.ofNullable(first.getReportedOn())
+                                .map(Object::toString).orElse("NODATE");
 
                         Long anomalyId = Optional.ofNullable(first.getId()).orElse(0L);
                         String formattedId = normalizedProvider + "-" + datePart + "-" + anomalyId;
@@ -234,6 +233,9 @@ public class ConsumerServiceImpl implements ConsumerService {
                                 .filter(v -> !v.isBlank())
                                 .orElse(Optional.ofNullable(c.getVendorCode()).orElse(""));
                     }
+
+                    // Mask constructed note using the primary anomaly type context
+                    note = maskNoteByType(note, primaryAnomalyType);
 
                     history.add(new ConsumerHistoryDto(
                             consistencyStatus, note, inconsistentOn, consistentOn, vendorCodeForHistory));
@@ -258,9 +260,60 @@ public class ConsumerServiceImpl implements ConsumerService {
 
         } catch (Exception e) {
             log.error("getConsumerById failed for id={}", id, e);
-            // choose your fallback: return null or a minimal DTO
             return null;
         }
+    }
+
+    /* ===================== Masking helpers ===================== */
+
+    private static String maskNoteByType(String note, AnomalyType type) {
+        if (note == null || note.isBlank()) return note;
+        String lower = note.toLowerCase();
+
+        boolean isDuplicate = (type != null && type.getName() != null)
+                ? type.getName().toLowerCase().contains("duplicate")
+                : lower.contains("duplicate anomaly");
+
+        boolean isExceeding = (type != null && type.getName() != null)
+                ? type.getName().toLowerCase().contains("exceed")
+                : lower.contains("exceeding anomaly");
+
+        if (isDuplicate) {
+            // e.g., 823850883 -> *****0883
+            return maskDigitsLast4(note);
+        } else if (isExceeding) {
+            // e.g., 21221812426 -> 2122181****
+            return maskDigitsKeepFirst7(note);
+        }
+        return note;
+    }
+
+    // Replace any run of 7–15 digits with ***** + last4  (MSISDN style)
+    private static String maskDigitsLast4(String text) {
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile("(\\d{7,15})");
+        java.util.regex.Matcher m = p.matcher(text);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            String d = m.group(1);
+            String tail = d.substring(Math.max(0, d.length() - 4));
+            m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement("*****" + tail));
+        }
+        m.appendTail(sb);
+        return sb.toString();
+    }
+
+    // Replace any run of 8–20 digits with first7 + ****  (ID number style)
+    private static String maskDigitsKeepFirst7(String text) {
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile("(\\d{8,20})");
+        java.util.regex.Matcher m = p.matcher(text);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            String d = m.group(1);
+            String head = d.substring(0, Math.min(7, d.length()));
+            m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(head + "****"));
+        }
+        m.appendTail(sb);
+        return sb.toString();
     }
 
 
