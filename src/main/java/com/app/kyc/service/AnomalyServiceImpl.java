@@ -349,20 +349,24 @@ public class AnomalyServiceImpl implements AnomalyService
 
    @Transactional(readOnly = true)
    public AnomalyDetailsResponseDTO getAnomalyByIdWithDetails(Long id) {
+      // 1) Load anomaly (fail fast if missing)
       Anomaly anomaly = anomalyRepository.findById(id)
               .orElseThrow(() -> new RuntimeException("Anomaly not found with id: " + id));
 
+      // Build the main DTO (your existing logic)
       AnomlyDto anomlyDto = (anomaly.getStatus().getCode() == 6)
               ? new AnomlyDto(anomaly, 0)
               : new AnomlyDto(anomaly);
 
-      // ---- Tracking (mask only the note text) ----
+      // 2) Tracking — RETURN ALL ROWS (no dedupe by status, no removals)
       List<AnomalyTrackingDto> anomalyTracking =
-              anomalyTrackingRepository.findDistinctByAnomalyIdOrderByCreatedOnDesc(id).stream()
+              anomalyTrackingRepository.findDistinctByAnomalyIdOrderByCreatedOnDesc(id) // if you have a non-DISTINCT method, prefer it
+                      .stream()
                       .map(c -> {
+                         // mask note only if an explicit note exists, else generate a friendly note
                          String finalNote;
                          if (c.getNote() != null && !c.getNote().isBlank()) {
-                            finalNote = maskNoteByType(c.getNote());          // << apply rule-based masking
+                            finalNote = maskNoteByType(c.getNote());
                          } else if (AnomalyStatus.REPORTED == c.getStatus()) {
                             finalNote = "Anomaly flagged by " + c.getUpdateBy();
                          } else if (AnomalyStatus.RESOLVED_PARTIALLY == c.getStatus()) {
@@ -373,56 +377,39 @@ public class AnomalyServiceImpl implements AnomalyService
                             finalNote = "";
                          }
 
+                         // (kept) build a lightweight inner DTO to derive formattedId if consumers exist
                          Anomaly anomalyEntity = c.getAnomaly();
-                         AnomlyDto anomalyDto = new AnomlyDto(anomalyEntity);
-
-                         if (anomalyDto.getConsumers() != null && !anomalyDto.getConsumers().isEmpty()) {
-                            String vendorCode = anomalyDto.getConsumers().get(0).getVendorCode();
+                         AnomlyDto inner = new AnomlyDto(anomalyEntity);
+                         if (inner.getConsumers() != null && !inner.getConsumers().isEmpty()) {
+                            String vendorCode = inner.getConsumers().get(0).getVendorCode();
                             if (vendorCode != null && !vendorCode.isBlank()) {
-                               anomalyDto.setFormattedId(vendorCode);
+                               inner.setFormattedId(vendorCode);
                             }
                          } else {
-                            anomalyDto.setFormattedId("ANOMALY_" + anomalyDto.getId());
+                            inner.setFormattedId("ANOMALY_" + inner.getId());
                          }
 
                          return new AnomalyTrackingDto(
                                  c.getId(),
                                  c.getCreatedOn(),
                                  c.getStatus(),
-                                 finalNote,                  // masked (per type) if original note present
+                                 finalNote,
                                  anomalyEntity,
                                  c.getUpdateBy(),
                                  c.getUpdateOn()
                          );
                       })
-                      .collect(Collectors.collectingAndThen(
-                              Collectors.toMap(
-                                      AnomalyTrackingDto::getStatus,
-                                      dto -> dto,
-                                      (existing, replacement) -> existing,
-                                      LinkedHashMap::new
-                              ),
-                              m -> {
-                                 List<AnomalyTrackingDto> list = new ArrayList<>(m.values());
-                                 boolean hasFully = list.stream().anyMatch(d -> d.getStatus() == AnomalyStatus.RESOLVED_FULLY);
-                                 boolean hasPartially = list.stream().anyMatch(d -> d.getStatus() == AnomalyStatus.RESOLVED_PARTIALLY);
-                                 if (hasFully) {
-                                    list.removeIf(d -> d.getStatus() == AnomalyStatus.RESOLVED_PARTIALLY);
-                                 } else if (hasPartially) {
-                                    list.removeIf(d -> d.getStatus() == AnomalyStatus.RESOLVED_FULLY);
-                                 }
-                                 return list;
-                              }
-                      ));
+                      .collect(Collectors.toList()); // <-- no collectingAndThen / toMap / filtering
 
-      // ---- Consumers (left unchanged per your request) ----
-      List<ConsumerDto> consumerDtos = consumerAnomalyRepository.findByAnomaly_Id(id).stream()
+      // 3) Consumers (unchanged; no masking here per your previous request)
+      List<ConsumerDto> consumerDtos = consumerAnomalyRepository.findByAnomaly_Id(id)
+              .stream()
               .collect(Collectors.toMap(
                       ca -> ca.getConsumer().getId(),
                       ca -> {
                          ConsumerDto dto = new ConsumerDto(ca.getConsumer());
                          if (Objects.nonNull(ca.getNotes())) {
-                            dto.setNotes(ca.getNotes());      // no masking here now
+                            dto.setNotes(ca.getNotes());
                          }
                          String consistentOn = ca.getConsumer().getConsistentOn();
                          dto.setConsistentOn((consistentOn == null || consistentOn.isBlank()) ? "N/A" : consistentOn);
@@ -440,7 +427,7 @@ public class AnomalyServiceImpl implements AnomalyService
               .count();
       long inconsistentCount = consumerDtos.size() - consistentCount;
 
-      // ---- formattedId override (unchanged logic) ----
+      // 4) formattedId override (kept as-is)
       if (!consumerDtos.isEmpty()) {
          String vendorCode = anomaly.getAnomalyFormattedId();
          anomlyDto.setFormattedId(
@@ -451,14 +438,16 @@ public class AnomalyServiceImpl implements AnomalyService
       }
       anomlyDto.setConsumers(consumerDtos);
 
-      // ---- If DTO carries a note, mask per type ----
+      // 5) Mask the main anomaly note if present
       if (anomlyDto.getNote() != null && !anomlyDto.getNote().isBlank()) {
-         anomlyDto.setNote(maskNoteByType(anomlyDto.getNote()));   // << apply rule-based masking
+         anomlyDto.setNote(maskNoteByType(anomlyDto.getNote()));
       }
 
+      // 6) Return
       return new AnomalyDetailsResponseDTO(anomlyDto, anomalyTracking,
               (int) consistentCount, (int) inconsistentCount);
    }
+
 
 
    // Add inside the same service class
