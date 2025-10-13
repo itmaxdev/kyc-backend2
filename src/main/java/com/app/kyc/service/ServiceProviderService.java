@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.app.kyc.model.DashboardObjectInterface;
+import com.app.kyc.model.ServiceProviderPutRequest;
 import org.springframework.data.crossstore.ChangeSetPersister.NotFoundException;
 
 import com.app.kyc.entity.ServiceProvider;
@@ -48,4 +49,6 @@ public interface ServiceProviderService
    List<DashboardObjectInterface> findColorsByServiceProviderIds(List<Long> serviceProviderIds);
 
    ServiceProvider createServiceProvider(ServiceProvider sp);
+
+    Object update(Long id, ServiceProviderPutRequest req);
 }

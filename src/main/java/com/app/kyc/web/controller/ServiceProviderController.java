@@ -5,12 +5,14 @@ import java.util.*;
 
 import javax.servlet.http.HttpServletRequest;
 
+import com.app.kyc.model.ServiceProviderPutRequest;
 import com.app.kyc.repository.ServiceProviderRepository;
 import com.app.kyc.repository.ServiceRepository;
 import com.app.kyc.service.AnomalyService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -371,4 +373,11 @@ public class ServiceProviderController {
       }
    }
 
+
+   @PutMapping("/{id}")
+   public ResponseEntity<?> update(
+           @PathVariable Long id,
+           @Validated @RequestBody ServiceProviderPutRequest req) {
+      return ResponseEntity.ok(serviceProviderService.update(id, req));
+   }
 }

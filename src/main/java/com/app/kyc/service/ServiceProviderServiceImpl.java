@@ -4,9 +4,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import com.app.kyc.entity.*;
-import com.app.kyc.model.AnomlyDto;
-import com.app.kyc.model.ConsumerDto;
-import com.app.kyc.model.DashboardObjectInterface;
+import com.app.kyc.model.*;
 import com.app.kyc.repository.*;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,13 +16,13 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
-import com.app.kyc.model.ServiceProviderStatus;
 import com.app.kyc.response.ServiceProviderAllInfoResponseDTO;
 import com.app.kyc.response.ServiceProviderUserResponseDTO;
 import com.app.kyc.response.ServiceUserResponseDTO;
 import com.app.kyc.util.PaginationUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ServiceProviderServiceImpl implements ServiceProviderService
@@ -296,5 +294,55 @@ public class ServiceProviderServiceImpl implements ServiceProviderService
       sp.setCreatedOn(new Date());
       sp.setDeleted(false);
       return serviceProviderRepository.save(sp);
+   }
+
+
+   @Transactional
+   public ServiceProviderResponse update(Long id, ServiceProviderPutRequest req) {
+      ServiceProvider sp = serviceProviderRepository.findById(id)
+              .orElseThrow(() -> new IllegalArgumentException("ServiceProvider not found: " + id));
+
+      sp.setName(req.name.trim());
+      sp.setAddress(req.address);
+      sp.setCompanyPhoneNumber(req.companyPhoneNumber);
+      sp.setDeleted(Boolean.TRUE.equals(req.deleted));
+      sp.setApprovedBy(req.approvedBy);
+      sp.setColor(req.color);
+
+      sp.setStatus(parseStatus(req.status)); // requires valid value
+
+      /*Industry industry = industryRepo.findById(req.industryId)
+              .orElseThrow(() -> new IllegalArgumentException("Industry not found: " + req.industryId));
+      sp.setIndustry(industry);
+*/
+      return toResponse(serviceProviderRepository.save(sp));
+   }
+
+
+   private ServiceProviderStatus parseStatus(String raw) {
+      if (raw == null) return null;
+      String v = raw.trim().toUpperCase();
+      // Map common inputs → enum (adjust names to match your enum values)
+      if (v.equals("1") || v.equals("ACTIVE"))   return ServiceProviderStatus.Active;
+      if (v.equals("0") || v.equals("INACTIVE")) return ServiceProviderStatus.Inactive;
+      // fallback to enum name
+      return ServiceProviderStatus.valueOf(v);
+   }
+
+   private ServiceProviderResponse toResponse(ServiceProvider sp) {
+      ServiceProviderResponse r = new ServiceProviderResponse();
+      r.id = sp.getId();
+      r.name = sp.getName();
+      r.address = sp.getAddress();
+      r.companyPhoneNumber = sp.getCompanyPhoneNumber();
+      r.deleted = sp.isDeleted();
+      r.status = Optional.ofNullable(sp.getStatus()).map(Enum::name).orElse(null);
+      r.approvedBy = sp.getApprovedBy();
+      r.color = sp.getColor();
+      if (sp.getIndustry() != null) {
+         r.industryId = sp.getIndustry().getId();
+         r.industryName = sp.getIndustry().getName();
+      }
+      return r;
    }
 }

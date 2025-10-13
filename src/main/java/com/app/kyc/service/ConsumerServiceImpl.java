@@ -279,11 +279,11 @@ public class ConsumerServiceImpl implements ConsumerService {
                 : lower.contains("exceeding anomaly");
 
         if (isDuplicate) {
-            // e.g., 823850883 -> *****0883
-            return maskDigitsLast4(note);
-        } else if (isExceeding) {
             // e.g., 21221812426 -> 2122181****
             return maskDigitsKeepFirst7(note);
+        } else if (isExceeding) {
+            // e.g., 823850883 -> *****0883
+            return maskDigitsLast4(note);
         }
         return note;
     }
@@ -304,7 +304,7 @@ public class ConsumerServiceImpl implements ConsumerService {
 
     // Replace any run of 8–20 digits with first7 + ****  (ID number style)
     private static String maskDigitsKeepFirst7(String text) {
-        java.util.regex.Pattern p = java.util.regex.Pattern.compile("(\\d{8,20})");
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile("(\\d{5,20})");
         java.util.regex.Matcher m = p.matcher(text);
         StringBuffer sb = new StringBuffer();
         while (m.find()) {
