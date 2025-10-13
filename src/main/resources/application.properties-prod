@@ -103,7 +103,7 @@ spring.allow.email.notification=true
 
 # SMTP configuration
 spring.mail.host=mail.smtp2go.com
-spring.mail.port=2525              
+spring.mail.port=2525
 spring.mail.username=KYC-dev@itmaxglobal.com
 spring.mail.password=tMaRLvDfSyxp5hJC
 spring.mail.properties.mail.smtp.auth=true
