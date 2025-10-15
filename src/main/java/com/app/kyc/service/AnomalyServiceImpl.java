@@ -1,31 +1,23 @@
 package com.app.kyc.service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import com.app.kyc.entity.*;
+import com.app.kyc.repository.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.*;
 import org.springframework.stereotype.Service;
 
-import com.app.kyc.entity.Anomaly;
-import com.app.kyc.entity.AnomalyTracking;
-import com.app.kyc.entity.Consumer;
-import com.app.kyc.entity.ConsumerAnomaly;
-import com.app.kyc.entity.NotificationJob;
-import com.app.kyc.entity.User;
 import com.app.kyc.model.AnomalyStatus;
 import com.app.kyc.model.AnomalyTrackingDto;
 import com.app.kyc.model.AnomlyDto;
 import com.app.kyc.model.ConsumerDto;
 import com.app.kyc.model.DashboardObjectInterface;
 import com.app.kyc.model.NotificationType;
-// import com.app.kyc.entity.ConsumerService;
-import com.app.kyc.repository.AnomalyRepository;
-import com.app.kyc.repository.AnomalyTrackingRepository;
-import com.app.kyc.repository.ConsumerAnomalyRepository;
-import com.app.kyc.repository.ConsumerRepository;
-import com.app.kyc.repository.NotificationJobRepository;
 import com.app.kyc.request.UpdateAnomalyStatusRequest;
 import com.app.kyc.response.AnomalyDetailsResponseDTO;
 import com.app.kyc.response.AnomalyHasSubscriptionsResponseDTO;
@@ -58,6 +50,9 @@ public class AnomalyServiceImpl implements AnomalyService
    
    @Autowired
    private NotificationJobRepository notificationJobRepository;
+
+   @Autowired
+   private AnomalyStatisticsRepository anomalyStatisticsRepository;
 
 
    public AnomlyDto getAnomalyById(Long id)
@@ -347,8 +342,9 @@ public class AnomalyServiceImpl implements AnomalyService
    }
 
 
-   @Transactional(readOnly = true)
+   @Transactional
    public AnomalyDetailsResponseDTO getAnomalyByIdWithDetails(Long id) {
+
       // 1) Load anomaly (fail fast if missing)
       Anomaly anomaly = anomalyRepository.findById(id)
               .orElseThrow(() -> new RuntimeException("Anomaly not found with id: " + id));
@@ -358,12 +354,11 @@ public class AnomalyServiceImpl implements AnomalyService
               ? new AnomlyDto(anomaly, 0)
               : new AnomlyDto(anomaly);
 
-      // 2) Tracking — RETURN ALL ROWS (no dedupe by status, no removals)
+      // 2) Tracking — RETURN ALL ROWS (no dedupe)
       List<AnomalyTrackingDto> anomalyTracking =
-              anomalyTrackingRepository.findDistinctByAnomalyIdOrderByCreatedOnDesc(id) // if you have a non-DISTINCT method, prefer it
+              anomalyTrackingRepository.findDistinctByAnomalyIdOrderByCreatedOnDesc(id)
                       .stream()
                       .map(c -> {
-                         // mask note only if an explicit note exists, else generate a friendly note
                          String finalNote;
                          if (c.getNote() != null && !c.getNote().isBlank()) {
                             finalNote = maskNoteByType(c.getNote());
@@ -377,14 +372,14 @@ public class AnomalyServiceImpl implements AnomalyService
                             finalNote = "";
                          }
 
-                         // (kept) build a lightweight inner DTO to derive formattedId if consumers exist
                          Anomaly anomalyEntity = c.getAnomaly();
                          AnomlyDto inner = new AnomlyDto(anomalyEntity);
                          if (inner.getConsumers() != null && !inner.getConsumers().isEmpty()) {
                             String vendorCode = inner.getConsumers().get(0).getVendorCode();
-                            if (vendorCode != null && !vendorCode.isBlank()) {
-                               inner.setFormattedId(vendorCode);
-                            }
+                            inner.setFormattedId(
+                                    (vendorCode != null && !vendorCode.isBlank())
+                                            ? vendorCode
+                                            : "ANOMALY_" + inner.getId());
                          } else {
                             inner.setFormattedId("ANOMALY_" + inner.getId());
                          }
@@ -399,9 +394,9 @@ public class AnomalyServiceImpl implements AnomalyService
                                  c.getUpdateOn()
                          );
                       })
-                      .collect(Collectors.toList()); // <-- no collectingAndThen / toMap / filtering
+                      .collect(Collectors.toList());
 
-      // 3) Consumers (unchanged; no masking here per your previous request)
+      // 3) Consumers (unchanged)
       List<ConsumerDto> consumerDtos = consumerAnomalyRepository.findByAnomaly_Id(id)
               .stream()
               .collect(Collectors.toMap(
@@ -412,13 +407,15 @@ public class AnomalyServiceImpl implements AnomalyService
                             dto.setNotes(ca.getNotes());
                          }
                          String consistentOn = ca.getConsumer().getConsistentOn();
-                         dto.setConsistentOn((consistentOn == null || consistentOn.isBlank()) ? "N/A" : consistentOn);
+                         dto.setConsistentOn(
+                                 (consistentOn == null || consistentOn.isBlank()) ? "N/A" : consistentOn);
                          return dto;
                       },
                       (existing, duplicate) -> existing,
                       LinkedHashMap::new
               ))
-              .values().stream()
+              .values()
+              .stream()
               .sorted(Comparator.comparing(ConsumerDto::getIsConsistent))
               .collect(Collectors.toList());
 
@@ -427,26 +424,41 @@ public class AnomalyServiceImpl implements AnomalyService
               .count();
       long inconsistentCount = consumerDtos.size() - consistentCount;
 
-      // 4) formattedId override (kept as-is)
+      // 4) formattedId override
       if (!consumerDtos.isEmpty()) {
          String vendorCode = anomaly.getAnomalyFormattedId();
          anomlyDto.setFormattedId(
-                 (vendorCode != null && !vendorCode.isBlank()) ? vendorCode : "ANOMALY_" + anomlyDto.getId()
-         );
+                 (vendorCode != null && !vendorCode.isBlank()) ? vendorCode : "ANOMALY_" + anomlyDto.getId());
       } else {
          anomlyDto.setFormattedId("ANOMALY_" + anomlyDto.getId());
       }
       anomlyDto.setConsumers(consumerDtos);
 
-      // 5) Mask the main anomaly note if present
+      // 5) Mask main anomaly note if present
       if (anomlyDto.getNote() != null && !anomlyDto.getNote().isBlank()) {
          anomlyDto.setNote(maskNoteByType(anomlyDto.getNote()));
       }
 
-      // 6) Return
-      return new AnomalyDetailsResponseDTO(anomlyDto, anomalyTracking,
-              (int) consistentCount, (int) inconsistentCount);
+      // 6) Build DTO with resolved percentage logic
+      AnomalyDetailsResponseDTO dto = new AnomalyDetailsResponseDTO(
+              anomlyDto,
+              anomalyTracking,
+              (int) consistentCount,
+              (int) inconsistentCount
+      );
+
+      // 7️⃣  Persist snapshot of the percentage into anomaly_statistics
+      AnomalyStatistics stat = new AnomalyStatistics();
+      stat.setAnomalyId(anomaly.getId());
+      stat.setPartiallyResolvedPercentage(
+              BigDecimal.valueOf(dto.getPartiallyResolvedPercentage()).setScale(2, RoundingMode.HALF_UP)
+      );
+      anomalyStatisticsRepository.save(stat);
+
+      // 8) Return final DTO
+      return dto;
    }
+
 
 
 
