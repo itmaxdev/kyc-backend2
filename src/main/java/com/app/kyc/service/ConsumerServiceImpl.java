@@ -6,6 +6,8 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -21,6 +23,8 @@ import javax.persistence.EntityManager;
 import javax.persistence.FlushModeType;
 import javax.persistence.PersistenceContext;
 
+import com.app.kyc.entity.*;
+import com.app.kyc.repository.*;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.Row;
@@ -41,14 +45,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.app.kyc.Masking.MaskingContext;
 import com.app.kyc.Masking.MaskingUtil;
-import com.app.kyc.entity.Anomaly;
-import com.app.kyc.entity.AnomalyTracking;
-import com.app.kyc.entity.AnomalyType;
-import com.app.kyc.entity.Consumer;
-import com.app.kyc.entity.ConsumerAnomaly;
-import com.app.kyc.entity.ConsumerTracking;
-import com.app.kyc.entity.ServiceProvider;
-import com.app.kyc.entity.User;
 import com.app.kyc.model.AnomalyStatus;
 import com.app.kyc.model.AnomlyDto;
 import com.app.kyc.model.ConsumerDto;
@@ -56,14 +52,6 @@ import com.app.kyc.model.ConsumerHistoryDto;
 import com.app.kyc.model.DashboardObjectInterface;
 import com.app.kyc.model.ExceedingConsumers;
 import com.app.kyc.model.Pagination;
-import com.app.kyc.repository.AnomalyRepository;
-import com.app.kyc.repository.AnomalyTrackingRepository;
-import com.app.kyc.repository.AnomalyTypeRepository;
-import com.app.kyc.repository.ConsumerAnomalyRepository;
-import com.app.kyc.repository.ConsumerRepository;
-import com.app.kyc.repository.ConsumerSpecifications;
-import com.app.kyc.repository.ConsumerTrackingRepository;
-import com.app.kyc.repository.ServiceProviderRepository;
 import com.app.kyc.response.ConsumersDetailsResponseDTO;
 import com.app.kyc.response.ConsumersHasSubscriptionsResponseDTO;
 import com.app.kyc.response.FlaggedConsumersListDTO;
@@ -101,6 +89,9 @@ public class ConsumerServiceImpl implements ConsumerService {
 
     @Autowired
     ConsumerServiceService consumerServiceService;
+
+    @Autowired
+    private AnomalyStatisticsRepository anomalyStatisticsRepository;
 
     @Autowired
     private AnomalyTrackingRepository anomalyTrackingRepository;
@@ -1979,8 +1970,56 @@ System.out.println("Get all flagged ");
 
         }
 
+    private void addAnomalyStatics(Long anomalyId) {
+
+        List<ConsumerDto> consumerDtos = consumerAnomalyRepository.findByAnomaly_Id(anomalyId)
+                .stream()
+                .collect(Collectors.toMap(
+                        ca -> ca.getConsumer().getId(),
+                        ca -> {
+                            ConsumerDto dto = new ConsumerDto(ca.getConsumer());
+                            if (Objects.nonNull(ca.getNotes())) dto.setNotes(ca.getNotes());
+                            String consistentOn = ca.getConsumer().getConsistentOn();
+                            dto.setConsistentOn(
+                                    (consistentOn == null || consistentOn.isBlank()) ? "N/A" : consistentOn);
+                            return dto;
+                        },
+                        (existing, duplicate) -> existing,
+                        LinkedHashMap::new
+                ))
+                .values()
+                .stream()
+                .sorted(Comparator.comparing(ConsumerDto::getIsConsistent))
+                .collect(Collectors.toList());
+
+        long consistentCount = consumerDtos.stream()
+                .filter(c -> c.getConsistentOn() != null && !"N/A".equalsIgnoreCase(c.getConsistentOn()))
+                .count();
+        long inconsistentCount = consumerDtos.size() - consistentCount;
+
+        double partiallyResolvedPercentage = 0.0;
+        long totalCount = consistentCount + inconsistentCount;
+
+        if (totalCount > 0) {
+            partiallyResolvedPercentage = BigDecimal.valueOf(consistentCount)
+                    .multiply(BigDecimal.valueOf(100))
+                    .divide(BigDecimal.valueOf(totalCount), 2, RoundingMode.HALF_UP)
+                    .doubleValue();
+        }
+
+        AnomalyStatistics stat = new AnomalyStatistics();
+        stat.setAnomalyId(anomalyId);
+        stat.setPartiallyResolvedPercentage(
+                BigDecimal.valueOf(partiallyResolvedPercentage).setScale(2, RoundingMode.HALF_UP)
+        );
+        anomalyStatisticsRepository.save(stat);
+    }
 
 
+
+    private void recalc() {
+
+    }
 
     // ======== helpers (same assumptions as your code) ========
 
@@ -2805,6 +2844,7 @@ System.out.println("Get all flagged ");
         }
 
         consumerRepository.markConsumersConsistent(0, ids);
+        addAnomalyStatics(anomaly.getId());
         return anomaly;
     }
 
@@ -2865,6 +2905,7 @@ System.out.println("Get all flagged ");
         }
 
         consumerRepository.markConsumersConsistent(0, ids);
+        addAnomalyStatics(anomaly.getId());
         return anomaly;
     }
 

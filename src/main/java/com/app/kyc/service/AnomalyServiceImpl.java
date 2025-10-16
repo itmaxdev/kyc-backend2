@@ -436,8 +436,12 @@ public class AnomalyServiceImpl implements AnomalyService
       }
 
       // ✅ 6) Check if previous snapshot exists (get oldest record)
-      List<AnomalyStatistics> existingStats = anomalyStatisticsRepository
+      /*List<AnomalyStatistics> existingStats = anomalyStatisticsRepository
               .findByAnomalyIdOrderByRecordedOnAsc(id);
+*/
+      List<AnomalyStatistics> existingStats  = anomalyStatisticsRepository.findFirstNonFullyResolvedByAnomalyId(id);
+
+
 
       double percentageToUse;
       if (!existingStats.isEmpty()) {
@@ -447,13 +451,6 @@ public class AnomalyServiceImpl implements AnomalyService
          // Compute and insert a new one
          AnomalyDetailsResponseDTO tempDto = new AnomalyDetailsResponseDTO(
                  anomlyDto, anomalyTracking, (int) consistentCount, (int) inconsistentCount);
-
-         AnomalyStatistics stat = new AnomalyStatistics();
-         stat.setAnomalyId(anomaly.getId());
-         stat.setPartiallyResolvedPercentage(
-                 BigDecimal.valueOf(tempDto.getPartiallyResolvedPercentage()).setScale(2, RoundingMode.HALF_UP)
-         );
-         anomalyStatisticsRepository.save(stat);
          percentageToUse = tempDto.getPartiallyResolvedPercentage();
       }
 
