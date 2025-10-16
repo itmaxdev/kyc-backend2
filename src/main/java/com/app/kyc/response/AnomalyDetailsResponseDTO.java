@@ -6,6 +6,7 @@ import java.util.List;
 
 import com.app.kyc.model.AnomalyTrackingDto;
 import com.app.kyc.model.AnomlyDto;
+import com.app.kyc.model.AnomalyStatus;
 
 public class AnomalyDetailsResponseDTO {
 
@@ -38,21 +39,12 @@ public class AnomalyDetailsResponseDTO {
       this.anomalyTrackingDto = anomalyTrackingDto;
       this.consistentCount = consistentCount;
       this.inconsistentCount = inconsistentCount;
+      this.totalCount = consistentCount + inconsistentCount;
 
-      this.totalCount = consistentCount + inconsistentCount; // total_count
-
-      // resolved_percentage = (resolved_count / total_count) * 100
-      if (this.totalCount > 0) {
-         this.partiallyResolvedPercentage = BigDecimal.valueOf(consistentCount)
-                 .multiply(BigDecimal.valueOf(100))
-                 .divide(BigDecimal.valueOf(this.totalCount), 2, RoundingMode.HALF_UP)
-                 .doubleValue();
-      } else {
-         this.partiallyResolvedPercentage = 0.0;
-      }
+      calculatePercentage();  // ✅ main logic centralized
    }
 
-   // Optional: constructor that accepts a precomputed percentage
+   // Optional: constructor that accepts precomputed percentage
    public AnomalyDetailsResponseDTO(
            AnomlyDto anomalyDto,
            List<AnomalyTrackingDto> anomalyTrackingDto,
@@ -72,27 +64,54 @@ public class AnomalyDetailsResponseDTO {
    public void setAnomalyTrackingDto(List<AnomalyTrackingDto> anomalyTrackingDto) { this.anomalyTrackingDto = anomalyTrackingDto; }
 
    public long getConsistentCount() { return consistentCount; }
-   public void setConsistentCount(long consistentCount) { this.consistentCount = consistentCount; recalc(); }
+   public void setConsistentCount(long consistentCount) {
+      this.consistentCount = consistentCount;
+      recalc();
+   }
 
    public long getInconsistentCount() { return inconsistentCount; }
-   public void setInconsistentCount(long inconsistentCount) { this.inconsistentCount = inconsistentCount; recalc(); }
+   public void setInconsistentCount(long inconsistentCount) {
+      this.inconsistentCount = inconsistentCount;
+      recalc();
+   }
 
-   public long getTotalCount() { return totalCount; }              // useful to return
-   public long getResolvedCount() { return consistentCount; }      // alias
+   public long getTotalCount() { return totalCount; }
+   public long getResolvedCount() { return consistentCount; }
 
    public double getPartiallyResolvedPercentage() { return partiallyResolvedPercentage; }
    public void setPartiallyResolvedPercentage(double p) { this.partiallyResolvedPercentage = p; }
 
-   // Recalculate when counts change
-   private void recalc() {
+   // ------------------------------------------------------------
+   // ✅ Main Calculation Logic
+   // ------------------------------------------------------------
+   private void calculatePercentage() {
       this.totalCount = this.consistentCount + this.inconsistentCount;
+
       if (this.totalCount > 0) {
+         // 1️⃣ If anomalyDto is resolved, force 100%
+         if (anomalyDto != null && anomalyDto.getStatus() != null) {
+            AnomalyStatus status = anomalyDto.getStatus();
+
+            if (status == AnomalyStatus.RESOLVED_FULLY ||
+                    status == AnomalyStatus.RESOLVED_PARTIALLY) {
+               this.partiallyResolvedPercentage = 100.0;
+               return;
+            }
+         }
+
+         // 2️⃣ Otherwise calculate normally
          this.partiallyResolvedPercentage = BigDecimal.valueOf(this.consistentCount)
                  .multiply(BigDecimal.valueOf(100))
                  .divide(BigDecimal.valueOf(this.totalCount), 2, RoundingMode.HALF_UP)
                  .doubleValue();
       } else {
+         // 3️⃣ No records — default to 0
          this.partiallyResolvedPercentage = 0.0;
       }
+   }
+
+   // Recalculate when counts change
+   private void recalc() {
+      calculatePercentage();
    }
 }

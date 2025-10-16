@@ -309,7 +309,7 @@ public class ConsumerServiceImpl implements ConsumerService {
         StringBuffer sb = new StringBuffer();
         while (m.find()) {
             String d = m.group(1);
-            String head = d.substring(0, Math.min(7, d.length()));
+            String head = d.substring(0, Math.min(5, d.length()));
             m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(head + "****"));
         }
         m.appendTail(sb);
