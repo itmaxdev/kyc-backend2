@@ -342,70 +342,66 @@ public class AnomalyServiceImpl implements AnomalyService
    }
 
 
+
    @Transactional
    public AnomalyDetailsResponseDTO getAnomalyByIdWithDetails(Long id) {
 
-      // 1) Load anomaly (fail fast if missing)
+      // 1) Load anomaly
       Anomaly anomaly = anomalyRepository.findById(id)
               .orElseThrow(() -> new RuntimeException("Anomaly not found with id: " + id));
 
-      // Build the main DTO (your existing logic)
       AnomlyDto anomlyDto = (anomaly.getStatus().getCode() == 6)
               ? new AnomlyDto(anomaly, 0)
               : new AnomlyDto(anomaly);
 
-      // 2) Tracking — RETURN ALL ROWS (no dedupe)
-      List<AnomalyTrackingDto> anomalyTracking =
-              anomalyTrackingRepository.findDistinctByAnomalyIdOrderByCreatedOnDesc(id)
-                      .stream()
-                      .map(c -> {
-                         String finalNote;
-                         if (c.getNote() != null && !c.getNote().isBlank()) {
-                            finalNote = maskNoteByType(c.getNote());
-                         } else if (AnomalyStatus.REPORTED == c.getStatus()) {
-                            finalNote = "Anomaly flagged by " + c.getUpdateBy();
-                         } else if (AnomalyStatus.RESOLVED_PARTIALLY == c.getStatus()) {
-                            finalNote = "Anomaly Resolved Partially by " + c.getUpdateBy();
-                         } else if (AnomalyStatus.RESOLVED_FULLY == c.getStatus()) {
-                            finalNote = "Anomaly Resolved by " + c.getUpdateBy();
-                         } else {
-                            finalNote = "";
-                         }
+      // 2) Tracking
+      List<AnomalyTrackingDto> anomalyTracking = anomalyTrackingRepository
+              .findDistinctByAnomalyIdOrderByCreatedOnDesc(id)
+              .stream()
+              .map(c -> {
+                 String finalNote;
+                 if (c.getNote() != null && !c.getNote().isBlank()) {
+                    finalNote = maskNoteByType(c.getNote());
+                 } else if (AnomalyStatus.REPORTED == c.getStatus()) {
+                    finalNote = "Anomaly flagged by " + c.getUpdateBy();
+                 } else if (AnomalyStatus.RESOLVED_PARTIALLY == c.getStatus()) {
+                    finalNote = "Anomaly Resolved Partially by " + c.getUpdateBy();
+                 } else if (AnomalyStatus.RESOLVED_FULLY == c.getStatus()) {
+                    finalNote = "Anomaly Resolved by " + c.getUpdateBy();
+                 } else {
+                    finalNote = "";
+                 }
 
-                         Anomaly anomalyEntity = c.getAnomaly();
-                         AnomlyDto inner = new AnomlyDto(anomalyEntity);
-                         if (inner.getConsumers() != null && !inner.getConsumers().isEmpty()) {
-                            String vendorCode = inner.getConsumers().get(0).getVendorCode();
-                            inner.setFormattedId(
-                                    (vendorCode != null && !vendorCode.isBlank())
-                                            ? vendorCode
-                                            : "ANOMALY_" + inner.getId());
-                         } else {
-                            inner.setFormattedId("ANOMALY_" + inner.getId());
-                         }
+                 Anomaly anomalyEntity = c.getAnomaly();
+                 AnomlyDto inner = new AnomlyDto(anomalyEntity);
+                 if (inner.getConsumers() != null && !inner.getConsumers().isEmpty()) {
+                    String vendorCode = inner.getConsumers().get(0).getVendorCode();
+                    inner.setFormattedId((vendorCode != null && !vendorCode.isBlank())
+                            ? vendorCode : "ANOMALY_" + inner.getId());
+                 } else {
+                    inner.setFormattedId("ANOMALY_" + inner.getId());
+                 }
 
-                         return new AnomalyTrackingDto(
-                                 c.getId(),
-                                 c.getCreatedOn(),
-                                 c.getStatus(),
-                                 finalNote,
-                                 anomalyEntity,
-                                 c.getUpdateBy(),
-                                 c.getUpdateOn()
-                         );
-                      })
-                      .collect(Collectors.toList());
+                 return new AnomalyTrackingDto(
+                         c.getId(),
+                         c.getCreatedOn(),
+                         c.getStatus(),
+                         finalNote,
+                         anomalyEntity,
+                         c.getUpdateBy(),
+                         c.getUpdateOn()
+                 );
+              })
+              .collect(Collectors.toList());
 
-      // 3) Consumers (unchanged)
+      // 3) Consumers
       List<ConsumerDto> consumerDtos = consumerAnomalyRepository.findByAnomaly_Id(id)
               .stream()
               .collect(Collectors.toMap(
                       ca -> ca.getConsumer().getId(),
                       ca -> {
                          ConsumerDto dto = new ConsumerDto(ca.getConsumer());
-                         if (Objects.nonNull(ca.getNotes())) {
-                            dto.setNotes(ca.getNotes());
-                         }
+                         if (Objects.nonNull(ca.getNotes())) dto.setNotes(ca.getNotes());
                          String consistentOn = ca.getConsumer().getConsistentOn();
                          dto.setConsistentOn(
                                  (consistentOn == null || consistentOn.isBlank()) ? "N/A" : consistentOn);
@@ -424,7 +420,7 @@ public class AnomalyServiceImpl implements AnomalyService
               .count();
       long inconsistentCount = consumerDtos.size() - consistentCount;
 
-      // 4) formattedId override
+      // 4) Set formattedId
       if (!consumerDtos.isEmpty()) {
          String vendorCode = anomaly.getAnomalyFormattedId();
          anomlyDto.setFormattedId(
@@ -434,30 +430,45 @@ public class AnomalyServiceImpl implements AnomalyService
       }
       anomlyDto.setConsumers(consumerDtos);
 
-      // 5) Mask main anomaly note if present
+      // 5) Mask note
       if (anomlyDto.getNote() != null && !anomlyDto.getNote().isBlank()) {
          anomlyDto.setNote(maskNoteByType(anomlyDto.getNote()));
       }
 
-      // 6) Build DTO with resolved percentage logic
-      AnomalyDetailsResponseDTO dto = new AnomalyDetailsResponseDTO(
+      // ✅ 6) Check if previous snapshot exists (get oldest record)
+      List<AnomalyStatistics> existingStats = anomalyStatisticsRepository
+              .findByAnomalyIdOrderByRecordedOnAsc(id);
+
+      double percentageToUse;
+      if (!existingStats.isEmpty()) {
+         // Use the very first recorded snapshot (40.00)
+         percentageToUse = existingStats.get(0).getPartiallyResolvedPercentage().doubleValue();
+      } else {
+         // Compute and insert a new one
+         AnomalyDetailsResponseDTO tempDto = new AnomalyDetailsResponseDTO(
+                 anomlyDto, anomalyTracking, (int) consistentCount, (int) inconsistentCount);
+
+         AnomalyStatistics stat = new AnomalyStatistics();
+         stat.setAnomalyId(anomaly.getId());
+         stat.setPartiallyResolvedPercentage(
+                 BigDecimal.valueOf(tempDto.getPartiallyResolvedPercentage()).setScale(2, RoundingMode.HALF_UP)
+         );
+         anomalyStatisticsRepository.save(stat);
+         percentageToUse = tempDto.getPartiallyResolvedPercentage();
+      }
+
+      // ✅ 7) Build final response using the selected percentage
+      AnomalyDetailsResponseDTO finalDto = new AnomalyDetailsResponseDTO(
               anomlyDto,
               anomalyTracking,
               (int) consistentCount,
-              (int) inconsistentCount
+              (int) inconsistentCount,
+              percentageToUse
       );
 
-      // 7️⃣  Persist snapshot of the percentage into anomaly_statistics
-      AnomalyStatistics stat = new AnomalyStatistics();
-      stat.setAnomalyId(anomaly.getId());
-      stat.setPartiallyResolvedPercentage(
-              BigDecimal.valueOf(dto.getPartiallyResolvedPercentage()).setScale(2, RoundingMode.HALF_UP)
-      );
-      anomalyStatisticsRepository.save(stat);
-
-      // 8) Return final DTO
-      return dto;
+      return finalDto;
    }
+
 
 
 

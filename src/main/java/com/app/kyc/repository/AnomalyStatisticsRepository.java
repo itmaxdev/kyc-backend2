@@ -8,4 +8,6 @@ import java.util.List;
 @Repository
 public interface AnomalyStatisticsRepository extends JpaRepository<AnomalyStatistics, Long> {
     List<AnomalyStatistics> findByAnomalyIdOrderByRecordedOnDesc(Long anomalyId);
+    List<AnomalyStatistics> findByAnomalyIdOrderByRecordedOnAsc(Long anomalyId);
+
 }
