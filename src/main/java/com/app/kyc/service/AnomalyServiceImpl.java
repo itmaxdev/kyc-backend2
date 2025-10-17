@@ -439,7 +439,8 @@ public class AnomalyServiceImpl implements AnomalyService
       /*List<AnomalyStatistics> existingStats = anomalyStatisticsRepository
               .findByAnomalyIdOrderByRecordedOnAsc(id);
 */
-      List<AnomalyStatistics> existingStats  = anomalyStatisticsRepository.findFirstNonFullyResolvedByAnomalyId(id);
+      //List<AnomalyStatistics> existingStats  = anomalyStatisticsRepository.findFirstNonFullyResolvedByAnomalyId(id);
+      List<AnomalyStatistics> existingStats  = anomalyStatisticsRepository.findUniqueNonFullyResolved();
 
 
 

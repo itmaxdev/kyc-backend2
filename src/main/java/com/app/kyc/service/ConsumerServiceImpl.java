@@ -386,7 +386,8 @@ public class ConsumerServiceImpl implements ConsumerService {
 		final List<ConsumersHasSubscriptionsResponseDTO> finalData = toDtoPage(dedup(filterData.getContent()));
 
         Map<String, Object> resp = new HashMap<>();
-        resp.put("count", allCount);
+        //resp.put("count", allCount);
+        resp.put("count", filterCount);
         resp.put("consistentCount", consistentCount);
         resp.put("inconsistentCount", inconsistentCount);
         resp.put("filterCount", filterCount);
@@ -1995,7 +1996,11 @@ System.out.println("Get all flagged ");
         long consistentCount = consumerDtos.stream()
                 .filter(c -> c.getConsistentOn() != null && !"N/A".equalsIgnoreCase(c.getConsistentOn()))
                 .count();
+        System.out.println("consistentCount values are: "+consistentCount);
+
         long inconsistentCount = consumerDtos.size() - consistentCount;
+        System.out.println("inconsistentCount values are: "+inconsistentCount);
+
 
         double partiallyResolvedPercentage = 0.0;
         long totalCount = consistentCount + inconsistentCount;
@@ -2844,6 +2849,7 @@ System.out.println("Get all flagged ");
         }
 
         consumerRepository.markConsumersConsistent(0, ids);
+        System.out.println("Inside the Anomaly status tagExceedingAnomalies: ");
         addAnomalyStatics(anomaly.getId());
         return anomaly;
     }
@@ -2905,6 +2911,7 @@ System.out.println("Get all flagged ");
         }
 
         consumerRepository.markConsumersConsistent(0, ids);
+        System.out.println("Inside the Anomaly status tagDuplicate Anomalies: ");
         addAnomalyStatics(anomaly.getId());
         return anomaly;
     }
