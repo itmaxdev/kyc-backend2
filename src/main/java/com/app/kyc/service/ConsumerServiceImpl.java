@@ -1972,53 +1972,32 @@ System.out.println("Get all flagged ");
         }
 
     private void addAnomalyStatics(Long anomalyId) {
-
         List<ConsumerDto> consumerDtos = consumerAnomalyRepository.findByAnomaly_Id(anomalyId)
                 .stream()
-                .collect(Collectors.toMap(
-                        ca -> ca.getConsumer().getId(),
-                        ca -> {
-                            ConsumerDto dto = new ConsumerDto(ca.getConsumer());
-                            if (Objects.nonNull(ca.getNotes())) dto.setNotes(ca.getNotes());
-                            String consistentOn = ca.getConsumer().getConsistentOn();
-                            dto.setConsistentOn(
-                                    (consistentOn == null || consistentOn.isBlank()) ? "N/A" : consistentOn);
-                            return dto;
-                        },
-                        (existing, duplicate) -> existing,
-                        LinkedHashMap::new
-                ))
-                .values()
-                .stream()
-                .sorted(Comparator.comparing(ConsumerDto::getIsConsistent))
+                .map(ca -> new ConsumerDto(ca.getConsumer()))
                 .collect(Collectors.toList());
 
         long consistentCount = consumerDtos.stream()
                 .filter(c -> c.getConsistentOn() != null && !"N/A".equalsIgnoreCase(c.getConsistentOn()))
                 .count();
-        System.out.println("consistentCount values are: "+consistentCount);
-
         long inconsistentCount = consumerDtos.size() - consistentCount;
-        System.out.println("inconsistentCount values are: "+inconsistentCount);
 
+        double partial = 0.0;
+        if (consistentCount + inconsistentCount > 0)
+            partial = (consistentCount * 100.0) / (consistentCount + inconsistentCount);
 
-        double partiallyResolvedPercentage = 0.0;
-        long totalCount = consistentCount + inconsistentCount;
+        // --- cap value during tagging stage ---
+        if (partial > 40.00) partial = 40.00;
 
-        if (totalCount > 0) {
-            partiallyResolvedPercentage = BigDecimal.valueOf(consistentCount)
-                    .multiply(BigDecimal.valueOf(100))
-                    .divide(BigDecimal.valueOf(totalCount), 2, RoundingMode.HALF_UP)
-                    .doubleValue();
-        }
+        log.info("addAnomalyStatics | anomalyId={} consistent={} inconsistent={} partial={}",
+                anomalyId, consistentCount, inconsistentCount, partial);
 
         AnomalyStatistics stat = new AnomalyStatistics();
         stat.setAnomalyId(anomalyId);
-        stat.setPartiallyResolvedPercentage(
-                BigDecimal.valueOf(partiallyResolvedPercentage).setScale(2, RoundingMode.HALF_UP)
-        );
+        stat.setPartiallyResolvedPercentage(BigDecimal.valueOf(partial).setScale(2, RoundingMode.HALF_UP));
         anomalyStatisticsRepository.save(stat);
     }
+
 
 
 

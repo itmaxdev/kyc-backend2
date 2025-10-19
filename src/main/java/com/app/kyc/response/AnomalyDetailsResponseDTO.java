@@ -14,7 +14,7 @@ public class AnomalyDetailsResponseDTO {
 
    private long consistentCount;       // resolved_count
    private long inconsistentCount;
-   private long totalCount;            // consistent + inconsistent
+   //private long totalCount;            // consistent + inconsistent
 
    // NOTE: this is the resolved percentage now (kept the old name to avoid breaking callers)
    private double partiallyResolvedPercentage;
@@ -38,18 +38,6 @@ public class AnomalyDetailsResponseDTO {
       this.anomalyTrackingDto = anomalyTrackingDto;
       this.consistentCount = consistentCount;
       this.inconsistentCount = inconsistentCount;
-
-      this.totalCount = consistentCount + inconsistentCount; // total_count
-
-      // resolved_percentage = (resolved_count / total_count) * 100
-      if (this.totalCount > 0) {
-         this.partiallyResolvedPercentage = BigDecimal.valueOf(consistentCount)
-                 .multiply(BigDecimal.valueOf(100))
-                 .divide(BigDecimal.valueOf(this.totalCount), 2, RoundingMode.HALF_UP)
-                 .doubleValue();
-      } else {
-         this.partiallyResolvedPercentage = 0.0;
-      }
    }
 
    // Optional: constructor that accepts a precomputed percentage
@@ -77,22 +65,10 @@ public class AnomalyDetailsResponseDTO {
    public long getInconsistentCount() { return inconsistentCount; }
    public void setInconsistentCount(long inconsistentCount) { this.inconsistentCount = inconsistentCount;}
 
-   public long getTotalCount() { return totalCount; }              // useful to return
+              // useful to return
    public long getResolvedCount() { return consistentCount; }      // alias
 
    public double getPartiallyResolvedPercentage() { return partiallyResolvedPercentage; }
    public void setPartiallyResolvedPercentage(double p) { this.partiallyResolvedPercentage = p; }
 
-   // Recalculate when counts change
-   private void recalc() {
-      this.totalCount = this.consistentCount + this.inconsistentCount;
-      if (this.totalCount > 0) {
-         this.partiallyResolvedPercentage = BigDecimal.valueOf(this.consistentCount)
-                 .multiply(BigDecimal.valueOf(100))
-                 .divide(BigDecimal.valueOf(this.totalCount), 2, RoundingMode.HALF_UP)
-                 .doubleValue();
-      } else {
-         this.partiallyResolvedPercentage = 0.0;
-      }
-   }
 }

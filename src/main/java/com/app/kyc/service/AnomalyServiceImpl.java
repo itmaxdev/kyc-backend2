@@ -2,6 +2,7 @@ package com.app.kyc.service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -346,7 +347,7 @@ public class AnomalyServiceImpl implements AnomalyService
    @Transactional
    public AnomalyDetailsResponseDTO getAnomalyByIdWithDetails(Long id) {
 
-      // 1) Load anomaly
+      // 1️⃣ Load anomaly
       Anomaly anomaly = anomalyRepository.findById(id)
               .orElseThrow(() -> new RuntimeException("Anomaly not found with id: " + id));
 
@@ -354,7 +355,7 @@ public class AnomalyServiceImpl implements AnomalyService
               ? new AnomlyDto(anomaly, 0)
               : new AnomlyDto(anomaly);
 
-      // 2) Tracking
+      // 2️⃣ Tracking
       List<AnomalyTrackingDto> anomalyTracking = anomalyTrackingRepository
               .findDistinctByAnomalyIdOrderByCreatedOnDesc(id)
               .stream()
@@ -377,7 +378,8 @@ public class AnomalyServiceImpl implements AnomalyService
                  if (inner.getConsumers() != null && !inner.getConsumers().isEmpty()) {
                     String vendorCode = inner.getConsumers().get(0).getVendorCode();
                     inner.setFormattedId((vendorCode != null && !vendorCode.isBlank())
-                            ? vendorCode : "ANOMALY_" + inner.getId());
+                            ? vendorCode
+                            : "ANOMALY_" + inner.getId());
                  } else {
                     inner.setFormattedId("ANOMALY_" + inner.getId());
                  }
@@ -394,7 +396,7 @@ public class AnomalyServiceImpl implements AnomalyService
               })
               .collect(Collectors.toList());
 
-      // 3) Consumers
+      // 3️⃣ Consumers
       List<ConsumerDto> consumerDtos = consumerAnomalyRepository.findByAnomaly_Id(id)
               .stream()
               .collect(Collectors.toMap(
@@ -420,7 +422,7 @@ public class AnomalyServiceImpl implements AnomalyService
               .count();
       long inconsistentCount = consumerDtos.size() - consistentCount;
 
-      // 4) Set formattedId
+      // 4️⃣ Set formattedId
       if (!consumerDtos.isEmpty()) {
          String vendorCode = anomaly.getAnomalyFormattedId();
          anomlyDto.setFormattedId(
@@ -430,42 +432,45 @@ public class AnomalyServiceImpl implements AnomalyService
       }
       anomlyDto.setConsumers(consumerDtos);
 
-      // 5) Mask note
+      // 5️⃣ Mask note
       if (anomlyDto.getNote() != null && !anomlyDto.getNote().isBlank()) {
          anomlyDto.setNote(maskNoteByType(anomlyDto.getNote()));
       }
 
-      // ✅ 6) Check if previous snapshot exists (get oldest record)
-      /*List<AnomalyStatistics> existingStats = anomalyStatisticsRepository
-              .findByAnomalyIdOrderByRecordedOnAsc(id);
-*/
-      //List<AnomalyStatistics> existingStats  = anomalyStatisticsRepository.findFirstNonFullyResolvedByAnomalyId(id);
-      List<AnomalyStatistics> existingStats  = anomalyStatisticsRepository.findUniqueNonFullyResolved();
-
-
+      // 6️⃣ Fetch latest percentage (Option B logic)
+      Optional<AnomalyStatistics> latestStat =
+              anomalyStatisticsRepository.findTopByAnomalyIdOrderByRecordedOnDesc(id);
 
       double percentageToUse;
-      if (!existingStats.isEmpty()) {
-         // Use the very first recorded snapshot (40.00)
-         percentageToUse = existingStats.get(0).getPartiallyResolvedPercentage().doubleValue();
+      if (latestStat.isPresent()) {
+         percentageToUse = latestStat.get().getPartiallyResolvedPercentage().doubleValue();
+         System.out.println("Created new stats for before anomaly" +id + "percent" + percentageToUse);
       } else {
-         // Compute and insert a new one
+         // Compute & insert a new record if none exist
          AnomalyDetailsResponseDTO tempDto = new AnomalyDetailsResponseDTO(
                  anomlyDto, anomalyTracking, (int) consistentCount, (int) inconsistentCount);
          percentageToUse = tempDto.getPartiallyResolvedPercentage();
+
+         AnomalyStatistics stat = new AnomalyStatistics();
+         stat.setAnomalyId(id);
+         stat.setPartiallyResolvedPercentage(
+                 BigDecimal.valueOf(percentageToUse).setScale(2, RoundingMode.HALF_UP));
+         stat.setRecordedOn(LocalDateTime.now());
+         anomalyStatisticsRepository.save(stat);
+
+         System.out.println("Created new stats for anomaly" +id + "percent" + percentageToUse);
       }
 
-      // ✅ 7) Build final response using the selected percentage
-      AnomalyDetailsResponseDTO finalDto = new AnomalyDetailsResponseDTO(
+      // 7️⃣ Final DTO
+      return new AnomalyDetailsResponseDTO(
               anomlyDto,
               anomalyTracking,
               (int) consistentCount,
               (int) inconsistentCount,
               percentageToUse
       );
-
-      return finalDto;
    }
+
 
 
 

@@ -6,6 +6,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import com.app.kyc.entity.AnomalyStatistics;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface AnomalyStatisticsRepository extends JpaRepository<AnomalyStatistics, Long> {
@@ -19,4 +20,6 @@ public interface AnomalyStatisticsRepository extends JpaRepository<AnomalyStatis
     List<AnomalyStatistics> findFirstNonFullyResolvedByAnomalyId(@Param("anomalyId") Long anomalyId);
 
 
+    Optional<AnomalyStatistics> findTopByAnomalyIdOrderByRecordedOnDesc(Long anomalyId);
 }
+
