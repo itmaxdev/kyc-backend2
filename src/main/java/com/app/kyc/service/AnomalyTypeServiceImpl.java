@@ -61,12 +61,12 @@ public class AnomalyTypeServiceImpl implements AnomalyTypeService
    }
 
    public List<AnomalyTypeDto> getAnomalyTypes() {
-      List<AnomalyType> types = anomalyTypeRepository.findAll();
+      List<AnomalyType> types = anomalyTypeRepository.findByDeletedFalse();
 
       return types.stream()
               .map(type -> new AnomalyTypeDto(
                       type.getName(),
-                      mapSeverity(type.getName())  // map business meaning
+                      mapSeverity(type.getName())
               ))
               .collect(Collectors.toList());
    }
@@ -92,20 +92,6 @@ public class AnomalyTypeServiceImpl implements AnomalyTypeService
       for(AnomalyType at : anomalyTypes)
       {
          AnomalyTypesListResponseDTO atResponse = null;
-         // switch(at.getTargetEntityType())
-         // {
-         //    case IncompleteData:
-         //       atResponse = new AnomalyTypesListResponseDTO(at.getId(), at.getName(), at.getTargetEntityType().name(),
-         //          serviceTypeService.getServiceTypeById(at.getEntity_id()).getName(), at.getSeverity().name());
-         //    break;
-         //    case DuplicateRecords:
-         //       atResponse = new AnomalyTypesListResponseDTO(at.getId(), at.getName(), at.getTargetEntityType().name(), industryService.getIndustryById(at.getEntity_id()).getName(),
-         //          at.getSeverity().name());
-         //    break;
-         //    case ExceedingThreshold:
-         //       atResponse = new AnomalyTypesListResponseDTO(at.getId(), at.getName(), at.getTargetEntityType().name(), null, at.getSeverity().name());
-         //    break;
-         // }
          atResponse = new AnomalyTypesListResponseDTO(at.getId(), at.getName(), at.getTargetEntityType().name(), null, at.getSeverity().name());
          response.add(atResponse);
       }
