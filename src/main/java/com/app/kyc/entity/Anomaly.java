@@ -179,7 +179,7 @@ public class Anomaly
     * Builds: {vendor}-{ddMMyyyy}-{zeroPaddedId}
     * e.g. vodacom-07102025-000123
     */
-   @PostPersist
+   //@PostPersist
    private void assignFormattedId() {
       if (this.anomalyFormattedId != null && !this.anomalyFormattedId.isBlank()) return;
 

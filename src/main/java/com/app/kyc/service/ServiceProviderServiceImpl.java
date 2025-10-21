@@ -296,6 +296,8 @@ public class ServiceProviderServiceImpl implements ServiceProviderService
 
       LocalDate today = LocalDate.now();
       sp.setCreatedOn(Date.from(today.atStartOfDay(ZoneId.systemDefault()).toInstant()));
+
+      System.out.println("Created date on is "+Date.from(today.atStartOfDay(ZoneId.systemDefault()).toInstant()));
       sp.setDeleted(false);
       sp.setCreatedBy(1L);
       sp.setStatus(ServiceProviderStatus.Active);

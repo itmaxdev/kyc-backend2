@@ -215,7 +215,8 @@ public class ConsumerServiceImpl implements ConsumerService {
                     String vendorCodeForHistory;
 
                     if (!firstAnomalyOpt.isPresent()) {
-                        note = fullName + " belonging to " + normalizedProvider;
+                        note = fullName + " belonging to " + providerName;
+                        //note = fullName + " belonging to " + normalizedProvider;
                         vendorCodeForHistory = Optional.ofNullable(c.getVendorCode()).orElse("");
                     } else {
                         Anomaly first = firstAnomalyOpt.get();
@@ -2118,6 +2119,12 @@ System.out.println("Get all flagged ");
 
             Anomaly savedAnomaly = anomalyRepository.save(tempAnomaly);
 
+            // ✅ Generate formatted ID after anomaly is saved
+            String formattedId = generateFormattedAnomalyId(consumer.getServiceProvider(), savedAnomaly.getId(), savedAnomaly.getReportedOn());
+            savedAnomaly.setAnomalyFormattedId(formattedId);
+            anomalyRepository.save(savedAnomaly);
+
+
             AnomalyTracking anomalyTracking = new AnomalyTracking(
                     savedAnomaly, new Date(), AnomalyStatus.REPORTED, "",
                     user.getFirstName() + " " + user.getLastName(),
@@ -2805,6 +2812,12 @@ System.out.println("Get all flagged ");
             anomaly.setUpdateBy(user.getFirstName() + " " + user.getLastName());
             anomaly = anomalyRepository.save(anomaly);
 
+
+            String formattedId = generateFormattedAnomalyId(consumer.getServiceProvider(), anomaly.getId(), anomaly.getReportedOn());
+            anomaly.setAnomalyFormattedId(formattedId);
+            anomalyRepository.save(anomaly);
+
+
             anomalyTrackingRepository.save(
                     new AnomalyTracking(anomaly, now, AnomalyStatus.REPORTED, "",
                             user.getFirstName() + " " + user.getLastName(), now)
@@ -2864,6 +2877,12 @@ System.out.println("Get all flagged ");
             anomaly.setAnomalyType(type);
             anomaly.setUpdateBy(user.getFirstName() + " " + user.getLastName());
             anomaly = anomalyRepository.save(anomaly);
+
+
+            String formattedId = generateFormattedAnomalyId(consumer.getServiceProvider(), anomaly.getId(), anomaly.getReportedOn());
+            anomaly.setAnomalyFormattedId(formattedId);
+            anomalyRepository.save(anomaly);
+
 
             anomalyTrackingRepository.save(
                     new AnomalyTracking(anomaly, now, AnomalyStatus.REPORTED, "",
@@ -3060,5 +3079,22 @@ System.out.println("Get all flagged ");
         return response;
     }
 
+
+
+    private String generateFormattedAnomalyId(ServiceProvider serviceProvider, Long id, Date reportedOn) {
+        String vendor = serviceProvider.getName();
+        String date = new SimpleDateFormat("ddMMyyyy").format(
+                reportedOn != null ? reportedOn : new Date()
+        );
+        String padded = String.format("%06d", id);
+        return vendor + "-" + date + "-" + padded;
+    }
+
+    private String slugify(String raw) {
+        System.out.println("raw valueis "+raw);
+        String s = raw == null ? "unknown" : raw.trim().toUpperCase(Locale.ROOT);
+        s = s.replaceAll("[^a-z0-9]+", "-");
+        return s.replaceAll("^-+|-+$", "");
+    }
 
 }
