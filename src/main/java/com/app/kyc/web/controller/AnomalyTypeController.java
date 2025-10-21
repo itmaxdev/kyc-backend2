@@ -98,7 +98,7 @@ public class AnomalyTypeController
    @PostMapping("/add")
    public ResponseEntity<?> addAnomalyType(HttpServletRequest request, @RequestBody AnomalyType anomalyType) throws SQLException
    {
-      //log.info("AnomalyTypeController/addAnomalyType");
+     System.out.println("AnomalyTypeController/addAnomalyType" +anomalyType.getSeverity());
       try
       {
          List<String> roles = new ArrayList<String>();

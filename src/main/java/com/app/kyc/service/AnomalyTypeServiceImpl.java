@@ -164,6 +164,7 @@ public class AnomalyTypeServiceImpl implements AnomalyTypeService
    @Override
    public void addAnomalyType(String username, AnomalyType anomalyType) throws NotFoundExceptionCustom, InvalidDataException
    {
+      System.out.println("addAnomalyType values: "+anomalyType.getSeverity());
       if(checkAnomalyTypeUnique(anomalyType))
       {
          User user = userService.getUserByEmail(username);
@@ -176,6 +177,7 @@ public class AnomalyTypeServiceImpl implements AnomalyTypeService
          if(allowAdd)
          {
             anomalyType.setCreatedOn(new Date());
+            anomalyType.setSeverity(anomalyType.getSeverity());
             anomalyTypeRepository.save(anomalyType);
          }
          else
@@ -283,13 +285,15 @@ public class AnomalyTypeServiceImpl implements AnomalyTypeService
    }
 
    public AnomalyType createAnomalyType(AnomalyType anomalyType) {
-      // Check if name already exists (optional but safe)
+
+      System.out.println("anomalyType severity values is "+anomalyType.getSeverity());
       if (anomalyTypeRepository.existsByNameIgnoreCase(anomalyType.getName())) {
          throw new RuntimeException("Anomaly Type with the same name already exists!");
       }
 
       anomalyType.setCreatedOn(new Date());
       anomalyType.setDeleted(false);
+      anomalyType.setSeverity(anomalyType.getSeverity());
 
       return anomalyTypeRepository.save(anomalyType);
    }

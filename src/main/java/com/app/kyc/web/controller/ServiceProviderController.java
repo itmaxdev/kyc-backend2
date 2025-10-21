@@ -6,6 +6,7 @@ import java.util.*;
 import javax.servlet.http.HttpServletRequest;
 
 import com.app.kyc.model.ServiceProviderPutRequest;
+import com.app.kyc.model.ServiceProviderStatus;
 import com.app.kyc.repository.ServiceProviderRepository;
 import com.app.kyc.repository.ServiceRepository;
 import com.app.kyc.service.AnomalyService;
@@ -199,8 +200,8 @@ public class ServiceProviderController {
          roles.add("SP Admin");
          roles.add("KYC Admin");
          if (securityHelper.hasRole(request, roles)) {
-            serviceProviderService.updateServiceProvider(serviceProvider);
-            return ResponseEntity.ok("ServiceProvider updated successfully");
+            ServiceProvider serviceProvider1 =  serviceProviderService.updateServiceProvider(serviceProvider);
+            return ResponseEntity.ok(serviceProvider1);
          } else
             return ResponseEntity.ok("Not authorized");
       } catch (Exception e) {
@@ -318,6 +319,7 @@ public class ServiceProviderController {
                     .orElseThrow(() -> new RuntimeException("Service provider not found"));
 
             sp.setDeleted(true);
+            sp.setStatus(ServiceProviderStatus.Inactive);
             serviceProviderRepository.save(sp);
 
             return ResponseEntity.ok("Service provider soft deleted successfully");

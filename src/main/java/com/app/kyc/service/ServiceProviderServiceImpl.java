@@ -1,5 +1,8 @@
 package com.app.kyc.service;
 
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -291,8 +294,13 @@ public class ServiceProviderServiceImpl implements ServiceProviderService
          throw new RuntimeException("Service Provider with name '" + sp.getName() + "' already exists!");
       }
 
-      sp.setCreatedOn(new Date());
+      LocalDate today = LocalDate.now();
+      sp.setCreatedOn(Date.from(today.atStartOfDay(ZoneId.systemDefault()).toInstant()));
       sp.setDeleted(false);
+      sp.setCreatedBy(1L);
+      sp.setStatus(ServiceProviderStatus.Active);
+      sp.setApprovedBy(2L);
+      sp.setColor("rgb(160, 23, 117)");
       return serviceProviderRepository.save(sp);
    }
 
