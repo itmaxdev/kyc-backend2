@@ -12,6 +12,7 @@ import com.app.kyc.model.DashboardObjectInterface;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.crossstore.ChangeSetPersister.NotFoundException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import com.app.kyc.entity.Anomaly;
@@ -83,7 +84,7 @@ public class AnomalyTypeServiceImpl implements AnomalyTypeService
       }
    }
 
-   @Override
+  /* @Override
    public Map<String, Object> getAllAnomalyTypes(String params) throws JsonMappingException, JsonProcessingException
    {
       Page<AnomalyType> pageAnomalyTypes = anomalyTypeRepository.findAll(PaginationUtil.getPageable(params));
@@ -98,6 +99,33 @@ public class AnomalyTypeServiceImpl implements AnomalyTypeService
       Map<String, Object> anomalyTypesWithCount = new HashMap<String, Object>();
       anomalyTypesWithCount.put("data", response);
       anomalyTypesWithCount.put("count", pageAnomalyTypes.getTotalElements());
+      return anomalyTypesWithCount;
+   }
+*/
+
+
+   @Override
+   public Map<String, Object> getAllAnomalyTypes(String params)
+           throws JsonMappingException, JsonProcessingException {
+
+      Pageable pageable = PaginationUtil.getPageable(params);
+      Page<AnomalyType> pageAnomalyTypes = anomalyTypeRepository.findByDeletedFalse(pageable);
+
+      List<AnomalyTypesListResponseDTO> response = pageAnomalyTypes
+              .stream()
+              .map(at -> new AnomalyTypesListResponseDTO(
+                      at.getId(),
+                      at.getName(),
+                      at.getTargetEntityType().name(),
+                      null,
+                      at.getSeverity().name()
+              ))
+              .collect(Collectors.toList());
+
+      Map<String, Object> anomalyTypesWithCount = new HashMap<>();
+      anomalyTypesWithCount.put("data", response);
+      anomalyTypesWithCount.put("count", pageAnomalyTypes.getTotalElements());
+
       return anomalyTypesWithCount;
    }
 

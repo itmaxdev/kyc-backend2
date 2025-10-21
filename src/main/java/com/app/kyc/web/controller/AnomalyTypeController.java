@@ -142,8 +142,8 @@ public class AnomalyTypeController
             {
                userName = securityHelper.getUserName(authorizationHeader.substring(7));
             }
-            anomalyTypeService.updateAnomalyType(userName, anomalyType);
-            return ResponseEntity.ok("AnomalyType updated successfully");
+            AnomalyType anomalyType1 = anomalyTypeService.updateAnomalyType(userName, anomalyType);
+            return ResponseEntity.ok(anomalyType1);
          }
          else
             return ResponseEntity.ok("Not authorized");
