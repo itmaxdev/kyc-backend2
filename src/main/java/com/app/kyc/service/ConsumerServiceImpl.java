@@ -6,8 +6,6 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -23,8 +21,6 @@ import javax.persistence.EntityManager;
 import javax.persistence.FlushModeType;
 import javax.persistence.PersistenceContext;
 
-import com.app.kyc.entity.*;
-import com.app.kyc.repository.*;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.Row;
@@ -45,6 +41,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.app.kyc.Masking.MaskingContext;
 import com.app.kyc.Masking.MaskingUtil;
+import com.app.kyc.entity.Anomaly;
+import com.app.kyc.entity.AnomalyTracking;
+import com.app.kyc.entity.AnomalyType;
+import com.app.kyc.entity.Consumer;
+import com.app.kyc.entity.ConsumerAnomaly;
+import com.app.kyc.entity.ConsumerTracking;
+import com.app.kyc.entity.ServiceProvider;
+import com.app.kyc.entity.User;
 import com.app.kyc.model.AnomalyStatus;
 import com.app.kyc.model.AnomlyDto;
 import com.app.kyc.model.ConsumerDto;
@@ -52,6 +56,14 @@ import com.app.kyc.model.ConsumerHistoryDto;
 import com.app.kyc.model.DashboardObjectInterface;
 import com.app.kyc.model.ExceedingConsumers;
 import com.app.kyc.model.Pagination;
+import com.app.kyc.repository.AnomalyRepository;
+import com.app.kyc.repository.AnomalyTrackingRepository;
+import com.app.kyc.repository.AnomalyTypeRepository;
+import com.app.kyc.repository.ConsumerAnomalyRepository;
+import com.app.kyc.repository.ConsumerRepository;
+import com.app.kyc.repository.ConsumerSpecifications;
+import com.app.kyc.repository.ConsumerTrackingRepository;
+import com.app.kyc.repository.ServiceProviderRepository;
 import com.app.kyc.response.ConsumersDetailsResponseDTO;
 import com.app.kyc.response.ConsumersHasSubscriptionsResponseDTO;
 import com.app.kyc.response.FlaggedConsumersListDTO;
@@ -89,9 +101,6 @@ public class ConsumerServiceImpl implements ConsumerService {
 
     @Autowired
     ConsumerServiceService consumerServiceService;
-
-    @Autowired
-    private AnomalyStatisticsRepository anomalyStatisticsRepository;
 
     @Autowired
     private AnomalyTrackingRepository anomalyTrackingRepository;
@@ -300,7 +309,7 @@ public class ConsumerServiceImpl implements ConsumerService {
         StringBuffer sb = new StringBuffer();
         while (m.find()) {
             String d = m.group(1);
-            String head = d.substring(0, Math.min(5, d.length()));
+            String head = d.substring(0, Math.min(7, d.length()));
             m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(head + "****"));
         }
         m.appendTail(sb);
@@ -386,8 +395,7 @@ public class ConsumerServiceImpl implements ConsumerService {
 		final List<ConsumersHasSubscriptionsResponseDTO> finalData = toDtoPage(dedup(filterData.getContent()));
 
         Map<String, Object> resp = new HashMap<>();
-        //resp.put("count", allCount);
-        resp.put("count", filterCount);
+        resp.put("count", allCount);
         resp.put("consistentCount", consistentCount);
         resp.put("inconsistentCount", inconsistentCount);
         resp.put("filterCount", filterCount);
@@ -860,7 +868,8 @@ System.out.println("Get all flagged ");
     public Map<String, Object> getAllFlaggedConsumers2(String params)
             throws JsonMappingException, JsonProcessingException {
 
-        System.out.println("Get all flagged");
+        System.out.println("Get all flagged" +params);
+
 
         final Pagination pagination = PaginationUtil.getFilterObject(params);
         final Pageable pageable     = PaginationUtil.getPageable(params);
@@ -888,7 +897,11 @@ System.out.println("Get all flagged ");
                 .orElse(null);
 
         if (noSpFilter) {
+            System.out.println("Get all flagged noSpFilter" +noSpFilter);
+            System.out.println("Get all flagged  pagination.getFilter().getAnomalyStatus()" + pagination.getFilter().getResolution());
+
             if (isResolved) {
+                System.out.println("Get all flagged isResolved" +isResolved);
                 consumerStatus.add(1);
                 anomalyStatus.add(AnomalyStatus.RESOLVED_FULLY);
 
@@ -896,7 +909,7 @@ System.out.println("Get all flagged ");
                         anomalyRepository.findAllByConsumerStatus(
                                 pageable, consumerStatus, anomalyStatus,
                                 pagination.getFilter().getAnomalyType(), searchText);
-
+                System.out.println("Get all flagged isResolved before anomalyStatus values" +anomalyStatus);
                 pageAnomaly = anomalyData.stream()
                         .map(a -> {
                             AnomlyDto d = new AnomlyDto(a, 0);
@@ -909,9 +922,15 @@ System.out.println("Get all flagged ");
                 totalAnomaliesCount = anomalyData.getTotalElements();
 
             } else {
+                System.out.println("Get all flagged isResolved later values" +isResolved);
                 anomalyStatus.addAll(this.setStatusList(pagination.getFilter().getAnomalyStatus()));
-                resolutionStatus.addAll(this.setResolution(pagination.getFilter().getResolution()));
 
+                resolutionStatus.addAll(this.setResolution(pagination.getFilter().getResolution()));
+                System.out.println("Get all flagged isResolved pageable values" +pageable);
+                System.out.println("Get all flagged isResolved anomalyStatus values" +anomalyStatus);
+                System.out.println("Get all flagged isResolved resolutionStatus values" +resolutionStatus);
+                System.out.println("Get all flagged isResolved searchText values" +searchText);
+                System.out.println("Get all flagged isResolved getAnomalyType values" +pagination.getFilter().getAnomalyType());
                 Page<Anomaly> anomalyData =
                         anomalyRepository.findAllByConsumersAll(
                                 pageable, anomalyStatus,
@@ -929,6 +948,7 @@ System.out.println("Get all flagged ");
                 totalAnomaliesCount = anomalyData.getTotalElements();
             }
         } else {
+            System.out.println("Get all flagged with sp filter" );
             final Long spId = pagination.getFilter().getServiceProviderID();
             List<Long> spIds;
 
@@ -944,7 +964,8 @@ System.out.println("Get all flagged ");
             if (isResolved) {
                 consumerStatus.add(1);
                 anomalyStatus.add(AnomalyStatus.RESOLVED_FULLY);
-
+                System.out.println("Get all flagged with isResolved "+isResolved );
+                System.out.println("Get all flagged with anomalyStatus "+anomalyStatus.size());
                 Page<Anomaly> anomalyData =
                         anomalyRepository.findAllByConsumerStatusAndServiceProviderId(
                                 pageable, consumerStatus, spIds,
@@ -963,6 +984,8 @@ System.out.println("Get all flagged ");
                 totalAnomaliesCount = anomalyData.getTotalElements();
 
             } else {
+                System.out.println("Get all flagged with Not isResolved "+isResolved );
+                System.out.println("Get all flagged with Not anomalyStatus "+anomalyStatus.size());
                 consumerStatus.add(0);
                 consumerStatus.add(1);
                 anomalyStatus.addAll(this.setStatusList(pagination.getFilter().getAnomalyStatus()));
@@ -1971,39 +1994,8 @@ System.out.println("Get all flagged ");
 
         }
 
-    private void addAnomalyStatics(Long anomalyId) {
-        List<ConsumerDto> consumerDtos = consumerAnomalyRepository.findByAnomaly_Id(anomalyId)
-                .stream()
-                .map(ca -> new ConsumerDto(ca.getConsumer()))
-                .collect(Collectors.toList());
-
-        long consistentCount = consumerDtos.stream()
-                .filter(c -> c.getConsistentOn() != null && !"N/A".equalsIgnoreCase(c.getConsistentOn()))
-                .count();
-        long inconsistentCount = consumerDtos.size() - consistentCount;
-
-        double partial = 0.0;
-        if (consistentCount + inconsistentCount > 0)
-            partial = (consistentCount * 100.0) / (consistentCount + inconsistentCount);
-
-        // --- cap value during tagging stage ---
-        if (partial > 40.00) partial = 40.00;
-
-        log.info("addAnomalyStatics | anomalyId={} consistent={} inconsistent={} partial={}",
-                anomalyId, consistentCount, inconsistentCount, partial);
-
-        AnomalyStatistics stat = new AnomalyStatistics();
-        stat.setAnomalyId(anomalyId);
-        stat.setPartiallyResolvedPercentage(BigDecimal.valueOf(partial).setScale(2, RoundingMode.HALF_UP));
-        anomalyStatisticsRepository.save(stat);
-    }
 
 
-
-
-    private void recalc() {
-
-    }
 
     // ======== helpers (same assumptions as your code) ========
 
@@ -2577,7 +2569,7 @@ System.out.println("Get all flagged ");
 				anomalyStatus.add(AnomalyStatus.RESOLVED_FULLY);
 				break;
 
-			case "unResolve":
+			case "unResolved":
 				anomalyStatus.addAll(Arrays.asList(AnomalyStatus.REPORTED, 
 						AnomalyStatus.UNDER_INVESTIGATION,
 						AnomalyStatus.QUESTION_SUBMITTED,
@@ -2828,8 +2820,6 @@ System.out.println("Get all flagged ");
         }
 
         consumerRepository.markConsumersConsistent(0, ids);
-        System.out.println("Inside the Anomaly status tagExceedingAnomalies: ");
-        addAnomalyStatics(anomaly.getId());
         return anomaly;
     }
 
@@ -2890,8 +2880,6 @@ System.out.println("Get all flagged ");
         }
 
         consumerRepository.markConsumersConsistent(0, ids);
-        System.out.println("Inside the Anomaly status tagDuplicate Anomalies: ");
-        addAnomalyStatics(anomaly.getId());
         return anomaly;
     }
 
