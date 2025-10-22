@@ -92,6 +92,7 @@ public class ServiceProviderServiceImpl implements ServiceProviderService
 
    public Map<String, Object> getAllServiceProviders(String params) throws JsonMappingException, JsonProcessingException {
       ObjectMapper mapper = new ObjectMapper();
+      System.out.println("Get all sp's");
       Map<String, Object> paramMap = mapper.readValue(params, new TypeReference<Map<String, Object>>() {});
 
       // 🔹 Extract pagination safely
@@ -135,12 +136,15 @@ public class ServiceProviderServiceImpl implements ServiceProviderService
               serviceProviderRepository.findAllByStatus(ServiceProviderStatus.Active, pageable);
 
       List<ServiceProviderUserResponseDTO> response = new ArrayList<>();
+      System.out.println("Get all sp's 1");
       for (ServiceProvider s : pageServiceProvider) {
          List<com.app.kyc.entity.Service> services = serviceRepository.findByServiceProvider(s.getId());
+         String formattedDate = new SimpleDateFormat("yyyy-MM-dd").format(s.getCreatedOn());
+         System.out.println("formattedDate is "+formattedDate);
          ServiceProviderUserResponseDTO obj = new ServiceProviderUserResponseDTO(
                  s.getId(),
                  s.getName(),
-                 s.getCreatedOn(),
+                 formattedDate,
                  s.getIndustry().getName(),
                  userService.getUserById(s.getCreatedBy()),
                  !services.isEmpty(),
