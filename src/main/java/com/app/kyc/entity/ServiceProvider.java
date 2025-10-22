@@ -9,6 +9,7 @@ import javax.persistence.Id;
 import javax.persistence.ManyToOne;
 import javax.persistence.Table;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 
@@ -26,7 +27,11 @@ public class ServiceProvider
    private String address;
    private String companyPhoneNumber;
    private boolean Deleted;
+
+
+   @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd")
    private Date createdOn;
+
    private Long createdBy;
    private ServiceProviderStatus status;
    private Long approvedBy;

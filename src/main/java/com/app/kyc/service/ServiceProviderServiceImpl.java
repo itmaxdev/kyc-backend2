@@ -1,5 +1,6 @@
 package com.app.kyc.service;
 
+import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -294,10 +295,8 @@ public class ServiceProviderServiceImpl implements ServiceProviderService
          throw new RuntimeException("Service Provider with name '" + sp.getName() + "' already exists!");
       }
 
-      LocalDate today = LocalDate.now();
-      sp.setCreatedOn(Date.from(today.atStartOfDay(ZoneId.systemDefault()).toInstant()));
 
-      System.out.println("Created date on is "+Date.from(today.atStartOfDay(ZoneId.systemDefault()).toInstant()));
+      sp.setCreatedOn(new Date());
       sp.setDeleted(false);
       sp.setCreatedBy(1L);
       sp.setStatus(ServiceProviderStatus.Active);
