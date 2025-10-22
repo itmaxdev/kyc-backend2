@@ -217,7 +217,8 @@ public class ConsumerServiceImpl implements ConsumerService {
                     if (!firstAnomalyOpt.isPresent()) {
                         note = fullName + " belonging to " + providerName;
                         //note = fullName + " belonging to " + normalizedProvider;
-                        vendorCodeForHistory = Optional.ofNullable(c.getVendorCode()).orElse("");
+                        //vendorCodeForHistory = Optional.ofNullable(c.getVendorCode()).orElse("");
+                        vendorCodeForHistory = providerName;
                     } else {
                         Anomaly first = firstAnomalyOpt.get();
 
