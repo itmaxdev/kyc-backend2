@@ -6,6 +6,13 @@ server.username=kumar.saragadam
 server.password=O9d#4n1#3ing8dS5%&8
 server.port=8081
 
+#SSL
+#server.ssl.enabled=true
+#server.ssl.key-store=classpath:keystore.p12
+#server.ssl.key-store-password=@n2#9tn3$#4n9n!293n$54n
+#server.ssl.key-store-type=PKCS12
+#server.ssl.key-alias=te-7f961be6-02d4-4701-9d56-d39e15846c4e
+
 # ==============================
 # Database Connection
 # ==============================
