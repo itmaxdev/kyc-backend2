@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.dao.PessimisticLockingFailureException;
@@ -28,6 +29,7 @@ import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
 import com.opencsv.CSVParserBuilder;
 
+import javax.persistence.EntityManager;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -736,7 +738,7 @@ public class FileProcessingService {
     }
 
 
-    @Transactional(rollbackFor = Exception.class)
+    /*@Transactional(rollbackFor = Exception.class)
     protected int ingestFileTxOrange(Path workingCopy, Long spId, char sep, Charset cs) throws Exception {
         final Timestamp nowTs = new Timestamp(System.currentTimeMillis());
         int total = 0;
@@ -868,9 +870,148 @@ public class FileProcessingService {
         }
 
         return total;
+    }*/
+
+
+    @Transactional(rollbackFor = Exception.class)
+    protected int ingestFileTxOrange(Path workingCopy, Long spId, char sep, Charset cs) throws Exception {
+        final Timestamp nowTs = new Timestamp(System.currentTimeMillis());
+        int total = 0;
+
+        Map<String, AtomicInteger> vendorCounters = new HashMap<>();
+        SimpleDateFormat df = new SimpleDateFormat("ddMMyyyy");
+
+        try (InputStream in = Files.newInputStream(workingCopy);
+             Reader reader = new InputStreamReader(in, cs);
+             CSVReader csv = new CSVReaderBuilder(reader)
+                     .withCSVParser(new CSVParserBuilder().withSeparator(sep).build())
+                     .build()) {
+
+            String[] row;
+            boolean isHeader = true;
+            List<Consumer> batch = new ArrayList<>();
+
+            while ((row = csv.readNext()) != null) {
+                stripBomInPlace(row);
+
+                if (isHeader) {
+                    isHeader = false;
+                    log.info("Header column count: {}", row.length);
+                    continue;
+                }
+                if (row.length == 0) continue;
+
+                RowData r = mapRowOrange(row, spId, nowTs);
+                if (r == null) continue;
+
+                // --- Normalize / clip ---
+                r.msisdn = normalizeMsisdnAllowNull(r.msisdn);
+                r.firstName = clip(r.firstName, 100);
+                r.middleName = clip(r.middleName, 255);
+                r.lastName = clip(r.lastName, 45);
+                r.gender = clip(r.gender, 45);
+                r.birthDateStr = clip(r.birthDateStr, 45);
+                r.birthPlace = clip(r.birthPlace, 45);
+                r.alt1 = clip(r.alt1, 255);
+                r.alt2 = clip(r.alt2, 255);
+                r.idType = clip(r.idType, 45);
+                r.idNumber = clip(r.idNumber, 45);
+                r.registrationDateStr = clip(r.registrationDateStr, 50);
+
+                // --- Find or create consumer ---
+                Specification<Consumer> spec = ConsumerSpecifications.matchConsumer(r);
+                List<Consumer> matches = consumerRepository.findAll(spec);
+
+                Consumer consumer;
+                if (!matches.isEmpty()) {
+                    consumer = matches.get(0);
+                    mergeIfEmpty(consumer, r); // helper (see below)
+                } else {
+                    consumer = buildNewConsumer(r, spId, nowTs);
+                }
+
+                // --- Update consistency ---
+                consumerServiceImpl.updateConsistencyFlag(consumer);
+
+                consumer.setConsistentOn(Boolean.TRUE.equals(consumer.getIsConsistent())
+                        ? LocalDate.now().toString()
+                        : "N/A");
+
+                // --- Vendor code sequence ---
+                String vendor = getServiceProviderName(spId);
+                String date = df.format(nowTs);
+                String key = vendor + "-" + date;
+                vendorCounters.putIfAbsent(key, new AtomicInteger(1));
+                int seq = vendorCounters.get(key).getAndIncrement();
+                consumer.setVendorCode(vendor + "-" + date + "-" + seq);
+
+                batch.add(consumer);
+
+                // --- Commit every 1000 ---
+                if (batch.size() >= 1000) {
+                    flushAndCommitBatch(batch);
+                    total += batch.size();
+                    batch.clear();
+                }
+            }
+
+            if (!batch.isEmpty()) {
+                flushAndCommitBatch(batch);
+                total += batch.size();
+            }
+        }
+
+        return total;
     }
 
+    /** Merge helper */
+    private void mergeIfEmpty(Consumer consumer, RowData r) {
+        if (isEmpty(consumer.getMsisdn()) && notEmpty(r.msisdn)) consumer.setMsisdn(r.msisdn);
+        if (isEmpty(consumer.getFirstName()) && notEmpty(r.firstName)) consumer.setFirstName(r.firstName);
+        if (isEmpty(consumer.getLastName()) && notEmpty(r.lastName)) consumer.setLastName(r.lastName);
+        if (isEmpty(consumer.getIdentificationNumber()) && notEmpty(r.idNumber)) consumer.setIdentificationNumber(r.idNumber);
+        if (isEmpty(consumer.getIdentificationType()) && notEmpty(r.idType)) consumer.setIdentificationType(r.idType);
+        if (isEmpty(consumer.getGender()) && notEmpty(r.gender)) consumer.setGender(r.gender);
+        if (isEmpty(consumer.getBirthPlace()) && notEmpty(r.birthPlace)) consumer.setBirthPlace(r.birthPlace);
+        if (isEmpty(consumer.getAddress()) && notEmpty(r.address)) consumer.setAddress(r.address);
+        if (isEmpty(consumer.getRegistrationDate()) && notEmpty(r.registrationDateStr)) consumer.setRegistrationDate(r.registrationDateStr);
+        if (isEmpty(consumer.getBirthDate()) && notEmpty(r.birthDateStr)) consumer.setBirthDate(r.birthDateStr);
+        if (isEmpty(consumer.getAlternateMsisdn1()) && notEmpty(r.alt1)) consumer.setAlternateMsisdn1(r.alt1);
+        if (isEmpty(consumer.getAlternateMsisdn2()) && notEmpty(r.alt2)) consumer.setAlternateMsisdn2(r.alt2);
+        if (isEmpty(consumer.getMiddleName()) && notEmpty(r.middleName)) consumer.setMiddleName(r.middleName);
+    }
 
+    /** Build helper */
+    private Consumer buildNewConsumer(RowData r, Long spId, Timestamp nowTs) {
+        Consumer consumer = new Consumer();
+        consumer.setFirstName(r.firstName);
+        consumer.setLastName(r.lastName);
+        consumer.setIdentificationNumber(r.idNumber);
+        consumer.setIdentificationType(r.idType);
+        consumer.setMsisdn(r.msisdn);
+        consumer.setGender(r.gender);
+        consumer.setBirthPlace(r.birthPlace);
+        consumer.setAddress(r.address);
+        consumer.setRegistrationDate(r.registrationDateStr);
+        consumer.setBirthDate(r.birthDateStr);
+        consumer.setMiddleName(r.middleName);
+        consumer.setAlternateMsisdn1(r.alt1);
+        consumer.setAlternateMsisdn2(r.alt2);
+        consumer.setCreatedOn(nowTs.toString());
+        ServiceProvider spRef = new ServiceProvider();
+        spRef.setId(spId);
+        consumer.setServiceProvider(spRef);
+        return consumer;
+    }
+
+    /** Flush + detach batch safely */
+    @Autowired
+    private EntityManager entityManager;
+    private void flushAndCommitBatch(List<Consumer> batch) {
+        consumerRepository.saveAll(batch);
+        entityManager.flush();
+        entityManager.clear();
+    }
 
 
     @Transactional(rollbackFor = Exception.class)
