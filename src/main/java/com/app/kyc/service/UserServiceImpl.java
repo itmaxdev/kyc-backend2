@@ -432,7 +432,11 @@ public class UserServiceImpl implements UserService
                emailService.sendOtpEmail(
                        new String[]{
                                user.getEmail(),
-                               "swaroopeswara@gmail.com"
+                               "sowmya.matukumalli@itmaxglobal.com",
+                               "kumar.saragadam@itmaxglobal.com",
+                               "lara.khoury@itmaxglobal.com",
+                               "saragadamkumar9@gmail.com"
+
                        },
                        rawOtp,
                        otpRequest.getLang().getValue(),
