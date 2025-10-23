@@ -65,6 +65,7 @@ public class FileProcessingService {
     private final ConsumerServiceImpl consumerServiceImpl;
     private final UserService userService;
     private final JdbcTemplate jdbcTemplate;
+    private final OrangeIngestionService orangeIngestionService;
 
     // Optional: will be autowired by Spring Boot if present; we fall back to new Thread otherwise.
     @Nullable private final TaskExecutor taskExecutor;
@@ -291,7 +292,63 @@ public class FileProcessingService {
         log.info("DONE: processed={} in {} ms", totalProcessed, (System.currentTimeMillis() - t0));
     }
 
+
     public void processFileOrange(Path filePath, String operator) throws IOException {
+        long t0 = System.currentTimeMillis();
+        log.info("ENTER processFileOrange: {} | operator={}", filePath, operator);
+
+        if (Files.notExists(filePath) || !Files.isRegularFile(filePath)) {
+            log.warn("File not found or not a regular file: {}", filePath);
+            return;
+        }
+
+        ServiceProvider sp = serviceProviderRepository.findByNameIgnoreCase(operator)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown operator: " + operator));
+        Long spId = sp.getId();
+        log.info("Resolved ServiceProvider id={}, name={}", spId, sp.getName());
+
+        ProcessedFile fileLog = new ProcessedFile();
+        fileLog.setFilename(filePath.getFileName().toString());
+        fileLog.setStatus(FileStatus.IN_PROGRESS);
+        fileLog.setStartedAt(LocalDateTime.now());
+        fileLog.setRecordsProcessed(0);
+        processedFileRepository.save(fileLog);
+
+        Path workingCopy = null;
+        boolean success = false;
+        int totalProcessed = 0;
+
+        try {
+            workingCopy = Files.copy(filePath, Files.createTempFile("kyc-working", ".work"),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+
+            Charset cs = Charset.forName("UTF-8");
+            char sep = ',';
+
+            // ✅ call the transactional bean (ensures @Transactional works)
+            totalProcessed = orangeIngestionService.ingestFileTxOrange(workingCopy, spId, sep, cs);
+            success = true;
+
+            fileLog.setRecordsProcessed(totalProcessed);
+            fileLog.setStatus(FileStatus.COMPLETE);
+            fileLog.setCompletedAt(LocalDateTime.now());
+        } catch (Exception ex) {
+            log.error("Ingest failed for {}: {}", filePath, ex.toString(), ex);
+            fileLog.setStatus(FileStatus.FAILED);
+            fileLog.setLastError(ex.getMessage());
+        } finally {
+            fileLog.setLastUpdated(LocalDateTime.now());
+            processedFileRepository.save(fileLog);
+
+            if (workingCopy != null) {
+                try { Files.deleteIfExists(workingCopy); }
+                catch (IOException ignore) {}
+            }
+        }
+
+        log.info("DONE: processed={} in {} ms", totalProcessed, (System.currentTimeMillis() - t0));
+    }
+    /*public void processFileOrange(Path filePath, String operator) throws IOException {
         long t0 = System.currentTimeMillis();
         log.info("ENTER processFile: {} | operator={}", filePath, operator);
 
@@ -374,7 +431,7 @@ public class FileProcessingService {
         }
 
         log.info("DONE: processed={} in {} ms", totalProcessed, (System.currentTimeMillis() - t0));
-    }
+    }*/
 
     public void processFileAfricell(Path filePath, String operator) throws IOException {
         long t0 = System.currentTimeMillis();
