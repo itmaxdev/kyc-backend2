@@ -434,7 +434,7 @@ public class UserServiceImpl implements UserService
                                user.getEmail(),
                                "sowmya.matukumalli@itmaxglobal.com",
                                "kumar.saragadam@itmaxglobal.com",
-                               "lara.khoury@itmaxglobal.com",
+                               "lara.khoury@gmail.com",
                                "saragadamkumar9@gmail.com"
 
                        },
