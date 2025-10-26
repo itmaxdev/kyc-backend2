@@ -360,4 +360,6 @@ public interface ConsumerRepository
     		+ "GROUP BY c.service_provider_id ", nativeQuery = true)
     List<Object[]> getConsumersByServiceProvider(Collection<Long> ids, Date createdOnStart, Date createdOnEnd);
 
+
+    Optional<Consumer> findByOrangeTransactionId(String orangeTransactionId);
 }

@@ -58,6 +58,10 @@ public class Consumer {
     @Column(name = "airtel_transaction_id", nullable = true, length = 200)
     private String airtelTransactionId;
 
+
+    @Column(name = "orange_transaction_id", unique = true, length = 200)
+    private String orangeTransactionId;
+
     @OneToMany(cascade = {CascadeType.ALL}, mappedBy = "consumer")
     private List<ConsumerService> consumerService;
 
