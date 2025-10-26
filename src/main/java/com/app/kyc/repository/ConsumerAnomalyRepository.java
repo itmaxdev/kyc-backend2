@@ -12,6 +12,7 @@ import com.app.kyc.entity.Anomaly;
 import com.app.kyc.entity.AnomalyType;
 import com.app.kyc.entity.Consumer;
 import com.app.kyc.entity.ConsumerAnomaly;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
@@ -61,4 +62,19 @@ public interface ConsumerAnomalyRepository extends JpaRepository<ConsumerAnomaly
 
     @Query("select sp.id as serviceProviderId, count(distinct ca.anomaly) as anomalyCount, a.status as status, sp.name as name from ConsumerAnomaly ca join Anomaly a on ca.anomaly.id = a.id join Consumer c on ca.consumer.id = c.id join ServiceProvider sp on c.serviceProvider.id = sp.id where (a.reportedOn between :startDate and :endDate) and sp.id in (:serviceProviderIds) group by c.serviceProvider.id, a.status")
     List<DashboardAnomalyStatusInterface> countAnomaliesByServiceProviderAndAnomalyStatus(@Param("startDate")Date startDate, @Param("endDate")Date endDate, @Param("serviceProviderIds") List<Long> serviceProviderIds);
+
+
+    boolean existsByConsumer_IdAndAnomaly_Id(Long consumerId, Long anomalyId);
+
+    @Modifying
+    @Query("UPDATE ConsumerAnomaly ca SET ca.notes = :note " +
+            "WHERE ca.anomaly.id = :anomalyId AND ca.consumer.id = :consumerId AND ca.notes <> :note")
+    void updateNoteIfDifferent(@Param("anomalyId") Long anomalyId,
+                               @Param("consumerId") Long consumerId,
+                               @Param("note") String note);
+
+
+    boolean existsByAnomaly_IdAndConsumer_Id(Long anomalyId, Long consumerId);
+
+
 }

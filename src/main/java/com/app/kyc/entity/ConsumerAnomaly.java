@@ -1,45 +1,32 @@
 package com.app.kyc.entity;
 
+import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
+
 import javax.persistence.*;
 
+
 @Entity
-@Table(name = "consumers_anomalies")
+@Table(name = "consumers_anomalies", uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"consumer_id", "anomaly_id"}, name = "uq_cons_anom")
+})
+@Data
+@Getter
+@Setter
 public class ConsumerAnomaly {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-
-    private String notes;
-
-    @ManyToOne
-    private Anomaly anomaly;
-
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "consumer_id", nullable = false)
     private Consumer consumer;
 
-    public Anomaly getAnomaly(){
-        return anomaly;
-    }
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "anomaly_id", nullable = false)
+    private Anomaly anomaly;
 
-    public void setAnomaly(Anomaly anomaly)
-    {
-        this.anomaly = anomaly;
-    }
-
-    public Consumer getConsumer(){
-        return consumer;
-    }
-    
-    public void setConsumer(Consumer consumer)
-    {
-        this.consumer = consumer;
-    }
-    public String getNotes() {
-        return notes;
-    }
-
-    public void setNotes(String notes) {
-        this.notes = notes;
-    }
+    @Column(length = 1000)
+    private String notes;  // ← This is missing in DB
 }

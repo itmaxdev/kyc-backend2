@@ -305,7 +305,6 @@ public class FileProcessingService {
         ServiceProvider sp = serviceProviderRepository.findByNameIgnoreCase(operator)
                 .orElseThrow(() -> new IllegalArgumentException("Unknown operator: " + operator));
         Long spId = sp.getId();
-        log.info("Resolved ServiceProvider id={}, name={}", spId, sp.getName());
 
         ProcessedFile fileLog = new ProcessedFile();
         fileLog.setFilename(filePath.getFileName().toString());
@@ -319,35 +318,47 @@ public class FileProcessingService {
         int totalProcessed = 0;
 
         try {
+            // work safely on a copy
             workingCopy = Files.copy(filePath, Files.createTempFile("kyc-working", ".work"),
-                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                    StandardCopyOption.REPLACE_EXISTING);
 
             Charset cs = Charset.forName("UTF-8");
             char sep = ',';
 
-            // ✅ call the transactional bean (ensures @Transactional works)
             totalProcessed = orangeIngestionService.ingestFileTxOrange(workingCopy, spId, sep, cs);
             success = true;
 
             fileLog.setRecordsProcessed(totalProcessed);
             fileLog.setStatus(FileStatus.COMPLETE);
             fileLog.setCompletedAt(LocalDateTime.now());
+            log.info("✅ Orange ingestion done: {} records", totalProcessed);
         } catch (Exception ex) {
-            log.error("Ingest failed for {}: {}", filePath, ex.toString(), ex);
+            log.error("❌ Ingest failed for {}: {}", filePath, ex.getMessage(), ex);
             fileLog.setStatus(FileStatus.FAILED);
             fileLog.setLastError(ex.getMessage());
         } finally {
             fileLog.setLastUpdated(LocalDateTime.now());
             processedFileRepository.save(fileLog);
-
-            if (workingCopy != null) {
-                try { Files.deleteIfExists(workingCopy); }
-                catch (IOException ignore) {}
-            }
+            if (workingCopy != null) Files.deleteIfExists(workingCopy);
         }
 
-        log.info("DONE: processed={} in {} ms", totalProcessed, (System.currentTimeMillis() - t0));
+        // ✅ move file after processing
+        try {
+            moveOriginal(filePath, success ? "processed" : "failed", fileLog);
+        } catch (IOException moveEx) {
+            log.error("❌ Move failed for {}: {}", filePath, moveEx.getMessage());
+            fileLog.setStatus(FileStatus.FAILED);
+            fileLog.setLastError("Move failed: " + moveEx.getMessage());
+            processedFileRepository.save(fileLog);
+        }
+
+        if (success) runCheckConsumerAsync(sp);
+
+        log.info("DONE: processed={} in {} ms", totalProcessed, System.currentTimeMillis() - t0);
     }
+
+
+
     /*public void processFileOrange(Path filePath, String operator) throws IOException {
         long t0 = System.currentTimeMillis();
         log.info("ENTER processFile: {} | operator={}", filePath, operator);
@@ -930,96 +941,7 @@ public class FileProcessingService {
     }*/
 
 
-    @Transactional(rollbackFor = Exception.class)
-    protected int ingestFileTxOrange(Path workingCopy, Long spId, char sep, Charset cs) throws Exception {
-        final Timestamp nowTs = new Timestamp(System.currentTimeMillis());
-        int total = 0;
 
-        Map<String, AtomicInteger> vendorCounters = new HashMap<>();
-        SimpleDateFormat df = new SimpleDateFormat("ddMMyyyy");
-
-        try (InputStream in = Files.newInputStream(workingCopy);
-             Reader reader = new InputStreamReader(in, cs);
-             CSVReader csv = new CSVReaderBuilder(reader)
-                     .withCSVParser(new CSVParserBuilder().withSeparator(sep).build())
-                     .build()) {
-
-            String[] row;
-            boolean isHeader = true;
-            List<Consumer> batch = new ArrayList<>();
-
-            while ((row = csv.readNext()) != null) {
-                stripBomInPlace(row);
-
-                if (isHeader) {
-                    isHeader = false;
-                    log.info("Header column count: {}", row.length);
-                    continue;
-                }
-                if (row.length == 0) continue;
-
-                RowData r = mapRowOrange(row, spId, nowTs);
-                if (r == null) continue;
-
-                // --- Normalize / clip ---
-                r.msisdn = normalizeMsisdnAllowNull(r.msisdn);
-                r.firstName = clip(r.firstName, 100);
-                r.middleName = clip(r.middleName, 255);
-                r.lastName = clip(r.lastName, 45);
-                r.gender = clip(r.gender, 45);
-                r.birthDateStr = clip(r.birthDateStr, 45);
-                r.birthPlace = clip(r.birthPlace, 45);
-                r.alt1 = clip(r.alt1, 255);
-                r.alt2 = clip(r.alt2, 255);
-                r.idType = clip(r.idType, 45);
-                r.idNumber = clip(r.idNumber, 45);
-                r.registrationDateStr = clip(r.registrationDateStr, 50);
-
-                // --- Find or create consumer ---
-                Specification<Consumer> spec = ConsumerSpecifications.matchConsumer(r);
-                List<Consumer> matches = consumerRepository.findAll(spec);
-
-                Consumer consumer;
-                if (!matches.isEmpty()) {
-                    consumer = matches.get(0);
-                    mergeIfEmpty(consumer, r); // helper (see below)
-                } else {
-                    consumer = buildNewConsumer(r, spId, nowTs);
-                }
-
-                // --- Update consistency ---
-                consumerServiceImpl.updateConsistencyFlag(consumer);
-
-                consumer.setConsistentOn(Boolean.TRUE.equals(consumer.getIsConsistent())
-                        ? LocalDate.now().toString()
-                        : "N/A");
-
-                // --- Vendor code sequence ---
-                String vendor = getServiceProviderName(spId);
-                String date = df.format(nowTs);
-                String key = vendor + "-" + date;
-                vendorCounters.putIfAbsent(key, new AtomicInteger(1));
-                int seq = vendorCounters.get(key).getAndIncrement();
-                consumer.setVendorCode(vendor + "-" + date + "-" + seq);
-
-                batch.add(consumer);
-
-                // --- Commit every 1000 ---
-                if (batch.size() >= 1000) {
-                    flushAndCommitBatch(batch);
-                    total += batch.size();
-                    batch.clear();
-                }
-            }
-
-            if (!batch.isEmpty()) {
-                flushAndCommitBatch(batch);
-                total += batch.size();
-            }
-        }
-
-        return total;
-    }
 
     /** Merge helper */
     private void mergeIfEmpty(Consumer consumer, RowData r) {
@@ -1525,7 +1447,7 @@ public class FileProcessingService {
         return Paths.get(System.getProperty("java.io.tmpdir"), "kyc-working");
     }
 
-    private void moveOriginal(Path original, String subfolder, ProcessedFile fileLog) throws IOException {
+   /* private void moveOriginal(Path original, String subfolder, ProcessedFile fileLog) throws IOException {
         Path destDir = original.getParent().resolve(subfolder);
         Files.createDirectories(destDir);
         String ts = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
@@ -1536,7 +1458,68 @@ public class FileProcessingService {
         fileLog.setFilenameNew(newName);
         processedFileRepository.save(fileLog);
         log.info("Moved file to: {}", target);
+    }*/
+
+
+    private void moveOriginal(Path original, String subfolder, ProcessedFile fileLog) throws IOException {
+        Path parent = original.getParent();
+        if (parent == null) {
+            throw new IOException("Parent directory is null for: " + original);
+        }
+
+        Path destDir = parent.resolve(subfolder);
+        Files.createDirectories(destDir);
+
+        String ts = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+        String base = original.getFileName().toString();
+        String newName = base.replace(".csv", "_" + ts + ".csv");
+        Path target = destDir.resolve(newName);
+
+        log.info("Attempting to move {} → {}", original.toAbsolutePath(), target.toAbsolutePath());
+
+        int attempts = 0;
+        boolean moved = false;
+        IOException lastEx = null;
+
+        while (attempts < 5 && !moved) {
+            try {
+                Files.move(original, target, StandardCopyOption.REPLACE_EXISTING);
+                moved = true;
+                log.info("✅ File moved successfully to {}", target.toAbsolutePath());
+            } catch (IOException ex) {
+                attempts++;
+                lastEx = ex;
+                log.warn("⚠ Move attempt {} failed for {} → {}: {}", attempts, original, target, ex.getMessage());
+                try {
+                    Thread.sleep(1000L * attempts); // exponential backoff
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+
+        // 🔁 Fallback: copy + delete (handles OneDrive sync locks)
+        if (!moved) {
+            log.warn("⚠ Falling back to copy+delete for OneDrive lock issue...");
+            try {
+                Files.copy(original, target, StandardCopyOption.REPLACE_EXISTING);
+                Files.deleteIfExists(original);
+                log.info("✅ File copied+deleted successfully to {}", target.toAbsolutePath());
+                moved = true;
+            } catch (IOException ex) {
+                log.error("❌ Even copy+delete failed for {} → {}: {}", original, target, ex.getMessage());
+                throw ex;
+            }
+        }
+
+        if (moved) {
+            fileLog.setFilenameNew(newName);
+            processedFileRepository.save(fileLog);
+        } else if (lastEx != null) {
+            throw lastEx;
+        }
     }
+
 
     private void safeCopyWithRetry(Path from, Path to) throws IOException {
         IOException last = null;
@@ -1749,6 +1732,7 @@ public class FileProcessingService {
         public String vodacomTransactionId;
         public String airtelTransactionId;
 
+        public String orangeTransactionId;
 
 
 

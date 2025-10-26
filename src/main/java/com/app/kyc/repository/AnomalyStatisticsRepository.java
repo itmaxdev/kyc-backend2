@@ -21,5 +21,7 @@ public interface AnomalyStatisticsRepository extends JpaRepository<AnomalyStatis
 
 
     Optional<AnomalyStatistics> findTopByAnomalyIdOrderByRecordedOnDesc(Long anomalyId);
+
+    Optional<AnomalyStatistics> findByAnomalyId(Long anomalyId);
 }
 

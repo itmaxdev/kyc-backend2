@@ -5,6 +5,7 @@ import com.app.kyc.entity.ServiceProvider;
 import com.app.kyc.repository.ConsumerRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -39,21 +40,20 @@ public class OrangeIngestionService {
     @PersistenceContext
     private EntityManager entityManager;
 
-    private static final int BATCH_SIZE = 2000;  // 🧩 Safer for large CSVs (avoid deadlocks)
-    private static final int MAX_FIELD_LEN = 255;
+    private static final int BATCH_SIZE = 2000;
+    private static final int MAX_RETRIES = 3;
 
     /**
-     * Transactional ingestion method — called from FileProcessingService.
+     * Transactional Orange ingestion – generates unique orange_transaction_id for deduplication.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
     public int ingestFileTxOrange(Path workingCopy, Long spId, char sep, Charset cs) throws Exception {
         final Timestamp nowTs = new Timestamp(System.currentTimeMillis());
         int total = 0;
 
-        Map<String, AtomicInteger> vendorCounters = new HashMap<>();
+        List<Consumer> batch = new ArrayList<>(BATCH_SIZE);
         SimpleDateFormat df = new SimpleDateFormat("ddMMyyyy");
-
-        List<Consumer> batch = new ArrayList<>();
+        Map<String, AtomicInteger> vendorCounters = new HashMap<>();
 
         try (InputStream in = Files.newInputStream(workingCopy);
              Reader reader = new InputStreamReader(in, cs);
@@ -65,65 +65,98 @@ public class OrangeIngestionService {
             boolean isHeader = true;
 
             while ((row = csv.readNext()) != null) {
-                if (isHeader) {
-                    isHeader = false;
-                    log.info("Header column count: {}", row.length);
-                    continue;
-                }
-
+                if (isHeader) { isHeader = false; log.info("Header column count: {}", row.length); continue; }
                 if (row.length == 0) continue;
 
                 try {
                     Consumer consumer = mapRowToConsumer(row, spId, nowTs);
+
+                    // ✅ Compute deterministic transaction ID hash
+                    String txHash = DigestUtils.sha256Hex(String.join("|",
+                            Optional.ofNullable(consumer.getMsisdn()).orElse(""),
+                            Optional.ofNullable(consumer.getFirstName()).orElse(""),
+                            Optional.ofNullable(consumer.getLastName()).orElse(""),
+                            Optional.ofNullable(consumer.getBirthDate()).orElse(""),
+                            Optional.ofNullable(consumer.getIdentificationNumber()).orElse(""),
+                            Optional.ofNullable(consumer.getIdentificationType()).orElse(""),
+                            String.valueOf(spId)
+                    ));
+
+                    consumer.setOrangeTransactionId(txHash);
+
+                    // 🔹 Check if consumer already exists by transaction hash
+                    consumerRepository.findByOrangeTransactionId(txHash).ifPresent(existing -> {
+                        consumer.setId(existing.getId()); // overwrite same record instead of new insert
+                    });
+
+                    // 🔹 Apply consistency logic
                     consumerServiceImpl.updateConsistencyFlag(consumer);
+
+                    // 🔹 Assign vendor code (Orange-<date>-seq)
+                    String date = df.format(nowTs);
+                    String key = "Orange-" + date;
+                    vendorCounters.putIfAbsent(key, new AtomicInteger(1));
+                    int seq = vendorCounters.get(key).getAndIncrement();
+                    consumer.setVendorCode("Orange-" + date + "-" + seq);
+
                     batch.add(consumer);
 
                     if (batch.size() >= BATCH_SIZE) {
-                        flushAndCommitBatch(batch);
-                        total += BATCH_SIZE;
+                        total += flushAndCommitBatch(batch);
                     }
                 } catch (DataIntegrityViolationException e) {
-                    log.warn("⚠️ Skipping row due to data error: {}", e.getMostSpecificCause().getMessage());
+                    log.warn("⚠️ Skipping row due to data violation: {}", e.getMostSpecificCause().getMessage());
                 } catch (Exception e) {
                     log.warn("⚠️ Failed to map row (skipped): {}", Arrays.toString(row));
                 }
             }
 
             if (!batch.isEmpty()) {
-                flushAndCommitBatch(batch);
-                total += batch.size();
+                total += flushAndCommitBatch(batch);
             }
 
         } catch (Exception e) {
-            log.error("❌ Ingest failed in OrangeIngestionService: {}", e.getMessage(), e);
-            throw e;  // rollback the transaction
+            log.error("❌ Orange ingestion failed: {}", e.getMessage(), e);
+            throw e;
         }
 
-        log.info("✅ Orange ingestion completed: {} records", total);
+        log.info("✅ Orange ingestion completed: {} records processed.", total);
         return total;
     }
 
     /**
-     * Flushes a batch to DB and clears persistence context.
+     * Flushes and clears persistence context with retry (to avoid deadlocks).
      */
-    private void flushAndCommitBatch(List<Consumer> batch) {
-        try {
-            consumerRepository.saveAll(batch);
-            entityManager.flush();
-            entityManager.clear();
-            batch.clear();
-        } catch (Exception e) {
-            log.error("❌ Error during batch flush: {}", e.getMessage());
-            throw e;
+    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
+    public int flushAndCommitBatch(List<Consumer> batch) throws InterruptedException {
+        int attempt = 0;
+        while (attempt < MAX_RETRIES) {
+            try {
+                consumerRepository.saveAll(batch);
+                entityManager.flush();
+                entityManager.clear();
+                int size = batch.size();
+                batch.clear();
+                return size;
+            } catch (Exception e) {
+                attempt++;
+                if (attempt >= MAX_RETRIES) {
+                    log.error("❌ Batch save failed after {} retries: {}", MAX_RETRIES, e.getMessage());
+                    throw e;
+                }
+                log.warn("⚠️ Deadlock or lock timeout, retrying batch ({}/{}): {}", attempt, MAX_RETRIES, e.getMessage());
+                Thread.sleep(500L * attempt);
+            }
         }
+        batch.clear();
+        return 0;
     }
 
     /**
-     * Safely maps CSV row → Consumer entity with clipping and validation.
+     * Maps CSV row → Consumer safely.
      */
     private Consumer mapRowToConsumer(String[] row, Long spId, Timestamp nowTs) {
         Consumer c = new Consumer();
-
         c.setFirstName(safeClip(row, 0, 100));
         c.setLastName(safeClip(row, 1, 100));
         c.setMsisdn(safeClip(row, 2, 45));
@@ -138,25 +171,15 @@ public class OrangeIngestionService {
         ServiceProvider spRef = new ServiceProvider();
         spRef.setId(spId);
         c.setServiceProvider(spRef);
-
         c.setCreatedOn(nowTs.toString());
-        c.setIsConsistent(Boolean.FALSE);
-        c.setConsistentOn(LocalDate.now().toString());
         return c;
     }
 
-    /**
-     * Utility: clip & null-safe field value to avoid SQL truncation.
-     */
     private String safeClip(String[] row, int idx, int maxLen) {
         if (row == null || idx >= row.length) return null;
         String val = row[idx];
         if (val == null) return null;
         val = val.trim();
-        if (val.length() > maxLen) {
-            log.warn("Truncating value '{}' to {} chars", val, maxLen);
-            return val.substring(0, maxLen);
-        }
-        return val;
+        return (val.length() > maxLen) ? val.substring(0, maxLen) : val;
     }
 }

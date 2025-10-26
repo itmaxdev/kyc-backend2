@@ -38,9 +38,10 @@ public class Anomaly
    @JoinColumn(name = "consumers_services_id")
    ConsumerService consumersService;
    
-   @ManyToMany(cascade = CascadeType.ALL)
-   @JoinTable(name = "consumers_anomalies", joinColumns = @JoinColumn(name = "anomaly_id"), inverseJoinColumns = @JoinColumn(name = "consumer_id"))
-   List<Consumer> consumers = new ArrayList<>();
+
+   @ManyToMany(mappedBy = "anomalies", fetch = FetchType.LAZY)
+   private List<Consumer> consumers = new ArrayList<>();
+
 
    @ManyToOne
    private AnomalyType anomalyType;

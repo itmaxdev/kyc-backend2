@@ -1,25 +1,19 @@
 package com.app.kyc.entity;
 
-import java.util.*;
-
-import javax.persistence.*;
-
 import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 import org.apache.commons.lang3.builder.ReflectionToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 
-
-
+import javax.persistence.*;
+import java.util.*;
 
 @Entity
 @Data
 @Setter
 @Getter
-@Table(
-        name = "consumers"
-)
+@Table(name = "consumers")
 public class Consumer {
 
     @Id
@@ -46,40 +40,52 @@ public class Consumer {
     private String subscriberType;
     private Boolean isConsistent;
     private int consumerStatus;
+
     @Column(name = "consistent_on")
     private String consistentOn;
+
     @Column(name = "vendor_code")
     private String vendorCode;
 
-    @Column(name = "vodacom_transaction_id", unique = true, nullable = true, length = 200)
+    @Column(name = "vodacom_transaction_id", unique = true, length = 200)
     private String vodacomTransactionId;
 
-    // 🔹 Not unique anymore
-    @Column(name = "airtel_transaction_id", nullable = true, length = 200)
+    @Column(name = "orange_transaction_id", unique = true, length = 200)
+    private String orangeTransactionId;
+
+    @Column(name = "airtel_transaction_id", length = 200)
     private String airtelTransactionId;
 
-    @OneToMany(cascade = {CascadeType.ALL}, mappedBy = "consumer")
+    @OneToMany(cascade = CascadeType.ALL, mappedBy = "consumer")
     private List<ConsumerService> consumerService;
 
-    @ManyToMany(cascade = {
-            CascadeType.PERSIST,
-            CascadeType.MERGE
-    })
-    @JoinTable(name = "consumers_services",
+    @ManyToMany(cascade = {CascadeType.MERGE, CascadeType.PERSIST})
+    @JoinTable(
+            name = "consumers_services",
             joinColumns = @JoinColumn(name = "consumer_id"),
-            inverseJoinColumns = @JoinColumn(name = "service_id"))
+            inverseJoinColumns = @JoinColumn(name = "service_id")
+    )
     private List<Service> services;
 
-    @ManyToMany(cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    @JoinTable(name = "consumers_anomalies",
+    /**
+     * ✅ FIXED:
+     *  - Removed CascadeType.ALL (no re-inserts)
+     *  - Added unique constraint for safety
+     *  - Lazy fetch to avoid unnecessary joins
+     */
+    @ManyToMany(fetch = FetchType.LAZY, cascade = {CascadeType.MERGE, CascadeType.PERSIST})
+    @JoinTable(
+            name = "consumers_anomalies",
             joinColumns = @JoinColumn(name = "consumer_id"),
-            inverseJoinColumns = @JoinColumn(name = "anomaly_id"))
-    List<Anomaly> anomalies = new ArrayList<>();
+            inverseJoinColumns = @JoinColumn(name = "anomaly_id"),
+            uniqueConstraints = {
+                    @UniqueConstraint(name = "uq_cons_anom", columnNames = {"consumer_id", "anomaly_id"})
+            }
+    )
+    private List<Anomaly> anomalies = new ArrayList<>();
 
     @ManyToOne
     private ServiceProvider serviceProvider;
-
-
 
     @Override
     public String toString() {
@@ -89,9 +95,9 @@ public class Consumer {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (!(o instanceof Consumer)) return false;
         Consumer consumer = (Consumer) o;
-        return msisdn != null && msisdn.equals(consumer.msisdn);
+        return Objects.equals(msisdn, consumer.msisdn);
     }
 
     @Override
