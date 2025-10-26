@@ -1912,7 +1912,7 @@ System.out.println("Get all flagged ");
                     }
 
                     // -------- Duplicate anomaly check (by msisdn) --------
-                   /* String keyMsisdn = normalize(consumer.getMsisdn());
+                   String keyMsisdn = normalize(consumer.getMsisdn());
                     if (!seenMsisdn.add(keyMsisdn)) {
                         try { tagDuplicateAnomalies(consumer, user); } catch (Exception e) { log.warn("duplicate-anomaly failed msisdn={}", keyMsisdn, e); }
                     } else {
@@ -1922,10 +1922,10 @@ System.out.println("Get all flagged ");
                         } catch (Exception e) {
                             log.warn("resolve-old-anomalies failed msisdn={}", keyMsisdn, e);
                         }
-                    }*/
+                    }
 
                     // -------- Exceeding anomaly check --------
-                    /*ExceedingConsumers exKey = new ExceedingConsumers();
+                    ExceedingConsumers exKey = new ExceedingConsumers();
                     exKey.setServiceProviderName(serviceProvider.getName());
                     exKey.setIdentificationType(Optional.ofNullable(consumer.getIdentificationType()).orElse(""));
                     exKey.setIdentificationNumber(Optional.ofNullable(consumer.getIdentificationNumber()).orElse(""));
@@ -1939,7 +1939,7 @@ System.out.println("Get all flagged ");
                         }
                     } else if (newCnt == 3) { // first time crossing the threshold
                         try { tagExceedingAnomalies(consumer, user); } catch (Exception e) { log.warn("exceeding-anomaly failed msisdn={}", keyMsisdn, e); }
-                    }*/
+                    }
 
                     // -------- Batch flush/clear --------
                     processed++;
