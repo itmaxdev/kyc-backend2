@@ -168,11 +168,19 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
    @Transactional
    void deleteAllByIdIn(List<Long> ids);
 
-   @Query("select count(distinct a.id) from Anomaly a inner join a.consumers consumers " +
+  /* @Query("select count(distinct a.id) from Anomaly a inner join a.consumers consumers " +
            "where consumers.serviceProvider.id in ?1 and a.status in ?2 and a.reportedOn between ?3 and ?4")
    long countDistinctByConsumers_ServiceProvider_IdInAndStatusInAndReportedOnBetween(Collection<Long> ids, Collection<AnomalyStatus> statuses, Date reportedOnStart, Date reportedOnEnd);
 
-   @Query("select count(distinct a.id) from Anomaly a inner join a.consumers consumers " +
+*/
+
+	@Query("select count(a.id) from Anomaly a where a.consumers.serviceProvider.id in ?1 and a.status in ?2 and a.reportedOn between ?3 and ?4 ")
+	long countDistinctByConsumers_ServiceProvider_IdInAndStatusInAndReportedOnBetween(Collection<Long> ids, Collection<AnomalyStatus> statuses, Date reportedOnStart, Date reportedOnEnd);
+
+
+
+
+	@Query("select count(distinct a.id) from Anomaly a inner join a.consumers consumers " +
            "where consumers.serviceProvider.id in ?1 and a.status in ?2 and a.reportedOn between ?3 and ?4")
    long countDistinctByConsumers_Withdrawn_ServiceProvider_IdInAndStatusInAndReportedOnBetween(Collection<Long> ids, Collection<AnomalyStatus> statuses, Date reportedOnStart, Date reportedOnEnd);
 
