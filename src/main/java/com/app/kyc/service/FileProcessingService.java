@@ -346,6 +346,26 @@ public class FileProcessingService {
             }
         }
 
+        try {
+            moveOriginal(filePath, success ? "processed" : "failed", fileLog);
+        } catch (IOException moveEx) {
+            log.error("Final move failed for {}: {}", filePath, moveEx.toString(), moveEx);
+            fileLog.setStatus(FileStatus.FAILED);
+            fileLog.setLastError("Move failed: " + moveEx.getMessage());
+            fileLog.setLastUpdated(LocalDateTime.now());
+            processedFileRepository.save(fileLog);
+        }
+
+        if (success) {
+            log.info("successs: processed={}");
+            runCheckConsumerAsync(sp);
+        } else {
+            log.info("Failure: processed={}");
+        }
+
+        log.info("DONE: processed={} in {} ms", totalProcessed, (System.currentTimeMillis() - t0));
+
+
         log.info("DONE: processed={} in {} ms", totalProcessed, (System.currentTimeMillis() - t0));
     }
     /*public void processFileOrange(Path filePath, String operator) throws IOException {
