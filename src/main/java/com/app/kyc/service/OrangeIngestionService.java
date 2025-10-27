@@ -157,16 +157,16 @@ public class OrangeIngestionService {
      */
     private Consumer mapRowToConsumer(String[] row, Long spId, Timestamp nowTs) {
         Consumer c = new Consumer();
-        c.setFirstName(safeClip(row, 0, 100));
-        c.setLastName(safeClip(row, 1, 100));
-        c.setMsisdn(safeClip(row, 2, 45));
-        c.setGender(safeClip(row, 3, 10));
-        c.setBirthDate(safeClip(row, 4, 45));
-        c.setBirthPlace(safeClip(row, 5, 45));
-        c.setAddress(safeClip(row, 6, 255));
-        c.setRegistrationDate(safeClip(row, 7, 50));
-        c.setIdentificationNumber(safeClip(row, 8, 45));
-        c.setIdentificationType(safeClip(row, 9, 45));
+        c.setFirstName(safeClip(row, 2, 100));
+        c.setLastName(safeClip(row, 3, 100));
+        c.setMsisdn(safeClip(row, 0, 45));
+        c.setGender(safeClip(row, 4, 10));
+        c.setBirthDate(safeClip(row, 5, 45));
+        c.setBirthPlace(safeClip(row, 6, 45));
+        c.setAddress(safeClip(row, 7, 255));
+        c.setRegistrationDate(safeClip(row, 1, 50));
+        c.setIdentificationNumber(safeClip(row, 9, 45));
+        c.setIdentificationType(safeClip(row, 8, 45));
 
         ServiceProvider spRef = new ServiceProvider();
         spRef.setId(spId);
