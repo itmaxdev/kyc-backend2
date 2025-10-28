@@ -38,7 +38,7 @@ public class CheckConsumerScheduler {
     // @Scheduled(cron = "${kyc.check-consumer.cron:0 */10 * * * *}")
     //@Scheduled(cron = "0 */1 * * * *")
     public void run() {
-        User user = userService.getUserByEmail("cadmin@test.com");
+        User user = userService.getUserByEmail("cadmin@itmaxglobal.com");
 
         for (ServiceProvider sp : serviceProviderRepository.findAll()) {
             running.computeIfAbsent(sp.getId(), id -> new AtomicBoolean(false));
