@@ -2216,9 +2216,9 @@ System.out.println("Get all flagged ");
 
                 // ✅ Only check resolution if status == 4 (submitted) or 5 (partially resolved)
                 if (anomaly.getStatus().getCode() == 4 || anomaly.getStatus().getCode() == 5) {
-                    AnomalyStatus newStatus = resolveAnomalyStatus(anomaly);
+                    //AnomalyStatus newStatus = resolveAnomalyStatus(anomaly);
 
-                    if (newStatus != anomaly.getStatus()) {
+                    /*if (newStatus != anomaly.getStatus()) {
                         anomaly.setStatus(newStatus);
                         anomaly.setUpdatedOn(new Date());
                         anomalyRepository.save(anomaly);
@@ -2229,7 +2229,7 @@ System.out.println("Get all flagged ");
                                         anomaly.getUpdatedOn())
                         );
                         System.out.println("consumer.getId() test four is: "+consumer.getId() + " consumer.getIsConsistent() test four is: "+consumer.getIsConsistent());
-                    }
+                    }*/
                 }
             }
         }
@@ -2254,7 +2254,7 @@ System.out.println("Get all flagged ");
 
 
 
-    private AnomalyStatus resolveAnomalyStatus(Anomaly anomaly) {
+   /* private AnomalyStatus resolveAnomalyStatus(Anomaly anomaly) {
         List<ConsumerAnomaly> links = consumerAnomalyRepository.findByAnomaly_Id(anomaly.getId());
         if (links == null || links.isEmpty()) {
             return anomaly.getStatus();
@@ -2277,7 +2277,7 @@ System.out.println("Get all flagged ");
         } else {
             return AnomalyStatus.RESOLVED_PARTIALLY; // code 4, all false
         }
-    }
+    }*/
 
 
 
@@ -2920,7 +2920,7 @@ System.out.println("Get all flagged ");
                     consumerRepository.saveAll(duplicateConsumers);
 
                     // 🔹 Re-evaluate anomaly resolution status
-                    AnomalyStatus newStatus = resolveAnomalyStatus(anomaly);
+                    /*AnomalyStatus newStatus = resolveAnomalyStatus(anomaly);
 
                     if (newStatus != anomaly.getStatus()) {
                         anomaly.setStatus(newStatus);
@@ -2937,7 +2937,7 @@ System.out.println("Get all flagged ");
                                         anomaly.getUpdatedOn()
                                 )
                         );
-                    }
+                    }*/
 
                     log.info("✅ Exceeding anomaly {} resolved to status {} for ID {} + {}",
                             anomaly.getId(),
