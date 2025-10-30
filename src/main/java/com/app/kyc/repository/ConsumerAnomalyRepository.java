@@ -53,6 +53,8 @@ public interface ConsumerAnomalyRepository extends JpaRepository<ConsumerAnomaly
 
     List<ConsumerAnomaly> findByAnomaly_Id(Long id);
 
+    List<ConsumerAnomaly> findByAnomaly_IdIn(List<Long> anomalyIds);
+
     @Query("SELECT DISTINCT ca FROM ConsumerAnomaly ca WHERE ca.anomaly.id = :id")
     List<ConsumerAnomaly> findDistinctByAnomalyId(@Param("id") Long id);
 

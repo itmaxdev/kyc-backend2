@@ -1,13 +1,9 @@
 package com.app.kyc.service;
+import com.app.kyc.entity.*;
+import com.app.kyc.model.AnomalyStatus;
+import com.app.kyc.repository.*;
 import org.apache.commons.codec.digest.DigestUtils;
 import com.app.kyc.config.ConsumerSpecifications;
-import com.app.kyc.entity.Consumer;
-import com.app.kyc.entity.ProcessedFile;
-import com.app.kyc.entity.ServiceProvider;
-import com.app.kyc.entity.User;
-import com.app.kyc.repository.ConsumerRepository;
-import com.app.kyc.repository.ProcessedFileRepository;
-import com.app.kyc.repository.ServiceProviderRepository;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.slf4j.Logger;
@@ -62,10 +58,14 @@ public class FileProcessingService {
     private final ProcessedFileRepository processedFileRepository;
     private final ServiceProviderRepository serviceProviderRepository;
     private final ConsumerRepository consumerRepository;
+    private final ConsumerAnomalyRepository consumerAnomalyRepository;
     private final ConsumerServiceImpl consumerServiceImpl;
     private final UserService userService;
     private final JdbcTemplate jdbcTemplate;
     private final OrangeIngestionService orangeIngestionService;
+
+    private final AnomalyRepository anomalyRepository;
+    private final AnomalyTrackingRepository anomalyTrackingRepository;
 
     // Optional: will be autowired by Spring Boot if present; we fall back to new Thread otherwise.
     @Nullable private final TaskExecutor taskExecutor;
@@ -1511,6 +1511,10 @@ public class FileProcessingService {
                 //User user = userService.getUserByEmail("system@itmaxglobal.com");
                 User user = userService.getUserByEmail("cadmin@itmaxglobal.com");
                 consumerServiceImpl.checkConsumer(list, user, sp);
+
+                consumerAnomalyRepository.findAllByConsumerIn(list);
+                consumerServiceImpl.updateAnomalyStatusForConsumers(list, user, sp);
+
                 log.info("Finished checkConsumer for operator {}", sp.getName());
             } catch (Exception ex) {
                 log.error("checkConsumer failed for operator {}: {}", sp.getName(), ex.toString(), ex);

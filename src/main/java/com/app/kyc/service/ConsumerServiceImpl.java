@@ -2809,7 +2809,6 @@ System.out.println("Get all flagged ");
         }
 
         consumerRepository.markConsumersConsistent(0, ids);
-        addAnomalyStatics(anomaly.getId());
         return anomaly;
     }
 
@@ -2876,7 +2875,7 @@ System.out.println("Get all flagged ");
         }
 
         consumerRepository.markConsumersConsistent(0, ids);
-        addAnomalyStatics(anomaly.getId());
+        //addAnomalyStatics(anomaly.getId());
         return anomaly;
     }
 
@@ -3095,7 +3094,7 @@ System.out.println("Get all flagged ");
         return s.replaceAll("^-+|-+$", "");
     }
 
-    private void addAnomalyStatics(Long anomalyId) {
+    public void addAnomalyStaticsV1(Long anomalyId) {
         List<ConsumerDto> consumerDtos = consumerAnomalyRepository.findByAnomaly_Id(anomalyId)
                 .stream()
                 .map(ca -> new ConsumerDto(ca.getConsumer()))
@@ -3110,9 +3109,6 @@ System.out.println("Get all flagged ");
         if (consistentCount + inconsistentCount > 0)
             partial = (consistentCount * 100.0) / (consistentCount + inconsistentCount);
 
-        // --- cap value during tagging stage ---
-        if (partial > 40.00) partial = 40.00;
-
         log.info("addAnomalyStatics | anomalyId={} consistent={} inconsistent={} partial={}",
                 anomalyId, consistentCount, inconsistentCount, partial);
 
@@ -3120,6 +3116,113 @@ System.out.println("Get all flagged ");
         stat.setAnomalyId(anomalyId);
         stat.setPartiallyResolvedPercentage(BigDecimal.valueOf(partial).setScale(2, RoundingMode.HALF_UP));
         anomalyStatisticsRepository.save(stat);
+    }
+
+
+    public AnomalyStatus checkAnomalies(List<ConsumerAnomaly> list, User user, ServiceProvider sp) {
+
+        // Extract all anomaly IDs from the consumer anomalies
+        List<Long> anomalyIds = list.stream()
+                .map(ca -> ca.getAnomaly().getId())
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+
+        if (anomalyIds.isEmpty()) {
+            log.info("No anomalies found for service provider {}", sp.getName());
+            return null; // must return something since return type is AnomalyStatus
+        }
+
+        // Fetch all linked ConsumerAnomalies for these anomaly IDs
+        List<ConsumerAnomaly> links = consumerAnomalyRepository.findByAnomaly_IdIn(anomalyIds);
+
+        log.info("Found {} linked anomalies for service provider {}", links.size(), sp.getName());
+
+        if (links == null || links.isEmpty()) {
+            return null; // anomaly is undefined in your method, so return null
+        }
+
+        boolean allTrue = links.stream()
+                .map(link -> link.getConsumer().getIsConsistent())
+                .filter(Objects::nonNull)
+                .allMatch(Boolean::booleanValue);
+
+        boolean allFalse = links.stream()
+                .map(link -> link.getConsumer().getIsConsistent())
+                .filter(Objects::nonNull)
+                .noneMatch(Boolean::booleanValue);
+
+        if (allTrue) {
+            return AnomalyStatus.RESOLVED_FULLY; // code 6
+        } else if (!allTrue && !allFalse) {
+            return AnomalyStatus.RESOLVED_PARTIALLY; // code 5
+        } else {
+            return AnomalyStatus.RESOLUTION_SUBMITTED; // code 4, corrected from RESOLVED_PARTIALLY
+        }
+    }
+
+
+
+    @Transactional
+    public void updateAnomalyStatusForConsumers(List<Consumer> consumers, User user, ServiceProvider sp) {
+        if (consumers == null || consumers.isEmpty()) {
+            log.info("No consumers found for service provider {}", sp.getName());
+            return;
+        }
+
+        List<ConsumerAnomaly> consumerAnomalies = consumerAnomalyRepository.findAllByConsumerIn(consumers);
+        if (consumerAnomalies == null || consumerAnomalies.isEmpty()) {
+            log.info("No consumer anomalies found for service provider {}", sp.getName());
+            return;
+        }
+
+        List<Long> anomalyIds = consumerAnomalies.stream()
+                .map(ca -> ca.getAnomaly().getId())
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+
+        for (Long anomalyId : anomalyIds) {
+            Anomaly anomaly = anomalyRepository.findById(anomalyId).orElse(null);
+            assert anomaly != null;
+            System.out.println("anomaly.getStatus() "+anomaly.getStatus());
+
+            if (anomaly.getStatus() != AnomalyStatus.REPORTED) {
+                AnomalyStatus newStatus = checkAnomalies(
+                        consumerAnomalyRepository.findByAnomaly_Id(anomalyId),
+                        user,
+                        sp
+                );
+
+                if (newStatus != null && newStatus != anomaly.getStatus()) {
+                    anomaly.setStatus(newStatus);
+                    anomaly.setUpdatedOn(new Date());
+                    anomaly.setUpdateBy(user.getFirstName() + " " + user.getLastName());
+                    anomalyRepository.save(anomaly);
+
+                    anomalyTrackingRepository.save(
+                            new AnomalyTracking(
+                                    anomaly,
+                                    new Date(),
+                                    newStatus,
+                                    "",
+                                    user.getFirstName() + " " + user.getLastName(),
+                                    anomaly.getUpdatedOn()
+                            )
+                    );
+
+
+
+                    log.info("✅ Updated anomaly {} to status {}", anomalyId, newStatus);
+                }
+                addAnomalyStaticsV1(anomaly.getId());
+                log.info(" Updated addAnomalyStaticsV1 {} to status {}", anomalyId, newStatus);
+            }
+
+
+
+
+        }
     }
 
 }
