@@ -54,10 +54,10 @@ public class DashboardServiceImpl implements DashboardService {
 
     static final List<AnomalyStatus> DEFAULT_ANOMALY_PENDING_LIST
             = new ArrayList<>(Arrays.asList(
-            AnomalyStatus.UNDER_INVESTIGATION,
-            AnomalyStatus.QUESTION_SUBMITTED,
-            AnomalyStatus.QUESTION_ANSWERED,
-            AnomalyStatus.RESOLUTION_SUBMITTED
+            AnomalyStatus.UNDER_INVESTIGATION
+           // AnomalyStatus.QUESTION_SUBMITTED,
+           // AnomalyStatus.QUESTION_ANSWERED,
+            //AnomalyStatus.RESOLUTION_SUBMITTED
     ));
 
     static final List<AnomalyStatus> DEFAULT_ANOMALY_WITHDRAWN_LIST
