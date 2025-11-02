@@ -6,6 +6,8 @@ import com.app.kyc.repository.ConsumerRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
+import org.hibernate.exception.LockTimeoutException;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -13,6 +15,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.persistence.EntityManager;
 import javax.persistence.PersistenceContext;
+import javax.persistence.PersistenceException;
+import javax.validation.ConstraintViolationException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
@@ -46,7 +50,6 @@ public class OrangeIngestionService {
     /**
      * Transactional Orange ingestion – generates unique orange_transaction_id for deduplication.
      */
-    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
     public int ingestFileTxOrange(Path workingCopy, Long spId, char sep, Charset cs) throws Exception {
         final Timestamp nowTs = new Timestamp(System.currentTimeMillis());
         int total = 0;
@@ -65,7 +68,11 @@ public class OrangeIngestionService {
             boolean isHeader = true;
 
             while ((row = csv.readNext()) != null) {
-                if (isHeader) { isHeader = false; log.info("Header column count: {}", row.length); continue; }
+                if (isHeader) {
+                    isHeader = false;
+                    log.info("Header column count: {}", row.length);
+                    continue;
+                }
                 if (row.length == 0) continue;
 
                 try {
@@ -84,15 +91,15 @@ public class OrangeIngestionService {
 
                     consumer.setOrangeTransactionId(txHash);
 
-                    // 🔹 Check if consumer already exists by transaction hash
+                    // 🔹 Upsert logic
                     consumerRepository.findByOrangeTransactionId(txHash).ifPresent(existing -> {
-                        consumer.setId(existing.getId()); // overwrite same record instead of new insert
+                        consumer.setId(existing.getId());
                     });
 
-                    // 🔹 Apply consistency logic
+                    // 🔹 Consistency
                     consumerServiceImpl.updateConsistencyFlag(consumer);
 
-                    // 🔹 Assign vendor code (Orange-<date>-seq)
+                    // 🔹 Vendor code
                     String date = df.format(nowTs);
                     String key = "Orange-" + date;
                     vendorCounters.putIfAbsent(key, new AtomicInteger(1));
@@ -104,10 +111,13 @@ public class OrangeIngestionService {
                     if (batch.size() >= BATCH_SIZE) {
                         total += flushAndCommitBatch(batch);
                     }
+
                 } catch (DataIntegrityViolationException e) {
                     log.warn("⚠️ Skipping row due to data violation: {}", e.getMostSpecificCause().getMessage());
+                    entityManager.clear(); // 🧹 clear session to avoid stale entity
                 } catch (Exception e) {
                     log.warn("⚠️ Failed to map row (skipped): {}", Arrays.toString(row));
+                    entityManager.clear(); // 🧹 clear session after mapping failure
                 }
             }
 
@@ -124,33 +134,76 @@ public class OrangeIngestionService {
         return total;
     }
 
+
     /**
      * Flushes and clears persistence context with retry (to avoid deadlocks).
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
     public int flushAndCommitBatch(List<Consumer> batch) throws InterruptedException {
         int attempt = 0;
+
         while (attempt < MAX_RETRIES) {
             try {
+                // ✅ Persist and flush the batch
                 consumerRepository.saveAll(batch);
                 entityManager.flush();
                 entityManager.clear();
+
                 int size = batch.size();
                 batch.clear();
+                log.info("✅ Batch committed successfully with {} records", size);
                 return size;
-            } catch (Exception e) {
+
+            } catch (DataIntegrityViolationException e) {
+                // ❌ Skip batch if any constraint violation (duplicate, nulls, etc.)
+                log.error("🚫 Data integrity violation (skipping batch of {}): {}",
+                        batch.size(), e.getMostSpecificCause().getMessage());
+                entityManager.clear();
+                batch.clear();
+                return 0;
+
+            } catch (PersistenceException | ConstraintViolationException e) {
+                // ❌ Hibernate or JPA constraint errors
+                log.error("🚫 Persistence/constraint issue while saving batch: {}", e.getMessage());
+                entityManager.clear();
+                batch.clear();
+                return 0;
+
+            } catch (CannotAcquireLockException  e) {
+                // 🔁 Retry only for transient DB lock issues
                 attempt++;
+                log.warn("⚠️ Lock/Deadlock on batch (attempt {}/{}): {}", attempt, MAX_RETRIES, e.getMessage());
+                entityManager.clear();
+
                 if (attempt >= MAX_RETRIES) {
-                    log.error("❌ Batch save failed after {} retries: {}", MAX_RETRIES, e.getMessage());
-                    throw e;
+                    log.error("❌ Giving up after {} retries for batch: {}", MAX_RETRIES, e.getMessage());
+                    batch.clear();
+                    return 0;
                 }
-                log.warn("⚠️ Deadlock or lock timeout, retrying batch ({}/{}): {}", attempt, MAX_RETRIES, e.getMessage());
+
+                // ⏳ Backoff before retry
+                Thread.sleep(500L * attempt);
+
+            } catch (Exception e) {
+                // ⚠️ Catch-all: rollback batch and continue ingestion
+                attempt++;
+                log.error("🚨 Unexpected error in batch attempt {}/{}: {}", attempt, MAX_RETRIES, e.getMessage());
+                entityManager.clear();
+
+                if (attempt >= MAX_RETRIES) {
+                    log.error("❌ Batch permanently failed after {} retries: {}", MAX_RETRIES, e.getMessage());
+                    batch.clear();
+                    return 0;
+                }
+
                 Thread.sleep(500L * attempt);
             }
         }
+
         batch.clear();
         return 0;
     }
+
 
     /**
      * Maps CSV row → Consumer safely.
