@@ -1990,6 +1990,73 @@ System.out.println("Get all flagged ");
 
 
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void checkConsumerForOrange(List<Consumer> consumers, User user, ServiceProvider serviceProvider) {
+        if (consumers == null || consumers.isEmpty()) {
+            log.info("checkConsumerForOrange start | operator={} consumers=0", serviceProvider.getName());
+            return;
+        }
+
+        long t0 = System.nanoTime();
+        log.info("checkConsumerForOrange start | operator={} consumers={}", serviceProvider.getName(), consumers.size());
+
+        //insert query for Anomaly
+
+
+        Long reportedById = user.getId();
+        Date updatedOn = new Date();
+        String updatedBy = user.getFirstName() + " " + user.getLastName();
+        /*String anomalyFormattedId = serviceProvider.getName() + "-" + new SimpleDateFormat("ddMMyyyy").format(new Date());
+
+        String baseId = serviceProvider.getName() + "-" +
+                new SimpleDateFormat("ddMMyyyy").format(new Date());*/
+
+        String baseId = serviceProvider.getName() + "-" +
+                new SimpleDateFormat("ddMMyyyy").format(new Date());
+
+
+
+        int count = anomalyRepository.insertIncompleteDataAnomalies(
+                reportedById,
+                updatedOn,
+                updatedBy,
+                baseId
+        );
+        log.info("✅ Inserted {} incomplete-data anomalies", count);
+
+
+        int countDuplicates = anomalyRepository.insertDuplicateAnomalies(
+                reportedById,
+                updatedOn,
+                updatedBy,
+                baseId
+        );
+        log.info("✅ Inserted {} Duplicates anomalies", countDuplicates);
+
+
+        long totalMs = (System.nanoTime() - t0) / 1_000_000;
+        log.info("checkConsumerForOrange processed={} in {} ms", serviceProvider.getName(), totalMs);
+
+
+        int countThreshold = anomalyRepository.insertExceedingThresholdAnomalies(
+                reportedById,
+                updatedOn,
+                updatedBy,
+                baseId
+        );
+
+
+        log.info("✅ Inserted {} exceeding-threshold anomalies", countThreshold);
+        log.info("✅ Inserted {} exceeding-threshold anomalies for operator {}", count, serviceProvider.getName());
+
+
+        int linkedCount = consumerAnomalyRepository.linkConsumersToAnomaliesByOperator(serviceProvider.getName());
+        log.info("✅ Linked {} consumer_anomaly records for {}", linkedCount, serviceProvider.getName());
+
+    }
+
+
+
     // ======== helpers (same assumptions as your code) ========
 
         private String safeMsisdn(Consumer c) {

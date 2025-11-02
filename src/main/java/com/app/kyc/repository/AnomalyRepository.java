@@ -1,9 +1,6 @@
 package com.app.kyc.repository;
 
-import java.util.Collection;
-import java.util.Date;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 import com.app.kyc.entity.*;
 import com.app.kyc.model.AnomalyStatus;
@@ -11,6 +8,7 @@ import com.app.kyc.model.DashboardObjectInterface;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -193,5 +191,133 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
 
 	@Query("SELECT a FROM Anomaly a WHERE a.consumersService.service.serviceProvider.id = :spId")
 	List<Anomaly> findByServiceProviderId(@Param("spId") Long spId);
+
+
+	// 🔹 1️⃣ Incomplete Data Anomalies
+	@Modifying
+	@Transactional
+	@Query(value = """
+    INSERT IGNORE INTO anomalies (
+        anomaly_type_id,
+        note,
+        status,
+        reported_on,
+        reported_by_id,
+        updated_on,
+        update_by,
+        anomaly_formatted_id,
+        consumer_id
+    )
+    SELECT
+        1 AS anomaly_type_id,  -- Incomplete Data
+        CONCAT('Incomplete data for consumer ID ', id) AS note,
+        0 AS status,
+        NOW() AS reported_on,
+        :reportedById AS reported_by_id,
+        :updatedOn AS updated_on,
+        :updatedBy AS update_by,
+        CONCAT(:anomalyFormattedId, '-', UUID_SHORT()) AS anomaly_formatted_id,
+        id AS consumer_id
+    FROM consumers
+    WHERE first_name IS NULL
+       OR middle_name IS NULL
+       OR last_name IS NULL
+       OR msisdn IS NULL
+       OR gender IS NULL
+       OR registration_date IS NULL
+       OR birth_date IS NULL 
+       OR birth_place IS NULL
+       OR address IS NULL
+       OR identification_number IS NULL
+       OR identification_type IS NULL
+       OR alternate_msisdn1 IS NULL
+       OR alternate_msisdn2 IS NULL
+    """, nativeQuery = true)
+	int insertIncompleteDataAnomalies(
+			@Param("reportedById") Long reportedById,
+			@Param("updatedOn") Date updatedOn,
+			@Param("updatedBy") String updatedBy,
+			@Param("anomalyFormattedId") String anomalyFormattedId
+	);
+
+
+
+	// 🔹 2️⃣ Duplicate MSISDN Anomalies
+	@Modifying
+	@Transactional
+	@Query(value = """
+    INSERT IGNORE INTO anomalies (
+        anomaly_type_id,
+        note,
+        status,
+        reported_on,
+        reported_by_id,
+        updated_on,
+        update_by,
+        anomaly_formatted_id,
+        consumer_id
+    )
+    SELECT 
+        2 AS anomaly_type_id,  -- Duplicate Records
+        CONCAT('Duplicate MSISDN detected for ', msisdn) AS note,
+        0 AS status,
+        NOW() AS reported_on,
+        :reportedById AS reported_by_id,
+        :updatedOn AS updated_on,
+        :updatedBy AS update_by,
+        CONCAT(:anomalyFormattedId, '-', UUID_SHORT()) AS anomaly_formatted_id,
+        MIN(id) AS consumer_id
+    FROM consumers
+    GROUP BY msisdn
+    HAVING COUNT(*) > 1
+    """, nativeQuery = true)
+	int insertDuplicateAnomalies(
+			@Param("reportedById") Long reportedById,
+			@Param("updatedOn") Date updatedOn,
+			@Param("updatedBy") String updatedBy,
+			@Param("anomalyFormattedId") String anomalyFormattedId
+	);
+
+
+
+	// 🔹 3️⃣ Exceeding Threshold Anomalies
+	@Modifying
+	@Transactional
+	@Query(value = """
+    INSERT IGNORE INTO anomalies (
+        anomaly_type_id,
+        note,
+        status,
+        reported_on,
+        reported_by_id,
+        updated_on,
+        update_by,
+        anomaly_formatted_id,
+        consumer_id
+    )
+    SELECT 
+        4 AS anomaly_type_id,  -- Exceeding Threshold
+        CONCAT('Exceeding threshold for ID Type ', identification_type,
+               ' and ID Number ', identification_number) AS note,
+        0 AS status,
+        NOW() AS reported_on,
+        :reportedById AS reported_by_id,
+        :updatedOn AS updated_on,
+        :updatedBy AS update_by,
+        CONCAT(:anomalyFormattedId, '-', UUID_SHORT()) AS anomaly_formatted_id,
+        MIN(id) AS consumer_id
+    FROM consumers
+    GROUP BY identification_type, identification_number
+    HAVING COUNT(*) >= 3
+    """, nativeQuery = true)
+	int insertExceedingThresholdAnomalies(
+			@Param("reportedById") Long reportedById,
+			@Param("updatedOn") Date updatedOn,
+			@Param("updatedBy") String updatedBy,
+			@Param("anomalyFormattedId") String anomalyFormattedId
+	);
+
+
+
 
 }

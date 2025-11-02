@@ -358,7 +358,7 @@ public class FileProcessingService {
 
         if (success) {
             log.info("successs: processed={}");
-            runCheckConsumerAsync(sp);
+            runCheckConsumerForOrangeAsync(sp);
         } else {
             log.info("Failure: processed={}");
         }
@@ -368,90 +368,7 @@ public class FileProcessingService {
 
         log.info("DONE: processed={} in {} ms", totalProcessed, (System.currentTimeMillis() - t0));
     }
-    /*public void processFileOrange(Path filePath, String operator) throws IOException {
-        long t0 = System.currentTimeMillis();
-        log.info("ENTER processFile: {} | operator={}", filePath, operator);
 
-        if (Files.notExists(filePath) || !Files.isRegularFile(filePath)) {
-            log.warn("File not found or not a regular file: {}", filePath);
-            return;
-        }
-
-
-        ServiceProvider sp = serviceProviderRepository.findByNameIgnoreCase(operator)
-                .orElseThrow(() -> new IllegalArgumentException("Unknown operator: " + operator));
-        Long spId = sp.getId();
-        log.info("Resolved ServiceProvider id={}, name={}", spId, sp.getName());
-
-
-        ServiceProvider sp1 = serviceProviderRepository.findById(spId).orElse(null);
-        if (sp1 == null || sp1.isDeleted()) {
-            log.info("Skipping file processing for deleted service provider: {}", spId);
-            return; // Stop processing
-        }
-
-
-        ProcessedFile fileLog = new ProcessedFile();
-        fileLog.setFilename(filePath.getFileName().toString());
-        fileLog.setStatus(FileStatus.IN_PROGRESS);
-        fileLog.setStartedAt(LocalDateTime.now());
-        fileLog.setRecordsProcessed(0);
-        processedFileRepository.save(fileLog);
-        log.info("ProcessedFile row created (IN_PROGRESS)");
-
-        Path workingCopy = null;
-        boolean success = false;
-        int totalProcessed = 0;
-
-        try {
-            workingCopy = createWorkingCopy(filePath);
-
-            Charset cs = pickCharset(workingCopy);
-            log.info("Detected charset: {}", cs.displayName());
-            char sep = detectSeparator(workingCopy, cs);
-            log.info("Detected CSV separator: '{}'", sep == '\t' ? "\\t" : String.valueOf(sep));
-
-            totalProcessed = ingestFileTxOrange(workingCopy, spId, sep, cs);
-            success = true;
-
-            fileLog.setRecordsProcessed(totalProcessed);
-            fileLog.setStatus(FileStatus.COMPLETE);
-            fileLog.setCompletedAt(LocalDateTime.now());
-            fileLog.setLastUpdated(LocalDateTime.now());
-            processedFileRepository.save(fileLog);
-
-        } catch (Exception ex) {
-            log.error("Ingest failed for {}: {}", (workingCopy != null ? workingCopy : filePath), ex.toString(), ex);
-            fileLog.setStatus(FileStatus.FAILED);
-            fileLog.setLastError("Ingestion error: " + ex.getMessage());
-            fileLog.setLastUpdated(LocalDateTime.now());
-            processedFileRepository.save(fileLog);
-        } finally {
-            if (workingCopy != null) {
-                try { Files.deleteIfExists(workingCopy); }
-                catch (IOException delEx) { log.warn("Could not delete working copy {}: {}", workingCopy, delEx.toString()); }
-            }
-        }
-
-        try {
-            moveOriginal(filePath, success ? "processed" : "failed", fileLog);
-        } catch (IOException moveEx) {
-            log.error("Final move failed for {}: {}", filePath, moveEx.toString(), moveEx);
-            fileLog.setStatus(FileStatus.FAILED);
-            fileLog.setLastError("Move failed: " + moveEx.getMessage());
-            fileLog.setLastUpdated(LocalDateTime.now());
-            processedFileRepository.save(fileLog);
-        }
-
-        if (success) {
-            log.info("successs: processed={}");
-            runCheckConsumerAsync(sp);
-        } else {
-            log.info("Failure: processed={}");
-        }
-
-        log.info("DONE: processed={} in {} ms", totalProcessed, (System.currentTimeMillis() - t0));
-    }*/
 
     public void processFileAfricell(Path filePath, String operator) throws IOException {
         long t0 = System.currentTimeMillis();
@@ -1511,6 +1428,41 @@ public class FileProcessingService {
                 //User user = userService.getUserByEmail("system@itmaxglobal.com");
                 User user = userService.getUserByEmail("cadmin@itmaxglobal.com");
                 consumerServiceImpl.checkConsumer(list, user, sp);
+
+                consumerAnomalyRepository.findAllByConsumerIn(list);
+                consumerServiceImpl.updateAnomalyStatusForConsumers(list, user, sp);
+
+                log.info("Finished checkConsumer for operator {}", sp.getName());
+            } catch (Exception ex) {
+                log.error("checkConsumer failed for operator {}: {}", sp.getName(), ex.toString(), ex);
+            } finally {
+                RUNNING_CHECKS.remove(spId);
+            }
+        };
+
+        if (taskExecutor != null) {
+            taskExecutor.execute(job);
+        } else {
+            new Thread(job, "check-consumer-" + spId).start();
+        }
+    }
+
+
+    private void runCheckConsumerForOrangeAsync(ServiceProvider sp) {
+        log.info("checkConsumer already to use");
+        Long spId = sp.getId();
+        if (!RUNNING_CHECKS.add(spId)) {
+            log.info("checkConsumer already running for operator {}, skipping", sp.getName());
+            return;
+        }
+        Runnable job = () -> {
+            try {
+                log.info("Starting checkConsumer for operator {}", sp.getName());
+                // Scope reduction: only that operator’s consumers
+                List<Consumer> list = consumerRepository.findAllByServiceProvider_Id(spId);
+                //User user = userService.getUserByEmail("system@itmaxglobal.com");
+                User user = userService.getUserByEmail("cadmin@itmaxglobal.com");
+                consumerServiceImpl.checkConsumerForOrange(list, user, sp);
 
                 consumerAnomalyRepository.findAllByConsumerIn(list);
                 consumerServiceImpl.updateAnomalyStatusForConsumers(list, user, sp);

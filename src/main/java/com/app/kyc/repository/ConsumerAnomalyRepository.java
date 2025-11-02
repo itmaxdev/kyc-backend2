@@ -12,6 +12,7 @@ import com.app.kyc.entity.Anomaly;
 import com.app.kyc.entity.AnomalyType;
 import com.app.kyc.entity.Consumer;
 import com.app.kyc.entity.ConsumerAnomaly;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
@@ -63,4 +64,21 @@ public interface ConsumerAnomalyRepository extends JpaRepository<ConsumerAnomaly
 
     @Query("select sp.id as serviceProviderId, count(distinct ca.anomaly) as anomalyCount, a.status as status, sp.name as name from ConsumerAnomaly ca join Anomaly a on ca.anomaly.id = a.id join Consumer c on ca.consumer.id = c.id join ServiceProvider sp on c.serviceProvider.id = sp.id where (a.reportedOn between :startDate and :endDate) and sp.id in (:serviceProviderIds) group by c.serviceProvider.id, a.status")
     List<DashboardAnomalyStatusInterface> countAnomaliesByServiceProviderAndAnomalyStatus(@Param("startDate")Date startDate, @Param("endDate")Date endDate, @Param("serviceProviderIds") List<Long> serviceProviderIds);
+
+    @Modifying
+    @Transactional
+    @Query(value = """
+    INSERT IGNORE INTO consumers_anomalies (consumer_id, anomaly_id, notes)
+    SELECT 
+        a.consumer_id,
+        a.id AS anomaly_id,
+        a.note AS notes
+    FROM anomalies a
+    WHERE a.consumer_id IS NOT NULL
+      AND a.anomaly_formatted_id LIKE CONCAT(:spName, '%')
+      AND a.id NOT IN (SELECT anomaly_id FROM consumers_anomalies)
+    """, nativeQuery = true)
+    int linkConsumersToAnomaliesByOperator(@Param("spName") String serviceProviderName);
+
+
 }
