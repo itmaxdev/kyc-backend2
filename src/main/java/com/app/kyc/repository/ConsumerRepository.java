@@ -25,6 +25,8 @@ import com.app.kyc.response.FlaggedConsumersListDTO;
 public interface ConsumerRepository
         extends JpaRepository<Consumer, Long>, JpaSpecificationExecutor<Consumer> {
 
+    @Query("SELECT c FROM Consumer c WHERE c.serviceProvider = :sp")
+    List<Consumer> findByServiceProvider(@Param("sp") ServiceProvider serviceProvider);
 
     @Query(value = "select g.id, g.consumerId, g.name, g.serviceName, g.serviceProviderId, (select name from service_providers where id = g.serviceProviderId) as serviceProviderName,\r\n" +
             " g.flaggedDate, g.anomalyEntityType, g.anomalyStatus, g.note, g.anomalyId, CONCAT(u.first_name, \" \", u.last_name) as reporterName \r\n" +
@@ -35,6 +37,10 @@ public interface ConsumerRepository
             " (select target_entity_type from anomaly_types where id = anomaly_type_id) as anomalyEntityType, status as anomalyStatus, id as anomalyId, \r\n" +
             "   note, id from anomalies) as b on a.id = b.consumers_services_id) as g on u.id = reported_by_id", nativeQuery = true)
     List<FlaggedConsumersListDTO> getAllFlaggedConsumers();
+
+    @Query(value = "SELECT id FROM anomalies WHERE anomaly_formatted_id LIKE CONCAT(:prefix, '%')", nativeQuery = true)
+    List<Long> findIdsByFormattedIdPrefix(@Param("prefix") String prefix);
+
 
 
     // ANY status (used above). If you prefer active-only, add "AND c.consumer_status = 0".

@@ -22,6 +22,7 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
    @Query(value = "SELECT * FROM anomalies WHERE anomaly_type_id = ?", nativeQuery = true)
    List<Anomaly> findByAnomalyType(@Param("anomalyTypeId") Long anomalyTypeId);
 
+
     // In AnomalyRepository
     Optional<Anomaly> findFirstByIdInAndAnomalyType_Id(List<Long> ids, Long anomalyTypeId);
 
@@ -37,6 +38,12 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
 
 	@Query("SELECT a FROM Anomaly a WHERE a.anomalyFormattedId LIKE CONCAT(:prefix, '%')")
 	List<Anomaly> findByAnomalyFormattedIdPrefix(@Param("prefix") String prefix);
+
+	@Query(value = """
+    SELECT id FROM anomalies
+    WHERE anomaly_formatted_id LIKE CONCAT(:prefix, '%')
+""", nativeQuery = true)
+	List<Long> findIdsByFormattedIdPrefix(@Param("prefix") String prefix);
 
 
 	@Query(value = "select * from anomalies where consumers_services_id in " + "(select id from consumers_services where service_id in" + "(select id from services where service_provider_id = :serviceProviderId))", nativeQuery = true)

@@ -101,6 +101,9 @@ public class ConsumerServiceImpl implements ConsumerService {
 
     static final Integer DEFAULT_FIRST_ROW = 0;
 
+    @Autowired
+    private EntityManager entityManager;
+
     List<Consumer> consumers = new ArrayList<>();
 
     /*public ConsumerDto getConsumerById(Long id) {
@@ -2005,33 +2008,49 @@ System.out.println("Get all flagged ");
         String baseId = serviceProvider.getName() + "-" + new SimpleDateFormat("ddMMyyyy").format(new Date());
 
         try {
-            // 1️⃣ Insert anomalies (via native SQL)
+            // 1️⃣ Insert anomalies using native SQL
             int countIncomplete = anomalyRepository.insertIncompleteDataAnomalies(reportedById, updatedOn, updatedBy, baseId);
-            int countDuplicate = anomalyRepository.insertDuplicateAnomalies(reportedById, updatedOn, updatedBy, baseId);
-            int countThreshold = anomalyRepository.insertExceedingThresholdAnomalies(reportedById, updatedOn, updatedBy, baseId);
+            int countDuplicate  = anomalyRepository.insertDuplicateAnomalies(reportedById, updatedOn, updatedBy, baseId);
+            int countThreshold  = anomalyRepository.insertExceedingThresholdAnomalies(reportedById, updatedOn, updatedBy, baseId);
             log.info("✅ Inserted {} incomplete, {} duplicate, {} threshold anomalies", countIncomplete, countDuplicate, countThreshold);
 
-            // 2️⃣ Fix formatted IDs after insert
-            int fixed = anomalyRepository.fixAnomalyFormattedIds(baseId);
-            log.info("🔧 Updated anomaly_formatted_id for {} anomalies", fixed);
+            // ✅ Force DB sync after native SQL inserts
+            entityManager.flush();
+            entityManager.clear();
 
-            // 3️⃣ Link anomalies → consumers
+            // 2️⃣ Link anomalies to consumers
             int linkedCount = consumerAnomalyRepository.linkConsumersToAnomaliesByOperator(serviceProvider.getName());
             log.info("🔗 Linked {} consumer_anomaly records for {}", linkedCount, serviceProvider.getName());
 
-            // 4️⃣ Create tracking history for the inserted anomalies
-            addAnomalyTrackingHistory(baseId, updatedBy);
+            // ✅ Flush again to make sure join-table writes are committed
+            entityManager.flush();
+            entityManager.clear();
 
-            // 5️⃣ Consumer change tracking
-            addConsumerHistory();
+            // 3️⃣ Track anomaly creation — after DB is synced
+            if (countIncomplete > 0)
+                addAnomalyTrackingHistory(baseId, "Auto-detected incomplete data", updatedBy);
+            if (countDuplicate > 0)
+                addAnomalyTrackingHistory(baseId, "Auto-detected duplicate MSISDNs", updatedBy);
+            if (countThreshold > 0)
+                addAnomalyTrackingHistory(baseId, "Auto-detected threshold exceedance", updatedBy);
+
+            // ✅ Another flush after tracking
+            entityManager.flush();
+            entityManager.clear();
+
+            // 4️⃣ Maintain consumer tracking & consistency history
+            addConsumerTrackingHistory(serviceProvider, updatedBy);
 
             long totalMs = (System.nanoTime() - t0) / 1_000_000;
             log.info("✅ checkConsumerForOrange completed for {} in {} ms", serviceProvider.getName(), totalMs);
+
         } catch (Exception ex) {
             log.error("❌ checkConsumerForOrange failed for {}: {}", serviceProvider.getName(), ex.getMessage(), ex);
             throw ex;
         }
     }
+
+
 
 
 
@@ -2178,22 +2197,7 @@ System.out.println("Get all flagged ");
     /**
      * 🔹 Adds a consumer consistency tracking record for auditing.
      */
-    private void addConsumerHistory(Long consumerId, ServiceProvider serviceProvider, boolean isConsistent, String consistentOn) {
-        try {
-            ConsumerTracking tracking = new ConsumerTracking(
-                    consumerId,
-                    serviceProvider,
-                    consistentOn != null ? consistentOn : "N/A",
-                    isConsistent,
-                    new Date()
-            );
-            consumerTrackingRepository.save(tracking);
-            log.info("📜 Consumer tracking added | consumerId={} | provider={} | consistentOn={} | consistent={}",
-                    consumerId, serviceProvider.getName(), consistentOn, isConsistent);
-        } catch (Exception e) {
-            log.error("⚠️ Failed to add consumer tracking for consumerId={} | Error={}", consumerId, e.getMessage());
-        }
-    }
+
 
 
 
@@ -2202,42 +2206,96 @@ System.out.println("Get all flagged ");
      * 🔹 Adds a tracking entry whenever a new anomaly is inserted or updated.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void addAnomalyTrackingHistory(String baseId, String updatedBy) {
-        if (baseId == null) {
-            log.warn("⚠️ addAnomalyTrackingHistory skipped because baseId is null");
+    public void addAnomalyTrackingHistory(String prefix, String note, String updatedBy) {
+
+        // Fetch anomaly IDs directly from DB (fresh data)
+        List<Long> anomalyIds = anomalyRepository.findIdsByFormattedIdPrefix(prefix);
+
+        if (anomalyIds == null || anomalyIds.isEmpty()) {
+            log.info("ℹ️ No anomaly IDs found for prefix={}", prefix);
             return;
         }
 
-        // 1️⃣ Fetch anomalies inserted in this run
-        List<Anomaly> anomalies = anomalyRepository.findByAnomalyFormattedIdPrefix(baseId);
+        log.info("🧾 Found {} anomalies to track (prefix={})", anomalyIds.size(), prefix);
 
-        if (anomalies == null || anomalies.isEmpty()) {
-            log.info("ℹ️ No anomalies found for tracking with prefix {}", baseId);
-            return;
-        }
-
-        log.info("🧾 Found {} anomalies to track (prefix={})", anomalies.size(), baseId);
-
-        List<AnomalyTracking> trackingList = new ArrayList<>();
+        // Prepare batch
+        List<AnomalyTracking> batch = new ArrayList<>();
         Date now = new Date();
+        int totalCount = 0;
+        final int batchSize = 1000;
 
-        for (Anomaly anomaly : anomalies) {
-            AnomalyTracking tracking = new AnomalyTracking(
-                    anomaly,
-                    now,
-                    AnomalyStatus.REPORTED,
-                    "Auto-detected anomaly (" + anomaly.getNote() + ")",
-                    updatedBy,
-                    now
-            );
-            trackingList.add(tracking);
+        for (Long anomalyId : anomalyIds) {
+            try {
+                // ✅ Use managed reference (no detached entity issue)
+                Anomaly ref = entityManager.getReference(Anomaly.class, anomalyId);
+
+                AnomalyTracking tracking = new AnomalyTracking();
+                tracking.setAnomaly(ref);
+                tracking.setStatus(AnomalyStatus.REPORTED);
+                tracking.setCreatedOn(now);
+                tracking.setUpdateBy(updatedBy);
+                tracking.setNote(note);
+
+                batch.add(tracking);
+
+                if (batch.size() >= batchSize) {
+                    anomalyTrackingRepository.saveAll(batch);
+                    entityManager.flush();
+                    entityManager.clear();
+                    totalCount += batch.size();
+                    batch.clear();
+                }
+
+            } catch (Exception ex) {
+                log.error("⚠️ Failed to add tracking for anomalyId={}: {}", anomalyId, ex.getMessage());
+                entityManager.clear();
+            }
         }
 
-        anomalyTrackingRepository.saveAll(trackingList);
-        log.info("✅ Added {} anomaly tracking entries for {}", trackingList.size(), baseId);
+        if (!batch.isEmpty()) {
+            anomalyTrackingRepository.saveAll(batch);
+            entityManager.flush();
+            entityManager.clear();
+            totalCount += batch.size();
+        }
+
+        log.info("✅ Added {} anomaly tracking entries for {}", totalCount, prefix);
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void addConsumerTrackingHistory(ServiceProvider serviceProvider, String updatedBy) {
 
+        List<Consumer> consumers = consumerRepository.findByServiceProvider(serviceProvider);
+
+        if (consumers == null || consumers.isEmpty()) {
+            log.info("ℹ️ No consumers found for {}", serviceProvider.getName());
+            return;
+        }
+
+        List<ConsumerTracking> trackingList = new ArrayList<>();
+        Date now = new Date();
+
+        for (Consumer c : consumers) {
+            if (c.getId() == null) {
+                log.warn("⚠️ Skipping Consumer with null ID for service provider {}", serviceProvider.getName());
+                continue;
+            }
+
+            trackingList.add(new ConsumerTracking(
+                    c.getId(),
+                    serviceProvider,
+                    (c.getConsistentOn() != null) ? c.getConsistentOn() : "N/A",
+                    c.getIsConsistent() != null ? c.getIsConsistent() : Boolean.FALSE,
+                    now
+            ));
+        }
+
+        consumerTrackingRepository.saveAll(trackingList);
+        entityManager.flush();
+        entityManager.clear();
+
+        log.info("✅ Added {} consumer tracking records for {}", trackingList.size(), serviceProvider.getName());
+    }
 
 
 
