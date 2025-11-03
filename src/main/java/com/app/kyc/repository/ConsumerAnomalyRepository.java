@@ -76,9 +76,14 @@ public interface ConsumerAnomalyRepository extends JpaRepository<ConsumerAnomaly
     FROM anomalies a
     WHERE a.consumer_id IS NOT NULL
       AND a.anomaly_formatted_id LIKE CONCAT(:spName, '%')
-      AND a.id NOT IN (SELECT anomaly_id FROM consumers_anomalies)
+      AND NOT EXISTS (
+          SELECT 1 
+          FROM consumers_anomalies ca 
+          WHERE ca.anomaly_id = a.id
+      )
     """, nativeQuery = true)
     int linkConsumersToAnomaliesByOperator(@Param("spName") String serviceProviderName);
+
 
 
 }

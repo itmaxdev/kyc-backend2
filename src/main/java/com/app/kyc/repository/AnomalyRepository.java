@@ -13,6 +13,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Repository
@@ -34,7 +35,11 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
    List<Anomaly> findAllAnomalyByServiceProviderAndServiceTypeIdAndReportedOnGreaterThanAndReportedOnLessThanEqual(Long serviceProviderId, Long serviceTypeId, Date start,
       Date end);
 
-   @Query(value = "select * from anomalies where consumers_services_id in " + "(select id from consumers_services where service_id in" + "(select id from services where service_provider_id = :serviceProviderId))", nativeQuery = true)
+	@Query("SELECT a FROM Anomaly a WHERE a.anomalyFormattedId LIKE CONCAT(:prefix, '%')")
+	List<Anomaly> findByAnomalyFormattedIdPrefix(@Param("prefix") String prefix);
+
+
+	@Query(value = "select * from anomalies where consumers_services_id in " + "(select id from consumers_services where service_id in" + "(select id from services where service_provider_id = :serviceProviderId))", nativeQuery = true)
    Page<Anomaly> findAllAnomalyByServiceProviderId(Long serviceProviderId, org.springframework.data.domain.Pageable pageable);
 
    Page<Anomaly> findDistinctByConsumers_ServiceProviderId(@Param("serviceProviderId") Long serviceProviderId, org.springframework.data.domain.Pageable pageable);
@@ -193,7 +198,7 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
 	List<Anomaly> findByServiceProviderId(@Param("spId") Long spId);
 
 
-	// 🔹 1️⃣ Incomplete Data Anomalies
+	// 1️⃣ Insert Incomplete Data Anomalies
 	@Modifying
 	@Transactional
 	@Query(value = """
@@ -210,29 +215,29 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
     )
     SELECT
         1 AS anomaly_type_id,  -- Incomplete Data
-        CONCAT('Incomplete data for consumer ID ', id) AS note,
+        CONCAT('Incomplete data for consumer ID ', c.id) AS note,
         0 AS status,
         NOW() AS reported_on,
         :reportedById AS reported_by_id,
         :updatedOn AS updated_on,
         :updatedBy AS update_by,
-        CONCAT(:anomalyFormattedId, '-', UUID_SHORT()) AS anomaly_formatted_id,
-        id AS consumer_id
-    FROM consumers
-    WHERE first_name IS NULL
-       OR middle_name IS NULL
-       OR last_name IS NULL
-       OR msisdn IS NULL
-       OR gender IS NULL
-       OR registration_date IS NULL
-       OR birth_date IS NULL 
-       OR birth_place IS NULL
-       OR address IS NULL
-       OR identification_number IS NULL
-       OR identification_type IS NULL
-       OR alternate_msisdn1 IS NULL
-       OR alternate_msisdn2 IS NULL
-    """, nativeQuery = true)
+        CONCAT(:anomalyFormattedId, '-', LPAD(c.id, 8, '0')) AS anomaly_formatted_id,
+        c.id AS consumer_id
+    FROM consumers c
+    WHERE c.first_name IS NULL
+       OR c.middle_name IS NULL
+       OR c.last_name IS NULL
+       OR c.msisdn IS NULL
+       OR c.gender IS NULL
+       OR c.registration_date IS NULL
+       OR c.birth_date IS NULL 
+       OR c.birth_place IS NULL
+       OR c.address IS NULL
+       OR c.identification_number IS NULL
+       OR c.identification_type IS NULL
+       OR c.alternate_msisdn1 IS NULL
+       OR c.alternate_msisdn2 IS NULL
+""", nativeQuery = true)
 	int insertIncompleteDataAnomalies(
 			@Param("reportedById") Long reportedById,
 			@Param("updatedOn") Date updatedOn,
@@ -242,7 +247,7 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
 
 
 
-	// 🔹 2️⃣ Duplicate MSISDN Anomalies
+	// 2️⃣ Insert Duplicate MSISDN Anomalies
 	@Modifying
 	@Transactional
 	@Query(value = """
@@ -259,18 +264,18 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
     )
     SELECT 
         2 AS anomaly_type_id,  -- Duplicate Records
-        CONCAT('Duplicate MSISDN detected for ', msisdn) AS note,
+        CONCAT('Duplicate MSISDN detected for ', c.msisdn) AS note,
         0 AS status,
         NOW() AS reported_on,
         :reportedById AS reported_by_id,
         :updatedOn AS updated_on,
         :updatedBy AS update_by,
-        CONCAT(:anomalyFormattedId, '-', UUID_SHORT()) AS anomaly_formatted_id,
-        MIN(id) AS consumer_id
-    FROM consumers
-    GROUP BY msisdn
+        CONCAT(:anomalyFormattedId, '-DUP-', LPAD(MIN(c.id), 8, '0')) AS anomaly_formatted_id,
+        MIN(c.id) AS consumer_id
+    FROM consumers c
+    GROUP BY c.msisdn
     HAVING COUNT(*) > 1
-    """, nativeQuery = true)
+""", nativeQuery = true)
 	int insertDuplicateAnomalies(
 			@Param("reportedById") Long reportedById,
 			@Param("updatedOn") Date updatedOn,
@@ -280,7 +285,7 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
 
 
 
-	// 🔹 3️⃣ Exceeding Threshold Anomalies
+	// 3️⃣ Insert Exceeding Threshold Anomalies
 	@Modifying
 	@Transactional
 	@Query(value = """
@@ -297,19 +302,19 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
     )
     SELECT 
         4 AS anomaly_type_id,  -- Exceeding Threshold
-        CONCAT('Exceeding threshold for ID Type ', identification_type,
-               ' and ID Number ', identification_number) AS note,
+        CONCAT('Exceeding threshold for ID Type ', c.identification_type,
+               ' and ID Number ', c.identification_number) AS note,
         0 AS status,
         NOW() AS reported_on,
         :reportedById AS reported_by_id,
         :updatedOn AS updated_on,
         :updatedBy AS update_by,
-        CONCAT(:anomalyFormattedId, '-', UUID_SHORT()) AS anomaly_formatted_id,
-        MIN(id) AS consumer_id
-    FROM consumers
-    GROUP BY identification_type, identification_number
+        CONCAT(:anomalyFormattedId, '-THR-', LPAD(MIN(c.id), 8, '0')) AS anomaly_formatted_id,
+        MIN(c.id) AS consumer_id
+    FROM consumers c
+    GROUP BY c.identification_type, c.identification_number
     HAVING COUNT(*) >= 3
-    """, nativeQuery = true)
+""", nativeQuery = true)
 	int insertExceedingThresholdAnomalies(
 			@Param("reportedById") Long reportedById,
 			@Param("updatedOn") Date updatedOn,
@@ -317,6 +322,17 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
 			@Param("anomalyFormattedId") String anomalyFormattedId
 	);
 
+
+
+	// 4️⃣ Update anomaly_formatted_id with generated anomaly IDs
+	@Modifying
+	@Transactional
+	@Query(value = """
+        UPDATE anomalies
+        SET anomaly_formatted_id = CONCAT(anomaly_formatted_id, '-', id)
+        WHERE anomaly_formatted_id = :baseId
+        """, nativeQuery = true)
+	int fixAnomalyFormattedIds(@Param("baseId") String baseId);
 
 
 

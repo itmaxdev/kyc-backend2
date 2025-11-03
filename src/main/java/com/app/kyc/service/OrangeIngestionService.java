@@ -6,17 +6,12 @@ import com.app.kyc.repository.ConsumerRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.codec.digest.DigestUtils;
-import org.hibernate.exception.LockTimeoutException;
-import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 
 import javax.persistence.EntityManager;
 import javax.persistence.PersistenceContext;
 import javax.persistence.PersistenceException;
-import javax.validation.ConstraintViolationException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
@@ -25,7 +20,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.Timestamp;
 import java.text.SimpleDateFormat;
-import java.time.LocalDate;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -40,6 +34,7 @@ public class OrangeIngestionService {
 
     private final ConsumerRepository consumerRepository;
     private final ConsumerServiceImpl consumerServiceImpl;
+    private final ConsumerBatchService consumerBatchService; // ✅ injected batch handler
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -48,7 +43,7 @@ public class OrangeIngestionService {
     private static final int MAX_RETRIES = 3;
 
     /**
-     * Transactional Orange ingestion – generates unique orange_transaction_id for deduplication.
+     * Ingests Orange CSV file and performs batch insertions with transaction safety.
      */
     public int ingestFileTxOrange(Path workingCopy, Long spId, char sep, Charset cs) throws Exception {
         final Timestamp nowTs = new Timestamp(System.currentTimeMillis());
@@ -78,7 +73,7 @@ public class OrangeIngestionService {
                 try {
                     Consumer consumer = mapRowToConsumer(row, spId, nowTs);
 
-                    // ✅ Compute deterministic transaction ID hash
+                    // ✅ Compute deterministic transaction ID
                     String txHash = DigestUtils.sha256Hex(String.join("|",
                             Optional.ofNullable(consumer.getMsisdn()).orElse(""),
                             Optional.ofNullable(consumer.getFirstName()).orElse(""),
@@ -88,41 +83,41 @@ public class OrangeIngestionService {
                             Optional.ofNullable(consumer.getIdentificationType()).orElse(""),
                             String.valueOf(spId)
                     ));
-
                     consumer.setOrangeTransactionId(txHash);
 
-                    // 🔹 Upsert logic
+                    // ✅ Deduplicate by transactionId
                     consumerRepository.findByOrangeTransactionId(txHash).ifPresent(existing -> {
                         consumer.setId(existing.getId());
                     });
 
-                    // 🔹 Consistency
+                    // ✅ Check consistency
                     consumerServiceImpl.updateConsistencyFlag(consumer);
 
-                    // 🔹 Vendor code
+                    // ✅ Generate vendor code
                     String date = df.format(nowTs);
                     String key = "Orange-" + date;
                     vendorCounters.putIfAbsent(key, new AtomicInteger(1));
                     int seq = vendorCounters.get(key).getAndIncrement();
-                    consumer.setVendorCode("Orange-" + date + "-" + seq);
+                    consumer.setVendorCode(key + "-" + seq);
 
                     batch.add(consumer);
 
+                    // ✅ Process batch safely
                     if (batch.size() >= BATCH_SIZE) {
-                        total += flushAndCommitBatch(batch);
+                        total += processBatchSafely(batch);
                     }
 
                 } catch (DataIntegrityViolationException e) {
                     log.warn("⚠️ Skipping row due to data violation: {}", e.getMostSpecificCause().getMessage());
-                    entityManager.clear(); // 🧹 clear session to avoid stale entity
+                    entityManager.clear();
                 } catch (Exception e) {
-                    log.warn("⚠️ Failed to map row (skipped): {}", Arrays.toString(row));
-                    entityManager.clear(); // 🧹 clear session after mapping failure
+                    log.warn("⚠️ Skipping malformed row: {}", Arrays.toString(row));
+                    entityManager.clear();
                 }
             }
 
             if (!batch.isEmpty()) {
-                total += flushAndCommitBatch(batch);
+                total += processBatchSafely(batch);
             }
 
         } catch (Exception e) {
@@ -134,79 +129,33 @@ public class OrangeIngestionService {
         return total;
     }
 
-
     /**
-     * Flushes and clears persistence context with retry (to avoid deadlocks).
+     * Wrapper that retries on transient DB issues.
      */
-    @Transactional(propagation = Propagation.REQUIRES_NEW, rollbackFor = Exception.class)
-    public int flushAndCommitBatch(List<Consumer> batch) throws InterruptedException {
+    private int processBatchSafely(List<Consumer> batch) throws InterruptedException {
         int attempt = 0;
 
         while (attempt < MAX_RETRIES) {
             try {
-                // ✅ Persist and flush the batch
-                consumerRepository.saveAll(batch);
-                entityManager.flush();
-                entityManager.clear();
-
-                int size = batch.size();
-                batch.clear();
-                log.info("✅ Batch committed successfully with {} records", size);
-                return size;
-
-            } catch (DataIntegrityViolationException e) {
-                // ❌ Skip batch if any constraint violation (duplicate, nulls, etc.)
-                log.error("🚫 Data integrity violation (skipping batch of {}): {}",
-                        batch.size(), e.getMostSpecificCause().getMessage());
-                entityManager.clear();
-                batch.clear();
-                return 0;
-
-            } catch (PersistenceException | ConstraintViolationException e) {
-                // ❌ Hibernate or JPA constraint errors
-                log.error("🚫 Persistence/constraint issue while saving batch: {}", e.getMessage());
-                entityManager.clear();
-                batch.clear();
-                return 0;
-
-            } catch (CannotAcquireLockException  e) {
-                // 🔁 Retry only for transient DB lock issues
+                return consumerBatchService.flushAndCommitBatch(batch);
+            } catch (PersistenceException e) {
                 attempt++;
-                log.warn("⚠️ Lock/Deadlock on batch (attempt {}/{}): {}", attempt, MAX_RETRIES, e.getMessage());
-                entityManager.clear();
-
-                if (attempt >= MAX_RETRIES) {
-                    log.error("❌ Giving up after {} retries for batch: {}", MAX_RETRIES, e.getMessage());
-                    batch.clear();
-                    return 0;
-                }
-
-                // ⏳ Backoff before retry
+                log.warn("⚠️ Retry {}/{} - DB issue: {}", attempt, MAX_RETRIES, e.getMessage());
                 Thread.sleep(500L * attempt);
-
             } catch (Exception e) {
-                // ⚠️ Catch-all: rollback batch and continue ingestion
                 attempt++;
-                log.error("🚨 Unexpected error in batch attempt {}/{}: {}", attempt, MAX_RETRIES, e.getMessage());
-                entityManager.clear();
-
-                if (attempt >= MAX_RETRIES) {
-                    log.error("❌ Batch permanently failed after {} retries: {}", MAX_RETRIES, e.getMessage());
-                    batch.clear();
-                    return 0;
-                }
-
+                log.warn("⚠️ Retry {}/{} - unexpected issue: {}", attempt, MAX_RETRIES, e.getMessage());
                 Thread.sleep(500L * attempt);
             }
         }
 
+        log.error("❌ Giving up after {} retries for current batch.", MAX_RETRIES);
         batch.clear();
         return 0;
     }
 
-
     /**
-     * Maps CSV row → Consumer safely.
+     * Safely maps CSV row → Consumer entity.
      */
     private Consumer mapRowToConsumer(String[] row, Long spId, Timestamp nowTs) {
         Consumer c = new Consumer();

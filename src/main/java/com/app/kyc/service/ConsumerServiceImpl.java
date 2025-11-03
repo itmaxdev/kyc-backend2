@@ -1989,8 +1989,7 @@ System.out.println("Get all flagged ");
 
 
 
-
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @Transactional(propagation = Propagation.REQUIRED)
     public void checkConsumerForOrange(List<Consumer> consumers, User user, ServiceProvider serviceProvider) {
         if (consumers == null || consumers.isEmpty()) {
             log.info("checkConsumerForOrange start | operator={} consumers=0", serviceProvider.getName());
@@ -2000,60 +1999,43 @@ System.out.println("Get all flagged ");
         long t0 = System.nanoTime();
         log.info("checkConsumerForOrange start | operator={} consumers={}", serviceProvider.getName(), consumers.size());
 
-        //insert query for Anomaly
-
-
         Long reportedById = user.getId();
         Date updatedOn = new Date();
         String updatedBy = user.getFirstName() + " " + user.getLastName();
-        /*String anomalyFormattedId = serviceProvider.getName() + "-" + new SimpleDateFormat("ddMMyyyy").format(new Date());
+        String baseId = serviceProvider.getName() + "-" + new SimpleDateFormat("ddMMyyyy").format(new Date());
 
-        String baseId = serviceProvider.getName() + "-" +
-                new SimpleDateFormat("ddMMyyyy").format(new Date());*/
+        try {
+            // 1️⃣ Insert anomalies (via native SQL)
+            int countIncomplete = anomalyRepository.insertIncompleteDataAnomalies(reportedById, updatedOn, updatedBy, baseId);
+            int countDuplicate = anomalyRepository.insertDuplicateAnomalies(reportedById, updatedOn, updatedBy, baseId);
+            int countThreshold = anomalyRepository.insertExceedingThresholdAnomalies(reportedById, updatedOn, updatedBy, baseId);
+            log.info("✅ Inserted {} incomplete, {} duplicate, {} threshold anomalies", countIncomplete, countDuplicate, countThreshold);
 
-        String baseId = serviceProvider.getName() + "-" +
-                new SimpleDateFormat("ddMMyyyy").format(new Date());
+            // 2️⃣ Fix formatted IDs after insert
+            int fixed = anomalyRepository.fixAnomalyFormattedIds(baseId);
+            log.info("🔧 Updated anomaly_formatted_id for {} anomalies", fixed);
 
+            // 3️⃣ Link anomalies → consumers
+            int linkedCount = consumerAnomalyRepository.linkConsumersToAnomaliesByOperator(serviceProvider.getName());
+            log.info("🔗 Linked {} consumer_anomaly records for {}", linkedCount, serviceProvider.getName());
 
+            // 4️⃣ Create tracking history for the inserted anomalies
+            addAnomalyTrackingHistory(baseId, updatedBy);
 
-        int count = anomalyRepository.insertIncompleteDataAnomalies(
-                reportedById,
-                updatedOn,
-                updatedBy,
-                baseId
-        );
-        log.info("✅ Inserted {} incomplete-data anomalies", count);
+            // 5️⃣ Consumer change tracking
+            addConsumerHistory();
 
-
-        int countDuplicates = anomalyRepository.insertDuplicateAnomalies(
-                reportedById,
-                updatedOn,
-                updatedBy,
-                baseId
-        );
-        log.info("✅ Inserted {} Duplicates anomalies", countDuplicates);
-
-
-        long totalMs = (System.nanoTime() - t0) / 1_000_000;
-        log.info("checkConsumerForOrange processed={} in {} ms", serviceProvider.getName(), totalMs);
-
-
-        int countThreshold = anomalyRepository.insertExceedingThresholdAnomalies(
-                reportedById,
-                updatedOn,
-                updatedBy,
-                baseId
-        );
-
-
-        log.info("✅ Inserted {} exceeding-threshold anomalies", countThreshold);
-        log.info("✅ Inserted {} exceeding-threshold anomalies for operator {}", count, serviceProvider.getName());
-
-
-        int linkedCount = consumerAnomalyRepository.linkConsumersToAnomaliesByOperator(serviceProvider.getName());
-        log.info("✅ Linked {} consumer_anomaly records for {}", linkedCount, serviceProvider.getName());
-
+            long totalMs = (System.nanoTime() - t0) / 1_000_000;
+            log.info("✅ checkConsumerForOrange completed for {} in {} ms", serviceProvider.getName(), totalMs);
+        } catch (Exception ex) {
+            log.error("❌ checkConsumerForOrange failed for {}: {}", serviceProvider.getName(), ex.getMessage(), ex);
+            throw ex;
+        }
     }
+
+
+
+
 
 
 
@@ -2190,6 +2172,74 @@ System.out.println("Get all flagged ");
             em.clear(); // reset Hibernate session
         }
     }
+
+
+    // 🔹 Tracks history of consumer changes
+    /**
+     * 🔹 Adds a consumer consistency tracking record for auditing.
+     */
+    private void addConsumerHistory(Long consumerId, ServiceProvider serviceProvider, boolean isConsistent, String consistentOn) {
+        try {
+            ConsumerTracking tracking = new ConsumerTracking(
+                    consumerId,
+                    serviceProvider,
+                    consistentOn != null ? consistentOn : "N/A",
+                    isConsistent,
+                    new Date()
+            );
+            consumerTrackingRepository.save(tracking);
+            log.info("📜 Consumer tracking added | consumerId={} | provider={} | consistentOn={} | consistent={}",
+                    consumerId, serviceProvider.getName(), consistentOn, isConsistent);
+        } catch (Exception e) {
+            log.error("⚠️ Failed to add consumer tracking for consumerId={} | Error={}", consumerId, e.getMessage());
+        }
+    }
+
+
+
+    // 🔹 Tracks anomaly creation and status changes
+    /**
+     * 🔹 Adds a tracking entry whenever a new anomaly is inserted or updated.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void addAnomalyTrackingHistory(String baseId, String updatedBy) {
+        if (baseId == null) {
+            log.warn("⚠️ addAnomalyTrackingHistory skipped because baseId is null");
+            return;
+        }
+
+        // 1️⃣ Fetch anomalies inserted in this run
+        List<Anomaly> anomalies = anomalyRepository.findByAnomalyFormattedIdPrefix(baseId);
+
+        if (anomalies == null || anomalies.isEmpty()) {
+            log.info("ℹ️ No anomalies found for tracking with prefix {}", baseId);
+            return;
+        }
+
+        log.info("🧾 Found {} anomalies to track (prefix={})", anomalies.size(), baseId);
+
+        List<AnomalyTracking> trackingList = new ArrayList<>();
+        Date now = new Date();
+
+        for (Anomaly anomaly : anomalies) {
+            AnomalyTracking tracking = new AnomalyTracking(
+                    anomaly,
+                    now,
+                    AnomalyStatus.REPORTED,
+                    "Auto-detected anomaly (" + anomaly.getNote() + ")",
+                    updatedBy,
+                    now
+            );
+            trackingList.add(tracking);
+        }
+
+        anomalyTrackingRepository.saveAll(trackingList);
+        log.info("✅ Added {} anomaly tracking entries for {}", trackingList.size(), baseId);
+    }
+
+
+
+
 
 
 
