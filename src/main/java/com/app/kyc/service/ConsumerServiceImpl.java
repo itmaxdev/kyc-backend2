@@ -1881,7 +1881,7 @@ System.out.println("Get all flagged ");
             Map<ExceedingConsumers, Integer> exceedMap = new HashMap<>();
 
             // Buffer writes in batches to avoid per-row I/O
-            final int batchSize = 500; // keep <= hibernate.jdbc.batch_size
+            final int batchSize = 5000; // keep <= hibernate.jdbc.batch_size
             List<Consumer> pendingSaves = new ArrayList<>(batchSize);
 
             // Optional helper your code uses
