@@ -222,7 +222,7 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
     )
     SELECT
         1 AS anomaly_type_id,  -- Incomplete Data
-        CONCAT('Missing Mandatory Fields: ', c.id) AS note,
+        CONCAT('Incomplete data for consumer ID', c.id) AS note,
         0 AS status,
         NOW() AS reported_on,
         :reportedById AS reported_by_id,
@@ -309,7 +309,8 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
     )
     SELECT 
         4 AS anomaly_type_id,  -- Exceeding Threshold
-        CONCAT('Exceeding Anomaly: You can''t have more than two active records per operator for a given combination of (ID Card Type + ID Number + ServiceProviderName): ('c.identification_type, ' + ',c.identification_number, ' + ',sp.name, ')') AS note,
+        CONCAT('Exceeding threshold for ID Type ', c.identification_type,
+			                               ' and ID Number ', c.identification_number,') AS note,
         0 AS status,
         NOW() AS reported_on,
         :reportedById AS reported_by_id,
