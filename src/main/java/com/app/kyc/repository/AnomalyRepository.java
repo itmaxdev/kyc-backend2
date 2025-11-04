@@ -222,7 +222,7 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
     )
     SELECT
         1 AS anomaly_type_id,  -- Incomplete Data
-        CONCAT('Incomplete data for consumer ID ', c.id) AS note,
+        CONCAT('Missing Mandatory Fields: ', c.id) AS note,
         0 AS status,
         NOW() AS reported_on,
         :reportedById AS reported_by_id,
@@ -277,7 +277,7 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
         :reportedById AS reported_by_id,
         :updatedOn AS updated_on,
         :updatedBy AS update_by,
-        CONCAT(:anomalyFormattedId, '-DUP-', LPAD(MIN(c.id), 8, '0')) AS anomaly_formatted_id,
+        CONCAT(:anomalyFormattedId, '-', LPAD(MIN(c.id), 8, '0')) AS anomaly_formatted_id,
         MIN(c.id) AS consumer_id
     FROM consumers c
     GROUP BY c.msisdn
@@ -309,14 +309,13 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
     )
     SELECT 
         4 AS anomaly_type_id,  -- Exceeding Threshold
-        CONCAT('Exceeding threshold for ID Type ', c.identification_type,
-               ' and ID Number ', c.identification_number) AS note,
+        CONCAT('Exceeding Anomaly: You can''t have more than two active records per operator for a given combination of (ID Card Type + ID Number + ServiceProviderName): ('c.identification_type, ' + ',c.identification_number, ' + ',sp.name, ')') AS note,
         0 AS status,
         NOW() AS reported_on,
         :reportedById AS reported_by_id,
         :updatedOn AS updated_on,
         :updatedBy AS update_by,
-        CONCAT(:anomalyFormattedId,LPAD(MIN(c.id), 8, '0')) AS anomaly_formatted_id,
+        CONCAT(:anomalyFormattedId,-,LPAD(MIN(c.id), 8, '0')) AS anomaly_formatted_id,
         MIN(c.id) AS consumer_id
     FROM consumers c
     GROUP BY c.identification_type, c.identification_number
