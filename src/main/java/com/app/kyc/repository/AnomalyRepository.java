@@ -316,7 +316,7 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
         :reportedById AS reported_by_id,
         :updatedOn AS updated_on,
         :updatedBy AS update_by,
-        CONCAT(:anomalyFormattedId, '-THR-', LPAD(MIN(c.id), 8, '0')) AS anomaly_formatted_id,
+        CONCAT(:anomalyFormattedId,LPAD(MIN(c.id), 8, '0')) AS anomaly_formatted_id,
         MIN(c.id) AS consumer_id
     FROM consumers c
     GROUP BY c.identification_type, c.identification_number
