@@ -2047,6 +2047,8 @@ System.out.println("Get all flagged ");
             // 4️⃣ Maintain consumer tracking & consistency history
             //addConsumerTrackingHistory(serviceProvider, updatedBy);
 
+            consumerTrackingRepository.insertMissingConsumerTracking();
+            anomalyTrackingRepository.insertMissingAnomaliesIntoTracking();
             long totalMs = (System.nanoTime() - t0) / 1_000_000;
             log.info("✅ checkConsumerForOrange completed for {} in {} ms", serviceProvider.getName(), totalMs);
 

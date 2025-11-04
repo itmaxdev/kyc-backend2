@@ -3,9 +3,12 @@ package com.app.kyc.repository;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import com.app.kyc.entity.AnomalyTracking;
+import org.springframework.transaction.annotation.Transactional;
 
 @Repository
 public interface AnomalyTrackingRepository extends JpaRepository<AnomalyTracking, Long>
@@ -17,5 +20,29 @@ public interface AnomalyTrackingRepository extends JpaRepository<AnomalyTracking
 
    List<AnomalyTracking> findDistinctByAnomalyIdOrderByCreatedOnDesc(Long anomalyId);
 
+   @Modifying
+   @Transactional
+   @Query(value = """
+    INSERT INTO anomaly_tracking (
+        anomaly_id,
+        status,
+        created_on,
+        note,
+        update_by,
+        update_on
+    )
+    SELECT 
+        a.id AS anomaly_id,
+        a.status,
+        a.reported_on AS created_on,
+        a.note,
+        a.update_by,
+        a.updated_on AS update_on
+    FROM anomalies a
+    LEFT JOIN anomaly_tracking t 
+        ON t.anomaly_id = a.id
+    WHERE t.anomaly_id IS NULL
+    """, nativeQuery = true)
+   int insertMissingAnomaliesIntoTracking();
 
 }
