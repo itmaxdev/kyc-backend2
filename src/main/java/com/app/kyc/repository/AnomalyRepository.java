@@ -311,30 +311,27 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
 
 
 	// 3️⃣ Insert Exceeding Threshold Anomalies
-	@Modifying(clearAutomatically = true)
-	@Transactional
-	@Query(value =
-			"INSERT IGNORE INTO anomalies (" +
-					" anomaly_type_id, note, status, reported_on, reported_by_id, updated_on, update_by, anomaly_formatted_id, consumer_id) " +
-					"SELECT 4 AS anomaly_type_id, " +
-					" CONCAT('Exceeding threshold for ID Type ', c.identification_type, " +
-					"        ' and ID Number ', c.identification_number) AS note, " +
-					" 0 AS status, NOW() AS reported_on, " +
-					" :reportedById AS reported_by_id, :updatedOn AS updated_on, :updatedBy AS update_by, " +
-					" CONCAT(:anomalyFormattedId, '-TH-', LPAD(MIN(c.id), 8, '0')) AS anomaly_formatted_id, " +
-					" MIN(c.id) AS consumer_id " +
-					" FROM consumers c " +
-					" WHERE c.identification_type IS NOT NULL AND c.identification_number IS NOT NULL " +
-					" GROUP BY c.identification_type, c.identification_number " +
-					" HAVING COUNT(*) >= 3",
-			nativeQuery = true)
-	int insertExceedingThresholdAnomalies(
-			@Param("reportedById") Long reportedById,
-			@Param("updatedOn") Date updatedOn,
-			@Param("updatedBy") String updatedBy,
-			@Param("anomalyFormattedId") String anomalyFormattedId
-	);
-
+	@Query(value = """
+    SELECT COUNT(*) 
+    FROM (
+        SELECT 
+            c.identification_type, 
+            c.identification_number,
+            COALESCE(sp.name, :operatorName) AS operator_name,
+            COUNT(*) AS cnt
+        FROM consumers c
+        LEFT JOIN service_providers sp ON sp.id = c.service_provider_id
+        WHERE c.identification_type IS NOT NULL
+          AND c.identification_number IS NOT NULL
+          AND TRIM(c.identification_type) <> ''
+          AND TRIM(c.identification_number) <> ''
+          AND c.identification_number <> '.'
+          AND (sp.name = :operatorName OR sp.name IS NULL)
+        GROUP BY c.identification_type, c.identification_number, sp.name
+        HAVING COUNT(*) >= 3
+    ) AS threshold_groups
+    """, nativeQuery = true)
+	int countExceedingThresholdGroups(@Param("operatorName") String operatorName);
 
 
 
@@ -350,6 +347,39 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
         WHERE anomaly_formatted_id = :baseId
         """, nativeQuery = true)
 	int fixAnomalyFormattedIds(@Param("baseId") String baseId);
+
+
+	@Modifying(clearAutomatically = true)
+	@Transactional
+	@Query(value =
+			"INSERT IGNORE INTO anomalies (" +
+					"  anomaly_type_id, note, status, reported_on, reported_by_id, updated_on, update_by, anomaly_formatted_id, consumer_id) " +
+					"SELECT 4 AS anomaly_type_id, " +
+					"  CONCAT(" +
+					"    'Exceeding Anomaly: You can''t have more than two active records per operator '," +
+					"    'for a given combination of (ID Card Type + ID Number + ServiceProviderName): (', " +
+					"    c.identification_type, ' + ', " +
+					"    c.identification_number, ' + ', " +
+					"    sp.name, ')'" +
+					"  ) AS note, " +
+					"  0 AS status, NOW() AS reported_on, " +
+					"  :reportedById AS reported_by_id, :updatedOn AS updated_on, :updatedBy AS update_by, " +
+					"  CONCAT(:anomalyFormattedId, '-TH-', LPAD(MIN(c.id), 8, '0')) AS anomaly_formatted_id, " +
+					"  MIN(c.id) AS consumer_id " +
+					"FROM consumers c " +
+					"JOIN service_providers sp ON sp.id = c.service_provider_id " +
+					"WHERE c.identification_type IS NOT NULL AND c.identification_number IS NOT NULL " +
+					"GROUP BY c.identification_type, c.identification_number, sp.name " +  // ✅ fix
+					"HAVING COUNT(*) >= 3",
+			nativeQuery = true)
+	int insertExceedingThresholdAnomalies(
+			@Param("reportedById") Long reportedById,
+			@Param("updatedOn") Date updatedOn,
+			@Param("updatedBy") String updatedBy,
+			@Param("anomalyFormattedId") String anomalyFormattedId
+	);
+
+
 
 
 

@@ -2020,8 +2020,20 @@ System.out.println("Get all flagged ");
             entityManager.flush(); // ensure consumers are visible to query
             logTopDuplicateGroups(entityManager);
 
+           // int countThreshold = anomalyRepository.insertExceedingThresholdAnomalies(
+                 //   reportedById, updatedOn, updatedBy, baseId);
+
+            int thresholdGroups = anomalyRepository.countExceedingThresholdGroups(serviceProvider.getName());
+            log.info("🔍 Found {} threshold groups for operator={}", thresholdGroups, serviceProvider.getName());
+
             int countThreshold = anomalyRepository.insertExceedingThresholdAnomalies(
-                    reportedById, updatedOn, updatedBy, baseId);
+                    reportedById, updatedOn, updatedBy, baseId
+            );
+            log.info("✅ Inserted {} threshold anomalies", countThreshold);
+
+            log.info("✅ Inserted {} threshold anomalies", countThreshold);
+
+
             log.info("✅ Inserted {} threshold anomalies", countThreshold);
 
             // 2️⃣ Link anomalies to consumers
