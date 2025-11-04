@@ -222,7 +222,24 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
     )
     SELECT
         1 AS anomaly_type_id,  -- Incomplete Data
-        CONCAT('Missing Mandatory Fields: ', c.id) AS note,
+        CONCAT(
+            'Missing Mandatory Fields: ',
+            TRIM(BOTH ', ' FROM CONCAT_WS(', ',
+                CASE WHEN c.first_name IS NULL THEN 'first_name' ELSE NULL END,
+                CASE WHEN c.middle_name IS NULL THEN 'middle_name' ELSE NULL END,
+                CASE WHEN c.last_name IS NULL THEN 'last_name' ELSE NULL END,
+                CASE WHEN c.msisdn IS NULL THEN 'msisdn' ELSE NULL END,
+                CASE WHEN c.gender IS NULL THEN 'gender' ELSE NULL END,
+                CASE WHEN c.registration_date IS NULL THEN 'registration_date' ELSE NULL END,
+                CASE WHEN c.birth_date IS NULL THEN 'birth_date' ELSE NULL END,
+                CASE WHEN c.birth_place IS NULL THEN 'birth_place' ELSE NULL END,
+                CASE WHEN c.address IS NULL THEN 'address' ELSE NULL END,
+                CASE WHEN c.identification_number IS NULL THEN 'identification_number' ELSE NULL END,
+                CASE WHEN c.identification_type IS NULL THEN 'identification_type' ELSE NULL END,
+                CASE WHEN c.alternate_msisdn1 IS NULL THEN 'alternate_msisdn1' ELSE NULL END,
+                CASE WHEN c.alternate_msisdn2 IS NULL THEN 'alternate_msisdn2' ELSE NULL END
+            ))
+        ) AS note,
         0 AS status,
         NOW() AS reported_on,
         :reportedById AS reported_by_id,
@@ -251,6 +268,7 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
 			@Param("updatedBy") String updatedBy,
 			@Param("anomalyFormattedId") String anomalyFormattedId
 	);
+
 
 
 
