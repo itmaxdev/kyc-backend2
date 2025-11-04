@@ -311,48 +311,30 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
 
 
 	// 3️⃣ Insert Exceeding Threshold Anomalies
-	@Modifying
+	@Modifying(clearAutomatically = true)
 	@Transactional
-	@Query(value = """
-    INSERT IGNORE INTO anomalies (
-        anomaly_type_id,
-        note,
-        status,
-        reported_on,
-        reported_by_id,
-        updated_on,
-        update_by,
-        anomaly_formatted_id,
-        consumer_id
-    )
-    SELECT 
-        4 AS anomaly_type_id,  -- Exceeding Threshold
-        CONCAT(
-            'Exceeding Anomaly: You can''t have more than two active records per operator ',
-            'for a given combination of (ID Card Type + ID Number + ServiceProviderName): (',
-            c.identification_type, ' + ', 
-            c.identification_number, ' + ', 
-            sp.name, 
-            ')'
-        ) AS note,
-        0 AS status,
-        NOW() AS reported_on,
-        :reportedById AS reported_by_id,
-        :updatedOn AS updated_on,
-        :updatedBy AS update_by,
-        CONCAT(:anomalyFormattedId, '-', LPAD(MIN(c.id), 8, '0')) AS anomaly_formatted_id,
-        MIN(c.id) AS consumer_id
-    FROM consumers c
-    JOIN service_providers sp ON sp.id = c.service_provider_id
-    GROUP BY c.identification_type, c.identification_number, sp.name
-    HAVING COUNT(*) >= 3
-""", nativeQuery = true)
+	@Query(value =
+			"INSERT IGNORE INTO anomalies (" +
+					" anomaly_type_id, note, status, reported_on, reported_by_id, updated_on, update_by, anomaly_formatted_id, consumer_id) " +
+					"SELECT 4 AS anomaly_type_id, " +
+					" CONCAT('Exceeding threshold for ID Type ', c.identification_type, " +
+					"        ' and ID Number ', c.identification_number) AS note, " +
+					" 0 AS status, NOW() AS reported_on, " +
+					" :reportedById AS reported_by_id, :updatedOn AS updated_on, :updatedBy AS update_by, " +
+					" CONCAT(:anomalyFormattedId, '-TH-', LPAD(MIN(c.id), 8, '0')) AS anomaly_formatted_id, " +
+					" MIN(c.id) AS consumer_id " +
+					" FROM consumers c " +
+					" WHERE c.identification_type IS NOT NULL AND c.identification_number IS NOT NULL " +
+					" GROUP BY c.identification_type, c.identification_number " +
+					" HAVING COUNT(*) >= 3",
+			nativeQuery = true)
 	int insertExceedingThresholdAnomalies(
 			@Param("reportedById") Long reportedById,
 			@Param("updatedOn") Date updatedOn,
 			@Param("updatedBy") String updatedBy,
 			@Param("anomalyFormattedId") String anomalyFormattedId
 	);
+
 
 
 

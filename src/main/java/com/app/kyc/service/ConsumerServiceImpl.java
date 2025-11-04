@@ -2011,12 +2011,18 @@ System.out.println("Get all flagged ");
             // 1️⃣ Insert anomalies using native SQL
             int countIncomplete = anomalyRepository.insertIncompleteDataAnomalies(reportedById, updatedOn, updatedBy, baseId);
             int countDuplicate  = anomalyRepository.insertDuplicateAnomalies(reportedById, updatedOn, updatedBy, baseId);
-            int countThreshold  = anomalyRepository.insertExceedingThresholdAnomalies(reportedById, updatedOn, updatedBy, baseId);
-            log.info("✅ Inserted {} incomplete, {} duplicate, {} threshold anomalies", countIncomplete, countDuplicate, countThreshold);
+            log.info("✅ Inserted {} incomplete, {} duplicate, {} threshold anomalies", countIncomplete, countDuplicate);
 
             // ✅ Force DB sync after native SQL inserts
             entityManager.flush();
             entityManager.clear();
+
+            entityManager.flush(); // ensure consumers are visible to query
+            logTopDuplicateGroups(entityManager);
+
+            int countThreshold = anomalyRepository.insertExceedingThresholdAnomalies(
+                    reportedById, updatedOn, updatedBy, baseId);
+            log.info("✅ Inserted {} threshold anomalies", countThreshold);
 
             // 2️⃣ Link anomalies to consumers
             int linkedCount = consumerAnomalyRepository.linkConsumersToAnomaliesByOperator(serviceProvider.getName());
@@ -2027,19 +2033,19 @@ System.out.println("Get all flagged ");
             entityManager.clear();
 
             // 3️⃣ Track anomaly creation — after DB is synced
-            if (countIncomplete > 0)
+           /* if (countIncomplete > 0)
                 addAnomalyTrackingHistory(baseId, "Auto-detected incomplete data", updatedBy);
             if (countDuplicate > 0)
                 addAnomalyTrackingHistory(baseId, "Auto-detected duplicate MSISDNs", updatedBy);
             if (countThreshold > 0)
                 addAnomalyTrackingHistory(baseId, "Auto-detected threshold exceedance", updatedBy);
-
+*/
             // ✅ Another flush after tracking
-            entityManager.flush();
-            entityManager.clear();
+            //entityManager.flush();
+            //entityManager.clear();
 
             // 4️⃣ Maintain consumer tracking & consistency history
-            addConsumerTrackingHistory(serviceProvider, updatedBy);
+            //addConsumerTrackingHistory(serviceProvider, updatedBy);
 
             long totalMs = (System.nanoTime() - t0) / 1_000_000;
             log.info("✅ checkConsumerForOrange completed for {} in {} ms", serviceProvider.getName(), totalMs);
@@ -2054,6 +2060,26 @@ System.out.println("Get all flagged ");
 
 
 
+    @SuppressWarnings("unchecked")
+    private void logTopDuplicateGroups(EntityManager entityManager) {
+        List<Object[]> topGroups = entityManager.createNativeQuery(
+                        "SELECT identification_type, identification_number, COUNT(*) AS cnt " +
+                                "FROM consumers " +
+                                "WHERE identification_type IS NOT NULL AND identification_number IS NOT NULL " +
+                                "GROUP BY identification_type, identification_number " +
+                                "HAVING COUNT(*) >= 3 " +
+                                "ORDER BY cnt DESC LIMIT 5")
+                .getResultList();
+
+        if (topGroups.isEmpty()) {
+            log.info("⚠️ No threshold groups (>=3) found in consumers table.");
+        } else {
+            log.info("🔍 Top 5 threshold groups:");
+            for (Object[] row : topGroups) {
+                log.info("   → IDType={} | IDNumber={} | Count={}", row[0], row[1], row[2]);
+            }
+        }
+    }
 
 
 
