@@ -99,7 +99,8 @@ public class FileProcessingTask {
                     fileProcessingService.processFileAirtel(file, operator);
                     break;
                 case "Orange":
-                    fileProcessingService.processFileOrange(file, operator);
+                    //fileProcessingService.processFileOrange(file, operator);
+                    fileProcessingService.processFileOrangeForPerormanceCheck(file, operator);
                     break;
                 case "Africell":
                     // make sure this exists; if not, add it or map to a generic handler

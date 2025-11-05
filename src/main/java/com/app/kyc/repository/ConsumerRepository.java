@@ -368,4 +368,40 @@ public interface ConsumerRepository
 
 
     Optional<Consumer> findByOrangeTransactionId(String orangeTransactionId);
+
+    @Modifying
+    @Transactional
+    @Query(value = """
+        LOAD DATA LOCAL INFILE :filePath
+        INTO TABLE consumers
+        CHARACTER SET utf8mb4
+        FIELDS TERMINATED BY ',' 
+        OPTIONALLY ENCLOSED BY '"' 
+        LINES TERMINATED BY '\\r\\n'
+        IGNORE 1 ROWS
+        (@msisdn, @date_creation, @nom, @prenom, @genre, @date_naissance, @lieu_naissance, @adresse, @type_piece, @numero_piece)
+        SET
+        service_provider_id = 20,                                   -- Orange
+        first_name          = LEFT(NULLIF(TRIM(@prenom), ''), 100),
+        last_name           = LEFT(NULLIF(TRIM(@nom), ''), 100),
+        gender              = NULLIF(TRIM(@genre), ''),
+        birth_date          = CASE 
+                                WHEN @date_naissance REGEXP '^[0-9]{2}-[0-9]{2}-[0-9]{4}$' 
+                                THEN STR_TO_DATE(@date_naissance, '%d-%m-%Y')
+                                ELSE NULL
+                              END,
+        registration_date   = CASE
+                                WHEN @date_creation REGEXP '^[0-9]{2}-[0-9]{2}-[0-9]{4} [0-9]{2}:[0-9]{2}$' 
+                                THEN STR_TO_DATE(@date_creation, '%d-%m-%Y %H:%i')
+                                ELSE NULL
+                              END,
+        birth_place         = LEFT(NULLIF(TRIM(@lieu_naissance), ''), 255),
+        address             = LEFT(NULLIF(TRIM(@adresse), ''), 255),
+        identification_type = LEFT(NULLIF(TRIM(@type_piece), ''), 100),
+        identification_number = LEFT(NULLIF(TRIM(@numero_piece), ''), 50),
+        created_on          = NOW(),
+        is_consistent       = FALSE,
+        consumer_status     = 0;
+    """, nativeQuery = true)
+    void loadOrangeCsv(@Param("filePath") String filePath);
 }

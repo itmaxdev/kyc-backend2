@@ -293,6 +293,63 @@ public class FileProcessingService {
     }
 
 
+    public void processFileOrangeForPerormanceCheck(Path filePath, String operator) throws IOException {
+        long t0 = System.currentTimeMillis();
+        log.info("ENTER processFileOrange: {} | operator={}", filePath, operator);
+
+        if (Files.notExists(filePath) || !Files.isRegularFile(filePath)) {
+            log.warn("File not found or not a regular file: {}", filePath);
+            return;
+        }
+
+        ServiceProvider sp = serviceProviderRepository.findByNameIgnoreCase(operator)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown operator: " + operator));
+        Long spId = sp.getId();
+        log.info("Resolved ServiceProvider id={}, name={}", spId, sp.getName());
+
+
+        String absolutePath = filePath.toAbsolutePath().toString().replace("\\", "/");
+        log.info("🚀 Importing Orange consumer data from file: {}", absolutePath);
+
+        consumerRepository.loadOrangeCsv(absolutePath);
+
+        log.info("✅ Successfully imported Orange consumers from {}", absolutePath);
+
+
+        ProcessedFile fileLog = new ProcessedFile();
+        fileLog.setFilename(filePath.getFileName().toString());
+        fileLog.setStatus(FileStatus.IN_PROGRESS);
+        fileLog.setStartedAt(LocalDateTime.now());
+        fileLog.setRecordsProcessed(0);
+        processedFileRepository.save(fileLog);
+
+
+        boolean success = true;
+        int totalProcessed = 0;
+
+        try {
+            moveOriginal(filePath, success ? "processed" : "failed", fileLog);
+        } catch (IOException moveEx) {
+            log.error("Final move failed for {}: {}", filePath, moveEx.toString(), moveEx);
+            fileLog.setStatus(FileStatus.FAILED);
+            fileLog.setLastError("Move failed: " + moveEx.getMessage());
+            fileLog.setLastUpdated(LocalDateTime.now());
+            processedFileRepository.save(fileLog);
+        }
+
+        if (success) {
+            log.info("successs: processed={}");
+            runCheckConsumerForOrangeAsync(sp);
+        } else {
+            log.info("Failure: processed={}");
+        }
+
+        log.info("DONE: processed={} in {} ms", totalProcessed, (System.currentTimeMillis() - t0));
+
+
+        log.info("DONE: processed={} in {} ms", totalProcessed, (System.currentTimeMillis() - t0));
+    }
+
     public void processFileOrange(Path filePath, String operator) throws IOException {
         long t0 = System.currentTimeMillis();
         log.info("ENTER processFileOrange: {} | operator={}", filePath, operator);
