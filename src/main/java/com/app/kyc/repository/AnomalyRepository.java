@@ -382,5 +382,88 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
 
 
 
+		/**
+		 * Runs the full Exceeding Threshold anomaly detection workflow:
+		 * 1. Inserts new anomalies (if not already existing)
+		 * 2. Inserts consumer–anomaly links safely
+		 * 3. Updates formatted IDs
+		 */
+		@Modifying
+		@Transactional
+		@Query(value = """
+        -- 1️⃣ Insert new anomalies
+        INSERT INTO anomalies (reported_by_id, note, anomaly_type_id)
+        SELECT DISTINCT 
+            3 AS reported_by_id,
+            CONCAT(
+                'Exceeding Anomaly: You can''t have more than two active records per operator for a given combination of (ID Card Type + ID Number + ServiceProviderName): (',
+                a.identification_type, '+', a.identification_number, '+', b.operator_name, ')'
+            ) AS note,
+            4 AS anomaly_type_id
+        FROM consumers a
+        INNER JOIN (
+            SELECT
+                c.identification_type,
+                c.identification_number,
+                sp.name AS operator_name,
+                COUNT(*) AS cnt
+            FROM consumers c
+            LEFT JOIN service_providers sp ON sp.id = c.service_provider_id
+            WHERE c.identification_type IS NOT NULL
+              AND c.identification_number IS NOT NULL
+              AND TRIM(c.identification_type) <> ''
+              AND TRIM(c.identification_number) <> ''
+              AND c.identification_number <> '.'
+            GROUP BY c.identification_type, c.identification_number, sp.name
+            HAVING COUNT(*) >= 3
+        ) b 
+            ON a.identification_number = b.identification_number
+        WHERE NOT EXISTS (
+            SELECT 1 
+            FROM anomalies x
+            WHERE x.note = CONCAT(
+                'Exceeding Anomaly: You can''t have more than two active records per operator for a given combination of (ID Card Type + ID Number + ServiceProviderName): (',
+                a.identification_type, '+', a.identification_number, '+', b.operator_name, ')'
+            )
+        );
+
+        -- 2️⃣ Link anomalies to consumers safely (ignore duplicates)
+        INSERT IGNORE INTO consumers_anomalies (consumer_id, anomaly_id, notes)
+        SELECT 
+            a.id AS consumer_id,
+            c.id AS anomaly_id,
+            CONCAT(
+                'Exceeding Anomaly: You can''t have more than two active records per operator for a given combination of (ID Card Type + ID Number + ServiceProviderName): (',
+                a.identification_type, '+', a.identification_number, '+', b.operator_name, ')'
+            ) AS notes
+        FROM consumers a
+        INNER JOIN (
+            SELECT
+                c.identification_type,
+                c.identification_number,
+                sp.name AS operator_name,
+                COUNT(*) AS cnt
+            FROM consumers c
+            JOIN service_providers sp ON sp.id = c.service_provider_id
+            WHERE c.identification_type IS NOT NULL
+              AND c.identification_number IS NOT NULL
+              AND TRIM(c.identification_type) <> ''
+              AND TRIM(c.identification_number) <> ''
+              AND c.identification_number <> '.'
+            GROUP BY c.identification_type, c.identification_number, sp.name
+            HAVING COUNT(*) >= 3
+        ) b 
+            ON a.identification_number = b.identification_number
+        INNER JOIN anomalies c 
+            ON a.identification_number = SUBSTRING_INDEX(SUBSTRING_INDEX(c.note, '+', 4), '+', -1);
+
+        -- 3️⃣ Update anomaly formatted ID field
+        UPDATE anomalies 
+        SET anomaly_formatted_id = CONCAT(
+            SUBSTRING_INDEX(SUBSTRING_INDEX(note, '+', 5), '+', -1),
+            '-', DATE_FORMAT(CURDATE(), '%d%m%Y'), '-', id
+        );
+        """, nativeQuery = true)
+		void runExceedingThresholdJob();
 
 }

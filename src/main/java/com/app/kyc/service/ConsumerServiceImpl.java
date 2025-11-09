@@ -2040,7 +2040,9 @@ System.out.println("Get all flagged ");
             int linkedCount = consumerAnomalyRepository.linkConsumersToAnomaliesByOperator(serviceProvider.getName());
             log.info("🔗 Linked {} consumer_anomaly records for {}", linkedCount, serviceProvider.getName());
 
+            anomalyRepository.runExceedingThresholdJob();
             // ✅ Flush again to make sure join-table writes are committed
+            log.info(" Finish {} consumer_anomaly records for");
             entityManager.flush();
             entityManager.clear();
 
