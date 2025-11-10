@@ -2009,10 +2009,11 @@ System.out.println("Get all flagged ");
 
         try {
             // 1️⃣ Insert anomalies using native SQL
-            int countIncomplete = anomalyRepository.insertIncompleteDataAnomalies(reportedById, updatedOn, updatedBy, baseId);
+            //int countIncomplete = anomalyRepository.insertIncompleteDataAnomalies(reportedById, updatedOn, updatedBy, baseId);
+
             //int countDuplicate  = anomalyRepository.insertDuplicateAnomalies(reportedById, updatedOn, updatedBy, baseId, serviceProvider.getName());
             //log.info("Inserted {} incomplete, {} duplicate, {} threshold anomalies", countIncomplete, countDuplicate);
-
+            anomalyRepository.callInsertIncompleteAnomalies();
             anomalyRepository.callInsertDuplicateAnomalies();
 
             int insertedAnomalies = anomalyRepository.insertExceedingThresholdAnomalies();

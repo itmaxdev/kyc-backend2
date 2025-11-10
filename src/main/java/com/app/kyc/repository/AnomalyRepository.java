@@ -488,4 +488,10 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
 	int linkConsumersToExceedingAnomalies();
 
 
+	@Modifying
+	@Transactional
+	@Query(value = "CALL InsertIncompleteAnomalies()", nativeQuery = true)
+	void callInsertIncompleteAnomalies();
+
+
 }
