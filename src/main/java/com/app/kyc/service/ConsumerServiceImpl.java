@@ -2032,6 +2032,47 @@ System.out.println("Get all flagged ");
     }
 
 
+    @Transactional(propagation = Propagation.REQUIRED)
+    public void checkConsumerForVodacom(List<Consumer> consumers, User user, ServiceProvider serviceProvider) {
+        if (consumers == null || consumers.isEmpty()) {
+            log.info("checkConsumerForVodacom start | operator={} consumers=0", serviceProvider.getName());
+            return;
+        }
+
+        long t0 = System.nanoTime();
+        log.info("checkConsumerForVodacom start | operator={} consumers={}", serviceProvider.getName(), consumers.size());
+
+        Long reportedById = user.getId();
+        Date updatedOn = new Date();
+        String updatedBy = user.getFirstName() + " " + user.getLastName();
+        String baseId = serviceProvider.getName() + "-" + new SimpleDateFormat("ddMMyyyy").format(new Date());
+
+        try {
+            //anomalyRepository.callInsertIncompleteAnomaliesForVodacom();
+            //anomalyRepository.callInsertDuplicateAnomaliesForVodacom();
+
+            anomalyRepository.callInsertVodacomAnomalies();
+
+            anomalyRepository.insertExceedingThresholdAnomaliesForVodacom();
+            anomalyRepository.linkConsumersToExceedingAnomalies();
+
+
+            entityManager.flush();
+            entityManager.clear();
+
+
+
+            // consumerTrackingRepository.insertMissingConsumerTracking();
+            //anomalyTrackingRepository.insertMissingAnomaliesIntoTracking();
+            long totalMs = (System.nanoTime() - t0) / 1_000_000;
+            log.info(" checkConsumerForVodacom completed for {} in {} ms", serviceProvider.getName(), totalMs);
+
+        } catch (Exception ex) {
+            log.error("checkConsumerForVodacom failed for {}: {}", serviceProvider.getName(), ex.getMessage(), ex);
+            throw ex;
+        }
+    }
+
 
 
 

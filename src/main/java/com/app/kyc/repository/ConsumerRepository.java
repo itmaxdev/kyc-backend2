@@ -425,4 +425,85 @@ public interface ConsumerRepository
     """, nativeQuery = true)
     void loadOrangeCsv(@Param("filePath") String filePath);
 
+
+    @Modifying
+    @Transactional
+    @Query(value = """
+    LOAD DATA LOCAL INFILE :filePath
+    IGNORE
+    INTO TABLE consumers
+    CHARACTER SET utf8mb4
+    FIELDS TERMINATED BY ',' 
+    OPTIONALLY ENCLOSED BY '"' 
+    LINES TERMINATED BY '\\r\\n'
+    IGNORE 1 ROWS
+    (
+        @msisdn,
+        @date_enr,
+        @firstname,
+        @middlename,
+        @lastname,
+        @gender,
+        @date_naissance,
+        @lieu_de_naissance,
+        @address_no,
+        @street_name,
+        @district_name,
+        @commune_name,
+        @city_town,
+        @emergency_contact_1,
+        @emergency_contact_2,
+        @card_type,
+        @card_id,
+        @trx_id,
+        @status
+    )
+    SET
+        service_provider_id = 24,
+        vodacom_transaction_id = LEFT(NULLIF(TRIM(@trx_id), ''), 64),
+        msisdn              = LEFT(NULLIF(TRIM(@msisdn), ''), 20),
+        first_name          = LEFT(NULLIF(TRIM(@firstname), ''), 100),
+        middle_name         = LEFT(NULLIF(TRIM(@middlename), ''), 100),
+        last_name           = LEFT(NULLIF(TRIM(@lastname), ''), 100),
+        gender              = NULLIF(TRIM(@gender), ''),
+        birth_date          = CASE 
+                                WHEN @date_naissance REGEXP '^[0-9]{1,2}/[0-9]{1,2}/[0-9]{4}$' 
+                                  THEN STR_TO_DATE(@date_naissance, '%m/%d/%Y')
+                                WHEN @date_naissance REGEXP '^[0-9]{2}-[0-9]{2}-[0-9]{4}$' 
+                                  THEN STR_TO_DATE(@date_naissance, '%d-%m-%Y')
+                                ELSE NULL
+                              END,
+        registration_date   = CASE
+                                WHEN @date_enr REGEXP '^[0-9]{1,2}/[0-9]{1,2}/[0-9]{4}$' 
+                                  THEN STR_TO_DATE(@date_enr, '%m/%d/%Y')
+                                WHEN @date_enr REGEXP '^[0-9]{2}-[0-9]{2}-[0-9]{4}$' 
+                                  THEN STR_TO_DATE(@date_enr, '%d-%m-%Y')
+                                ELSE NULL
+                              END,
+        birth_place         = LEFT(NULLIF(TRIM(@lieu_de_naissance), ''), 255),
+        address             = CONCAT_WS(', ',
+                                NULLIF(TRIM(@address_no), ''),
+                                NULLIF(TRIM(@street_name), ''),
+                                NULLIF(TRIM(@district_name), ''),
+                                NULLIF(TRIM(@commune_name), ''),
+                                NULLIF(TRIM(@city_town), '')
+                              ),
+        alternate_msisdn1   = LEFT(NULLIF(TRIM(@emergency_contact_1), ''), 20),
+        alternate_msisdn2   = LEFT(NULLIF(TRIM(@emergency_contact_2), ''), 20),
+        identification_type = LEFT(NULLIF(TRIM(@card_type), ''), 100),
+        identification_number = LEFT(NULLIF(TRIM(@card_id), ''), 50),
+        status               = LEFT(NULLIF(TRIM(@status), ''), 20),
+        consumer_status     = CASE
+                                WHEN LOWER(TRIM(@status)) IN ('accepted', 'actif', 'active', '1') THEN 1
+                                WHEN LOWER(TRIM(@status)) IN ('rejected', 'resilie', 'inactive', '0', 'suspendu') THEN 0
+                                ELSE 0
+                              END,
+        created_on          = NOW(),
+        is_consistent       = FALSE;
+""", nativeQuery = true)
+    void loadVodacomCsv(@Param("filePath") String filePath);
+
+
+
+
 }

@@ -93,7 +93,7 @@ public class FileProcessingTask {
         try {
             switch (operator) {
                 case "Vodacom":
-                    fileProcessingService.processFileVodacom(file, operator);
+                    fileProcessingService.processFileVodacomForPerformance(file, operator);
                     break;
                 case "Airtel":
                     fileProcessingService.processFileAirtel(file, operator);
