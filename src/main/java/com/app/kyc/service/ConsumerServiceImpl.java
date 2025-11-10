@@ -2010,34 +2010,37 @@ System.out.println("Get all flagged ");
         try {
             // 1️⃣ Insert anomalies using native SQL
             int countIncomplete = anomalyRepository.insertIncompleteDataAnomalies(reportedById, updatedOn, updatedBy, baseId);
-            int countDuplicate  = anomalyRepository.insertDuplicateAnomalies(reportedById, updatedOn, updatedBy, baseId, serviceProvider.getName());
-            log.info("Inserted {} incomplete, {} duplicate, {} threshold anomalies", countIncomplete, countDuplicate);
+            //int countDuplicate  = anomalyRepository.insertDuplicateAnomalies(reportedById, updatedOn, updatedBy, baseId, serviceProvider.getName());
+            //log.info("Inserted {} incomplete, {} duplicate, {} threshold anomalies", countIncomplete, countDuplicate);
 
+            anomalyRepository.callInsertDuplicateAnomalies();
 
+            int insertedAnomalies = anomalyRepository.insertExceedingThresholdAnomalies();
+            int linked = anomalyRepository.linkConsumersToExceedingAnomalies();
 
 
             entityManager.flush();
             entityManager.clear();
 
-            entityManager.flush();
-            logTopDuplicateGroups(entityManager);
+           // entityManager.flush();
+            //logTopDuplicateGroups(entityManager);
 
-            int thresholdGroups = anomalyRepository.countExceedingThresholdGroups(serviceProvider.getName());
+          /*  int thresholdGroups = anomalyRepository.countExceedingThresholdGroups(serviceProvider.getName());
             log.info("🔍 Found {} threshold groups for operator={}", thresholdGroups, serviceProvider.getName());
 
             int countThreshold  = anomalyRepository.insertExceedingThresholdAnomalies(reportedById, updatedOn, updatedBy, baseId, serviceProvider.getName());
             log.info("✅ Inserted {} threshold anomalies", countThreshold);
+*/
 
-
-            int linkedCount = consumerAnomalyRepository.linkConsumersToAnomaliesByOperator(serviceProvider.getName());
+          /*  int linkedCount = consumerAnomalyRepository.linkConsumersToAnomaliesByOperator(serviceProvider.getName());
             log.info("🔗 Linked {} consumer_anomaly records for {}", linkedCount, serviceProvider.getName());
 
 
             entityManager.flush();
-            entityManager.clear();
+            entityManager.clear();*/
 
-            consumerTrackingRepository.insertMissingConsumerTracking();
-            anomalyTrackingRepository.insertMissingAnomaliesIntoTracking();
+           // consumerTrackingRepository.insertMissingConsumerTracking();
+            //anomalyTrackingRepository.insertMissingAnomaliesIntoTracking();
             long totalMs = (System.nanoTime() - t0) / 1_000_000;
             log.info(" checkConsumerForOrange completed for {} in {} ms", serviceProvider.getName(), totalMs);
 

@@ -372,16 +372,30 @@ public interface ConsumerRepository
     @Modifying
     @Transactional
     @Query(value = """
-        LOAD DATA LOCAL INFILE :filePath
-        INTO TABLE consumers
-        CHARACTER SET utf8mb4
-        FIELDS TERMINATED BY ',' 
-        OPTIONALLY ENCLOSED BY '"' 
-        LINES TERMINATED BY '\\r\\n'
-        IGNORE 1 ROWS
-        (@msisdn, @date_creation, @nom, @prenom, @genre, @date_naissance, @lieu_naissance, @adresse, @type_piece, @numero_piece)
-        SET
-        service_provider_id = 20,                                   -- Orange
+    LOAD DATA LOCAL INFILE :filePath
+    INTO TABLE consumers
+    CHARACTER SET utf8mb4
+    FIELDS TERMINATED BY ';' 
+    OPTIONALLY ENCLOSED BY '"' 
+    LINES TERMINATED BY '\\r\\n'
+    IGNORE 1 ROWS
+    (
+        @numero_contrat,
+        @msisdn,
+        @date_creation,
+        @nom,
+        @prenom,
+        @genre,
+        @date_naissance,
+        @lieu_naissance,
+        @adresse,
+        @type_piece,
+        @numero_piece,
+        @etat
+    )
+    SET
+        service_provider_id = 20,  -- Orange
+        orange_transaction_id     = LEFT(NULLIF(TRIM(@numero_contrat), ''), 50),
         first_name          = LEFT(NULLIF(TRIM(@prenom), ''), 100),
         last_name           = LEFT(NULLIF(TRIM(@nom), ''), 100),
         gender              = NULLIF(TRIM(@genre), ''),
@@ -399,9 +413,16 @@ public interface ConsumerRepository
         address             = LEFT(NULLIF(TRIM(@adresse), ''), 255),
         identification_type = LEFT(NULLIF(TRIM(@type_piece), ''), 100),
         identification_number = LEFT(NULLIF(TRIM(@numero_piece), ''), 50),
+        msisdn              = LEFT(NULLIF(TRIM(@msisdn), ''), 20),
+        status              = LEFT(NULLIF(TRIM(@etat), ''), 20),
+        consumer_status     = CASE
+                                WHEN LOWER(TRIM(@etat)) IN ('active', '1') THEN 1
+                                WHEN LOWER(TRIM(@etat)) IN ('inactive', '0') THEN 0
+                                ELSE 0
+                              END,
         created_on          = NOW(),
-        is_consistent       = FALSE,
-        consumer_status     = 0;
+        is_consistent       = FALSE;
     """, nativeQuery = true)
     void loadOrangeCsv(@Param("filePath") String filePath);
+
 }

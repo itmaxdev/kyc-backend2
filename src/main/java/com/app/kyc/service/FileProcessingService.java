@@ -47,6 +47,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 
 @Service
@@ -1506,38 +1507,69 @@ public class FileProcessingService {
 
 
     private void runCheckConsumerForOrangeAsync(ServiceProvider sp) {
-        log.info("checkConsumer already to use");
+        log.info("Preparing to run checkConsumer for operator {}", sp.getName());
         Long spId = sp.getId();
+
+        // Prevent concurrent runs for the same operator
         if (!RUNNING_CHECKS.add(spId)) {
             log.info("checkConsumer already running for operator {}, skipping", sp.getName());
             return;
         }
+
         Runnable job = () -> {
             try {
                 log.info("Starting checkConsumer for operator {}", sp.getName());
-                // Scope reduction: only that operator’s consumers
-                List<Consumer> list = consumerRepository.findAllByServiceProvider_Id(spId);
-                //User user = userService.getUserByEmail("system@itmaxglobal.com");
-                User user = userService.getUserByEmail("cadmin@itmaxglobal.com");
-                consumerServiceImpl.checkConsumerForOrange(list, user, sp);
 
-                consumerAnomalyRepository.findAllByConsumerIn(list);
-                consumerServiceImpl.updateAnomalyStatusForConsumers(list, user, sp);
+                // 1. Fetch all consumers for the given service provider
+                List<Consumer> allConsumers = consumerRepository.findAllByServiceProvider_Id(spId);
 
-                log.info("Finished checkConsumer for operator {}", sp.getName());
+                if (allConsumers == null || allConsumers.isEmpty()) {
+                    log.warn("No consumers found for operator {}", sp.getName());
+                    return;
+                }
+
+                // 2. Filter only active consumers (estat = ACTIF)
+                List<Consumer> activeConsumers = allConsumers.stream()
+                        .filter(c -> "ACTIF".equalsIgnoreCase(c.getEstat()))
+                        .collect(Collectors.toList());
+
+                // 3. Log inactive consumers
+                allConsumers.stream()
+                        .filter(c -> !"ACTIF".equalsIgnoreCase(c.getEstat()))
+                        .forEach(c ->
+                                log.info("Skipping inactive consumer: estat='{}' | TransactionId={}",
+                                        c.getEstat(), c.getOrangeTransactionId())
+                        );
+
+                // 4. Process only active consumers
+                if (!activeConsumers.isEmpty()) {
+                    log.info("Found {} active consumers for operator {}", activeConsumers.size(), sp.getName());
+
+                    User user = userService.getUserByEmail("cadmin@itmaxglobal.com");
+
+                    consumerServiceImpl.checkConsumerForOrange(activeConsumers, user, sp);
+                    consumerServiceImpl.updateAnomalyStatusForConsumers(activeConsumers, user, sp);
+
+                    log.info("checkConsumer completed successfully for operator {}", sp.getName());
+                } else {
+                    log.info("No active (ACTIF) consumers found for operator {}", sp.getName());
+                }
+
             } catch (Exception ex) {
-                log.error("checkConsumer failed for operator {}: {}", sp.getName(), ex.toString(), ex);
+                log.error("checkConsumer failed for operator {}: {}", sp.getName(), ex.getMessage(), ex);
             } finally {
                 RUNNING_CHECKS.remove(spId);
             }
         };
 
+        // 5. Execute asynchronously
         if (taskExecutor != null) {
             taskExecutor.execute(job);
         } else {
             new Thread(job, "check-consumer-" + spId).start();
         }
     }
+
 
     /* ================= IO helpers ================= */
 
