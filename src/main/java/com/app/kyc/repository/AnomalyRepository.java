@@ -416,36 +416,38 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
 	@Modifying
 	@Transactional
 	@Query(value = """
-        INSERT INTO anomalies (reported_by_id, anomaly_type_id, status, note)
-        SELECT
-            3 AS reported_by_id,
-            4 AS anomaly_type_id,
-            0 AS status,
-            CONCAT(
-                'Exceeding Anomaly: You can''t have more than two active records per operator for a given combination of (ID Card Type + ID Number + ServiceProviderName): (',
-                c.identification_type, ' + ', c.identification_number, ')'
-            ) AS note
-        FROM (
-            SELECT identification_type, identification_number
-            FROM consumers
-            WHERE identification_type IS NOT NULL
-              AND TRIM(identification_type) <> ''
-              AND identification_number IS NOT NULL
-              AND TRIM(identification_number) <> ''
-            GROUP BY identification_type, identification_number
-            HAVING COUNT(*) > 2
-        ) c
-        WHERE NOT EXISTS (
-            SELECT 1
-            FROM anomalies a
-            WHERE a.anomaly_type_id = 4
-              AND a.note = CONCAT(
-                  'Exceeding Anomaly: You can''t have more than two active records per operator for a given combination of (ID Card Type + ID Number + ServiceProviderName): (',
-                  c.identification_type, ' + ', c.identification_number, ')'
-              )
-        )
-        """, nativeQuery = true)
+    INSERT INTO anomalies (reported_by_id, anomaly_type_id, status, note)
+    SELECT
+        3 AS reported_by_id,
+        4 AS anomaly_type_id,
+        0 AS status,
+        CONCAT(
+            'Exceeding Anomaly: You can''t have more than two active records per operator for a given combination of (ID Card Type + ID Number + ServiceProviderName): (',
+            c.identification_type, ' + ', c.identification_number, ')'
+        ) AS note
+    FROM (
+        SELECT identification_type, identification_number
+        FROM consumers
+        WHERE status = 'ACTIF'  -- ✅ Only include active consumers
+          AND identification_type IS NOT NULL
+          AND TRIM(identification_type) <> ''
+          AND identification_number IS NOT NULL
+          AND TRIM(identification_number) <> ''
+        GROUP BY identification_type, identification_number
+        HAVING COUNT(*) > 2
+    ) c
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM anomalies a
+        WHERE a.anomaly_type_id = 4
+          AND a.note = CONCAT(
+              'Exceeding Anomaly: You can''t have more than two active records per operator for a given combination of (ID Card Type + ID Number + ServiceProviderName): (',
+              c.identification_type, ' + ', c.identification_number, ')'
+          )
+    )
+    """, nativeQuery = true)
 	int insertExceedingThresholdAnomalies();
+
 
 
 	// Step 2: Link consumers to anomalies

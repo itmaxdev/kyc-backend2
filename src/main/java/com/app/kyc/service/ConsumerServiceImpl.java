@@ -2008,37 +2008,17 @@ System.out.println("Get all flagged ");
         String baseId = serviceProvider.getName() + "-" + new SimpleDateFormat("ddMMyyyy").format(new Date());
 
         try {
-            // 1️⃣ Insert anomalies using native SQL
-            //int countIncomplete = anomalyRepository.insertIncompleteDataAnomalies(reportedById, updatedOn, updatedBy, baseId);
-
-            //int countDuplicate  = anomalyRepository.insertDuplicateAnomalies(reportedById, updatedOn, updatedBy, baseId, serviceProvider.getName());
-            //log.info("Inserted {} incomplete, {} duplicate, {} threshold anomalies", countIncomplete, countDuplicate);
             anomalyRepository.callInsertIncompleteAnomalies();
             anomalyRepository.callInsertDuplicateAnomalies();
 
-            int insertedAnomalies = anomalyRepository.insertExceedingThresholdAnomalies();
-            int linked = anomalyRepository.linkConsumersToExceedingAnomalies();
+            anomalyRepository.insertExceedingThresholdAnomalies();
+            anomalyRepository.linkConsumersToExceedingAnomalies();
 
 
             entityManager.flush();
             entityManager.clear();
 
-           // entityManager.flush();
-            //logTopDuplicateGroups(entityManager);
 
-          /*  int thresholdGroups = anomalyRepository.countExceedingThresholdGroups(serviceProvider.getName());
-            log.info("🔍 Found {} threshold groups for operator={}", thresholdGroups, serviceProvider.getName());
-
-            int countThreshold  = anomalyRepository.insertExceedingThresholdAnomalies(reportedById, updatedOn, updatedBy, baseId, serviceProvider.getName());
-            log.info("✅ Inserted {} threshold anomalies", countThreshold);
-*/
-
-          /*  int linkedCount = consumerAnomalyRepository.linkConsumersToAnomaliesByOperator(serviceProvider.getName());
-            log.info("🔗 Linked {} consumer_anomaly records for {}", linkedCount, serviceProvider.getName());
-
-
-            entityManager.flush();
-            entityManager.clear();*/
 
            // consumerTrackingRepository.insertMissingConsumerTracking();
             //anomalyTrackingRepository.insertMissingAnomaliesIntoTracking();
