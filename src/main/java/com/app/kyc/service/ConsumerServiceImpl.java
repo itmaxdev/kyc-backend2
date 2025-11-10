@@ -2010,64 +2010,39 @@ System.out.println("Get all flagged ");
         try {
             // 1️⃣ Insert anomalies using native SQL
             int countIncomplete = anomalyRepository.insertIncompleteDataAnomalies(reportedById, updatedOn, updatedBy, baseId);
-            int countDuplicate  = anomalyRepository.insertDuplicateAnomalies(reportedById, updatedOn, updatedBy, baseId);
-            log.info("✅ Inserted {} incomplete, {} duplicate, {} threshold anomalies", countIncomplete, countDuplicate);
+            int countDuplicate  = anomalyRepository.insertDuplicateAnomalies(reportedById, updatedOn, updatedBy, baseId, serviceProvider.getName());
+            log.info("Inserted {} incomplete, {} duplicate, {} threshold anomalies", countIncomplete, countDuplicate);
 
-            // ✅ Force DB sync after native SQL inserts
+
+
+
             entityManager.flush();
             entityManager.clear();
 
-            entityManager.flush(); // ensure consumers are visible to query
+            entityManager.flush();
             logTopDuplicateGroups(entityManager);
-
-           // int countThreshold = anomalyRepository.insertExceedingThresholdAnomalies(
-                 //   reportedById, updatedOn, updatedBy, baseId);
 
             int thresholdGroups = anomalyRepository.countExceedingThresholdGroups(serviceProvider.getName());
             log.info("🔍 Found {} threshold groups for operator={}", thresholdGroups, serviceProvider.getName());
 
-            int countThreshold = anomalyRepository.insertExceedingThresholdAnomalies(
-                    reportedById, updatedOn, updatedBy, baseId
-            );
-            log.info("✅ Inserted {} threshold anomalies", countThreshold);
-
+            int countThreshold  = anomalyRepository.insertExceedingThresholdAnomalies(reportedById, updatedOn, updatedBy, baseId, serviceProvider.getName());
             log.info("✅ Inserted {} threshold anomalies", countThreshold);
 
 
-            log.info("✅ Inserted {} threshold anomalies", countThreshold);
-
-            // 2️⃣ Link anomalies to consumers
             int linkedCount = consumerAnomalyRepository.linkConsumersToAnomaliesByOperator(serviceProvider.getName());
             log.info("🔗 Linked {} consumer_anomaly records for {}", linkedCount, serviceProvider.getName());
 
-            anomalyRepository.runExceedingThresholdJob();
-            // ✅ Flush again to make sure join-table writes are committed
-            log.info(" Finish {} consumer_anomaly records for");
+
             entityManager.flush();
             entityManager.clear();
-
-            // 3️⃣ Track anomaly creation — after DB is synced
-           /* if (countIncomplete > 0)
-                addAnomalyTrackingHistory(baseId, "Auto-detected incomplete data", updatedBy);
-            if (countDuplicate > 0)
-                addAnomalyTrackingHistory(baseId, "Auto-detected duplicate MSISDNs", updatedBy);
-            if (countThreshold > 0)
-                addAnomalyTrackingHistory(baseId, "Auto-detected threshold exceedance", updatedBy);
-*/
-            // ✅ Another flush after tracking
-            //entityManager.flush();
-            //entityManager.clear();
-
-            // 4️⃣ Maintain consumer tracking & consistency history
-            //addConsumerTrackingHistory(serviceProvider, updatedBy);
 
             consumerTrackingRepository.insertMissingConsumerTracking();
             anomalyTrackingRepository.insertMissingAnomaliesIntoTracking();
             long totalMs = (System.nanoTime() - t0) / 1_000_000;
-            log.info("✅ checkConsumerForOrange completed for {} in {} ms", serviceProvider.getName(), totalMs);
+            log.info(" checkConsumerForOrange completed for {} in {} ms", serviceProvider.getName(), totalMs);
 
         } catch (Exception ex) {
-            log.error("❌ checkConsumerForOrange failed for {}: {}", serviceProvider.getName(), ex.getMessage(), ex);
+            log.error("checkConsumerForOrange failed for {}: {}", serviceProvider.getName(), ex.getMessage(), ex);
             throw ex;
         }
     }
