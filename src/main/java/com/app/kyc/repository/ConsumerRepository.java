@@ -436,7 +436,7 @@ public interface ConsumerRepository
     FIELDS TERMINATED BY ',' 
     OPTIONALLY ENCLOSED BY '"' 
     ESCAPED BY '"'
-    LINES TERMINATED BY '\r\n'
+    LINES TERMINATED BY '\\r\\n'
     IGNORE 1 ROWS
     (
         @msisdn,
