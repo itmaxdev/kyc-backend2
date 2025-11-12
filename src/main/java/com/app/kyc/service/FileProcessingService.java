@@ -1610,7 +1610,7 @@ public class FileProcessingService {
                     User user = userService.getUserByEmail("cadmin@itmaxglobal.com");
 
                     consumerServiceImpl.checkConsumerForVodacom(activeConsumers, user, sp);
-                    consumerServiceImpl.updateAnomalyStatusForConsumers(activeConsumers, user, sp);
+                    //consumerServiceImpl.updateAnomalyStatusForConsumers(activeConsumers, user, sp);
 
                     log.info("checkConsumer completed successfully for operator {}", sp.getName());
                 } else {

@@ -504,6 +504,8 @@ public interface ConsumerRepository
     void loadVodacomCsv(@Param("filePath") String filePath);
 
 
+    @Query(value = "SELECT COUNT(*) FROM consumers WHERE service_provider_id = :spId", nativeQuery = true)
+    long countPreviousConsumers(@Param("spId") Long spId);
 
 
 }

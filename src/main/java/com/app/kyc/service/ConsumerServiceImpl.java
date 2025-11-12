@@ -2040,38 +2040,60 @@ System.out.println("Get all flagged ");
         }
 
         long t0 = System.nanoTime();
-        log.info("checkConsumerForVodacom start | operator={} consumers={}", serviceProvider.getName(), consumers.size());
-
-        Long reportedById = user.getId();
-        Date updatedOn = new Date();
         String updatedBy = user.getFirstName() + " " + user.getLastName();
-        String baseId = serviceProvider.getName() + "-" + new SimpleDateFormat("ddMMyyyy").format(new Date());
+        Long spId = serviceProvider.getId();
 
         try {
-            //anomalyRepository.callInsertIncompleteAnomaliesForVodacom();
-            //anomalyRepository.callInsertDuplicateAnomaliesForVodacom();
+            // 🧩 Step 1 — Count anomalies BEFORE this upload
+            long existingAnomalyCount = anomalyRepository.countExistingAnomaliesByServiceProvider(spId);
 
+            // 🧩 Step 2 — Insert anomalies for current upload
             anomalyRepository.callInsertVodacomAnomalies();
-
             anomalyRepository.insertExceedingThresholdAnomaliesForVodacom();
             anomalyRepository.linkConsumersToExceedingAnomalies();
 
+            // 🧩 Step 3 — If this is the first upload → skip resolution updates
+            if (existingAnomalyCount == 0) {
+                log.info("First CSV upload detected for operator {} — leaving all anomaly statuses as 0 (Open).",
+                        serviceProvider.getName());
+            } else {
+                log.info("Re-upload detected for operator {} — running anomaly-status updates.", serviceProvider.getName());
+
+                List<Object[]> consumersWithAnomalies = anomalyRepository.findConsumersWithExistingAnomalies(spId);
+                for (Object[] record : consumersWithAnomalies) {
+                    Long consumerId = ((Number) record[0]).longValue();
+                    String consumerStatus = String.valueOf(record[1]);
+                    Long anomalyId = ((Number) record[2]).longValue();
+                    int anomalyStatus = ((Number) record[3]).intValue();
+
+                    if (anomalyStatus == 5 || anomalyStatus == 6) continue; // already finalised
+
+                    if ("accepted".equalsIgnoreCase(consumerStatus) || "1".equals(consumerStatus)) {
+                        anomalyTrackingRepository.updateAnomalyStatus(
+                                anomalyId, 6, "Resolved Successfully", updatedBy);
+                        log.info("✅ Consumer {} accepted → Anomaly {} → Resolved Successfully", consumerId, anomalyId);
+                    } else {
+                        anomalyTrackingRepository.updateAnomalyStatus(
+                                anomalyId, 5, "Withdrawn", updatedBy);
+                        log.info("⚠️ Consumer {} not accepted → Anomaly {} → Withdrawn", consumerId, anomalyId);
+                    }
+                }
+            }
 
             entityManager.flush();
             entityManager.clear();
 
-
-
-            // consumerTrackingRepository.insertMissingConsumerTracking();
-            //anomalyTrackingRepository.insertMissingAnomaliesIntoTracking();
-            long totalMs = (System.nanoTime() - t0) / 1_000_000;
-            log.info(" checkConsumerForVodacom completed for {} in {} ms", serviceProvider.getName(), totalMs);
+            log.info("checkConsumerForVodacom completed for {} in {} ms",
+                    serviceProvider.getName(), (System.nanoTime() - t0) / 1_000_000);
 
         } catch (Exception ex) {
             log.error("checkConsumerForVodacom failed for {}: {}", serviceProvider.getName(), ex.getMessage(), ex);
             throw ex;
         }
     }
+
+
+
 
 
 

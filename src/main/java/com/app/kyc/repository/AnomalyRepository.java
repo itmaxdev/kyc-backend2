@@ -548,4 +548,32 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
 	@Transactional
 	@Query(value = "CALL InsertVodacomAnomalies()", nativeQuery = true)
 	void callInsertVodacomAnomalies();
+
+
+
+
+
+	@Query(value = """
+    SELECT 
+        c.id AS consumer_id,
+        c.status AS consumer_status,
+        a.id AS anomaly_id,
+        a.status AS anomaly_status
+    FROM consumers c
+    INNER JOIN consumers_anomalies ca ON ca.consumer_id = c.id
+    INNER JOIN anomalies a ON a.id = ca.anomaly_id
+    WHERE c.service_provider_id = :spId
+""", nativeQuery = true)
+	List<Object[]> findConsumersWithExistingAnomalies(@Param("spId") Long spId);
+
+	@Query(value = """
+    SELECT COUNT(a.id)
+    FROM anomalies a
+    JOIN consumers_anomalies ca ON ca.anomaly_id = a.id
+    JOIN consumers c ON c.id = ca.consumer_id
+    WHERE c.service_provider_id = :spId
+""", nativeQuery = true)
+	long countExistingAnomaliesByServiceProvider(@Param("spId") Long spId);
+
+
 }
