@@ -63,7 +63,7 @@ public class Consumer {
     private String orangeTransactionId;
 
     @Column(name = "status")
-    private String estat;
+    private String status;
     @OneToMany(cascade = {CascadeType.ALL}, mappedBy = "consumer")
     private List<ConsumerService> consumerService;
 

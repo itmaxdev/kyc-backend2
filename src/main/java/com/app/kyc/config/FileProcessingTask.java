@@ -1,8 +1,12 @@
 package com.app.kyc.config;
 
+import com.app.kyc.entity.ServiceProvider;
+import com.app.kyc.repository.AnomalyRepository;
+import com.app.kyc.repository.ServiceProviderRepository;
 import com.app.kyc.service.FileProcessingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -22,6 +26,13 @@ import java.util.stream.Stream;
 public class FileProcessingTask {
 
     private final FileProcessingService fileProcessingService;
+
+    @Autowired
+    private ServiceProviderRepository serviceProviderRepository;
+
+
+    @Autowired
+    private AnomalyRepository anomalyRepository;
 
     /** Comma-separated list of directories to scan (as you have in application.properties) */
     @Value("#{'${local.file.paths}'.split(',')}")
@@ -93,7 +104,19 @@ public class FileProcessingTask {
         try {
             switch (operator) {
                 case "Vodacom":
-                    fileProcessingService.processFileVodacomForPerformance(file, operator);
+
+                    ServiceProvider sp = serviceProviderRepository.findByNameIgnoreCase(operator)
+                            .orElseThrow(() -> new IllegalArgumentException("Unknown operator: " + operator));
+                    Long spId = sp.getId();
+                    long existingAnomalyCount = anomalyRepository.countExistingAnomaliesByServiceProvider(spId);
+                    if (existingAnomalyCount == 0) {
+                        log.info("First CSV upload detected for operator {} — leaving all anomaly statuses as 0 (Open).",
+                                operator);
+                        fileProcessingService.processFileVodacomForPerformance(file, operator);
+                    }else{
+                        fileProcessingService.processFileVodacom(file, operator);
+                    }
+
                     break;
                 case "Airtel":
                     fileProcessingService.processFileAirtel(file, operator);

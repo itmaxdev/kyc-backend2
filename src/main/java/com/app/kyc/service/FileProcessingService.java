@@ -1435,6 +1435,18 @@ public class FileProcessingService {
             consumer.setIdentificationType(r.idType);
         }
 
+
+        if (notEmpty(r.status)) {
+            if (consumer.getStatus() == null || consumer.getStatus().isBlank()) {
+                System.out.println("Setting getStatus for consumer id=" + consumer.getId() + " → " + r.status);
+            } else if (!consumer.getStatus().equals(r.status)) {
+                System.out.println("Updating getStatus for consumer id=" + consumer.getId() +
+                        " from " + consumer.getStatus() + " → " + r.status);
+            }
+            consumer.setStatus(r.status);
+        }
+
+
         if (notEmpty(r.vodacomTransactionId)) {
             if (consumer.getVodacomTransactionId() == null ||
                     !consumer.getVodacomTransactionId().equals(r.vodacomTransactionId)) {
@@ -1592,15 +1604,15 @@ public class FileProcessingService {
 
                 // 2. Filter only active consumers (estat = ACTIF)
                 List<Consumer> activeConsumers = allConsumers.stream()
-                        .filter(c -> "accepted".equalsIgnoreCase(c.getEstat()))
+                        .filter(c -> "accepted".equalsIgnoreCase(c.getStatus()))
                         .collect(Collectors.toList());
 
                 // 3. Log inactive consumers
                 allConsumers.stream()
-                        .filter(c -> !"accepted".equalsIgnoreCase(c.getEstat()))
+                        .filter(c -> !"accepted".equalsIgnoreCase(c.getStatus()))
                         .forEach(c ->
                                 log.info("Skipping inactive consumer: status='{}' | TransactionId={}",
-                                        c.getEstat(), c.getOrangeTransactionId())
+                                        c.getStatus(), c.getOrangeTransactionId())
                         );
 
                 // 4. Process only active consumers
@@ -1656,15 +1668,15 @@ public class FileProcessingService {
 
                 // 2. Filter only active consumers (estat = ACTIF)
                 List<Consumer> activeConsumers = allConsumers.stream()
-                        .filter(c -> "ACTIF".equalsIgnoreCase(c.getEstat()))
+                        .filter(c -> "ACTIF".equalsIgnoreCase(c.getStatus()))
                         .collect(Collectors.toList());
 
                 // 3. Log inactive consumers
                 allConsumers.stream()
-                        .filter(c -> !"ACTIF".equalsIgnoreCase(c.getEstat()))
+                        .filter(c -> !"ACTIF".equalsIgnoreCase(c.getStatus()))
                         .forEach(c ->
                                 log.info("Skipping inactive consumer: status='{}' | TransactionId={}",
-                                        c.getEstat(), c.getOrangeTransactionId())
+                                        c.getStatus(), c.getOrangeTransactionId())
                         );
 
                 // 4. Process only active consumers
@@ -1830,6 +1842,7 @@ public class FileProcessingService {
         r.idType              = idx(f,15);
         r.idNumber            = idx(f,16);
         r.vodacomTransactionId= idx(f,17);
+        r.status= idx(f,18);
         r.createdOnTs         =  idx(f, 1);;
         r.serviceProviderId   = spId;
         return r;
@@ -1940,6 +1953,7 @@ public class FileProcessingService {
         public String vodacomTransactionId;
         public String airtelTransactionId;
 
+        public String status;
 
 
 

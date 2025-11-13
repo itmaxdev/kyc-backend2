@@ -20,6 +20,15 @@ import org.springframework.transaction.annotation.Transactional;
 public interface ConsumerAnomalyRepository extends JpaRepository<ConsumerAnomaly, Long>
 {
     List<ConsumerAnomaly> getAllByAnomalyAndConsumer(Anomaly anomaly,Consumer consumer);
+    Optional<ConsumerAnomaly> findFirstByAnomaly_Id(Long anomalyId);
+
+    @Query("select ca.anomaly.id from ConsumerAnomaly ca " +
+            "where ca.consumer.id = :consumerId and ca.anomaly.anomalyType.id = :typeId")
+    Long findFirstAnomalyId(@Param("consumerId") Long consumerId,
+                            @Param("typeId") Long typeId);
+
+
+
     List<ConsumerAnomaly> findByAnomaly_AnomalyTypeAndConsumer(AnomalyType anomalyType,Consumer consumer);
 
     List<ConsumerAnomaly> findAllByConsumerIn(List<Consumer> consumers);
@@ -45,7 +54,7 @@ public interface ConsumerAnomalyRepository extends JpaRepository<ConsumerAnomaly
     @Query(value = "select a.id from consumers_anomalies ac join anomalies a on ac.anomaly_id = a.id where ac.consumer_id in (:consumerIds) AND a.status NOT IN (6) AND a.anomaly_type_id = :anomalyTypeId",  nativeQuery = true)
     List<Long> findAnomaliesIdByConsumerAndAnomalyTypeId(@Param("consumerIds") List<Long> consumerIds, @Param("anomalyTypeId") Long anomalyTypeId);
 
-    List<ConsumerAnomaly> findByConsumer_IdAndAnomaly_Id(Long consumer_id, Long anomaly_id);
+    Optional<ConsumerAnomaly> findByConsumer_IdAndAnomaly_Id(Long consumer_id, Long anomaly_id);
 
     List<ConsumerAnomaly> findByConsumer_Id(Long consumer_id);
 
