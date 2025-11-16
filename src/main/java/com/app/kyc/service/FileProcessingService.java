@@ -766,6 +766,7 @@ public class FileProcessingService {
                 r.idNumber            = clip(r.idNumber, 45);
                 r.registrationDateStr = clip(r.registrationDateStr, 50);
                 r.airtelTransactionId = clip(r.airtelTransactionId, 200);
+                r.status = clip(r.status, 50);
 
                 // 🔹 Deduplication-aware match
                 Consumer consumer = findOrMergeConsumer(r, duplicatesToSoftDelete);
@@ -1851,25 +1852,24 @@ public class FileProcessingService {
     private RowData mapRowAirtel(String[] f, Long spId, Timestamp nowTs) {
         Date date = new Date();
 
-
-
         RowData r = new RowData();
         r.msisdn              = idx(f, 1);
         r.firstName           = idx(f, 2);
         r.middleName          = idx(f, 3);
         r.lastName            = idx(f, 4);
-        r.gender              = idx(f, 5);
-        r.birthDateStr        = idx(f, 6);
-        r.birthPlace          = idx(f, 7);
-        r.address             = idx(f, 13);
-        r.alt1                = idx(f,16);
-        r.alt2                = idx(f,17);
-        r.idType              = idx(f,11);
-        r.idNumber            = idx(f,14);
-        r.registrationDateStr = idx(f, 19);;
-        r.createdOnTs         =  idx(f, 19);
+        r.gender              = idx(f, 8);
+        r.birthDateStr        = idx(f, 5);
+        r.birthPlace          = idx(f, 6);
+        r.address             = idx(f, 9);
+        r.alt1                = idx(f,15);
+        r.alt2                = idx(f,16);
+        r.idType              = idx(f,10);
+        r.idNumber            = idx(f,13);
+        r.registrationDateStr = idx(f, 18);;
+        r.createdOnTs         =  idx(f, 18);
         r.serviceProviderId   = spId;
         r.airtelTransactionId=  idx(f, 0);
+        r.status=  idx(f, 17);
         System.out.println("registrationDateStr is "+r.registrationDateStr);
         return r;
     }

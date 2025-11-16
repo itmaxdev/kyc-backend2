@@ -373,16 +373,39 @@ public class AnomalyServiceImpl implements AnomalyService
                     finalNote = "";
                  }
 
+
                  Anomaly anomalyEntity = c.getAnomaly();
+
+                 List<ConsumerAnomaly> links =
+                         consumerAnomalyRepository.findAllByAnomalyIdInFetchConsumer(Collections.singletonList(id));
+
+
+                 List<Consumer> consumers = links.stream()
+                         .map(ConsumerAnomaly::getConsumer)
+                         .collect(Collectors.toList());
+
                  AnomlyDto inner = new AnomlyDto(anomalyEntity);
+
+                 inner.setConsumers(
+                         consumers.stream()
+                                 .map(cons -> new ConsumerDto(cons, null))
+                                 .collect(Collectors.toList())
+                 );
+
+                 System.out.println("inner " + inner.getConsumers().size());
+
                  if (inner.getConsumers() != null && !inner.getConsumers().isEmpty()) {
                     String vendorCode = inner.getConsumers().get(0).getVendorCode();
+                    System.out.println("vendorCode " +vendorCode);
                     inner.setFormattedId((vendorCode != null && !vendorCode.isBlank())
                             ? vendorCode
                             : "ANOMALY_" + inner.getId());
                  } else {
+                    System.out.println("inner in the else" +inner.getConsumers().size());
                     inner.setFormattedId("ANOMALY_" + inner.getId());
                  }
+                 System.out.println("inner formattedid  " +inner.getFormattedId());
+
 
                  return new AnomalyTrackingDto(
                          c.getId(),
@@ -445,6 +468,9 @@ public class AnomalyServiceImpl implements AnomalyService
       if (latestStat.isPresent()) {
          percentageToUse = latestStat.get().getPartiallyResolvedPercentage().doubleValue();
          System.out.println("Created new stats for before anomaly" +id + "percent" + percentageToUse);
+         System.out.println("anomlyDto format Id" +anomalyTracking.get(0).getAnomlyDto().getFormattedId());
+         anomlyDto.setAnomalyFormattedId(anomalyTracking.get(0).getAnomlyDto().getFormattedId());
+         anomlyDto.setFormattedId(anomalyTracking.get(0).getAnomlyDto().getFormattedId());
       } else {
          // Compute & insert a new record if none exist
          AnomalyDetailsResponseDTO tempDto = new AnomalyDetailsResponseDTO(
@@ -458,7 +484,11 @@ public class AnomalyServiceImpl implements AnomalyService
          stat.setRecordedOn(LocalDateTime.now());
          anomalyStatisticsRepository.save(stat);
 
-         System.out.println("Created new stats for anomaly" +id + "percent" + percentageToUse);
+
+         anomlyDto.setAnomalyFormattedId(anomalyTracking.get(0).getAnomlyDto().getFormattedId());
+         anomlyDto.setFormattedId(anomalyTracking.get(0).getAnomlyDto().getFormattedId());
+         System.out.println("Created new stats for anomaly test" +id + "percent" + percentageToUse);
+         System.out.println("anomlyDto format Id" +anomlyDto.getFormattedId());
       }
 
       // 7️⃣ Final DTO

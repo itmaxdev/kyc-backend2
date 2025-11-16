@@ -361,6 +361,16 @@ public class ConsumerServiceImpl implements ConsumerService {
             inconsistentCount = consumerRepository.countByIsConsistentFalse();
         }
 
+        final long activeCount, inactiveCount;
+
+        if (spId != null) {
+            activeCount = consumerRepository.countByStatusAndServiceProvider_Id("Accepted", spId);
+            inactiveCount = consumerRepository.countByStatusAndServiceProvider_Id("Recycled", spId);
+        } else {
+            activeCount = consumerRepository.countByStatus("Accepted");
+            inactiveCount = consumerRepository.countByStatus("Recycled");
+        }
+
 		final Page<Consumer> filterData;
 		long filterCount;
 		if ("CONSISTENT".equals(type)) {
@@ -395,7 +405,11 @@ public class ConsumerServiceImpl implements ConsumerService {
         resp.put("consistentCount", consistentCount);
         resp.put("inconsistentCount", inconsistentCount);
         resp.put("filterCount", filterCount);
-        resp.put("data", finalData);               // page of ALL / CONSISTENT / INCONSISTENT based on type
+
+        resp.put("activeCount", activeCount);       // NEW
+        resp.put("inactiveCount", inactiveCount);   // NEW
+
+        resp.put("data", finalData);
         return resp;
     }
 
@@ -893,8 +907,8 @@ System.out.println("Get all flagged ");
                 .orElse(null);
 
         if (noSpFilter) {
-            System.out.println("Get all flagged noSpFilter" +noSpFilter);
-            System.out.println("Get all flagged  pagination.getFilter().getAnomalyStatus()" + pagination.getFilter().getResolution());
+            //System.out.println("Get all flagged noSpFilter" +noSpFilter);
+           // System.out.println("Get all flagged  pagination.getFilter().getAnomalyStatus()" + pagination.getFilter().getResolution());
 
             if (isResolved) {
                 System.out.println("Get all flagged isResolved" +isResolved);
@@ -918,15 +932,15 @@ System.out.println("Get all flagged ");
                 totalAnomaliesCount = anomalyData.getTotalElements();
 
             } else {
-                System.out.println("Get all flagged isResolved later values" +isResolved);
+               // System.out.println("Get all flagged isResolved later values" +isResolved);
                 anomalyStatus.addAll(this.setStatusList(pagination.getFilter().getAnomalyStatus()));
 
                 resolutionStatus.addAll(this.setResolution(pagination.getFilter().getResolution()));
-                System.out.println("Get all flagged isResolved pageable values" +pageable);
-                System.out.println("Get all flagged isResolved anomalyStatus values" +anomalyStatus);
-                System.out.println("Get all flagged isResolved resolutionStatus values" +resolutionStatus);
-                System.out.println("Get all flagged isResolved searchText values" +searchText);
-                System.out.println("Get all flagged isResolved getAnomalyType values" +pagination.getFilter().getAnomalyType());
+                //System.out.println("Get all flagged isResolved pageable values" +pageable);
+                //System.out.println("Get all flagged isResolved anomalyStatus values" +anomalyStatus);
+                //System.out.println("Get all flagged isResolved resolutionStatus values" +resolutionStatus);
+               // System.out.println("Get all flagged isResolved searchText values" +searchText);
+               // System.out.println("Get all flagged isResolved getAnomalyType values" +pagination.getFilter().getAnomalyType());
                 Page<Anomaly> anomalyData =
                         anomalyRepository.findAllByConsumersAll(
                                 pageable, anomalyStatus,
@@ -2052,7 +2066,10 @@ System.out.println("Get all flagged ");
             anomalyRepository.insertExceedingThresholdAnomaliesForVodacom();
             anomalyRepository.linkConsumersToExceedingAnomalies();
 
-            // 🧩 Step 3 — If this is the first upload → skip resolution updates
+             consumerTrackingRepository.insertMissingConsumerTracking();
+            anomalyTrackingRepository.insertMissingAnomaliesIntoTracking();
+
+           /* // 🧩 Step 3 — If this is the first upload → skip resolution updates
             if (existingAnomalyCount == 0) {
                 log.info("First CSV upload detected for operator {} — leaving all anomaly statuses as 0 (Open).",
                         serviceProvider.getName());
@@ -2079,7 +2096,7 @@ System.out.println("Get all flagged ");
                     }
                 }
             }
-
+*/
             entityManager.flush();
             entityManager.clear();
 

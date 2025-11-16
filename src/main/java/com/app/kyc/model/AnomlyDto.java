@@ -81,7 +81,7 @@ public class AnomlyDto {
         this.updatedOn = anomaly.getUpdatedOn();
         this.updateBy = anomaly.getUpdateBy();
         this.anomalyFormattedId = anomaly.getAnomalyFormattedId();
-        this.formattedId = anomaly.getConsumers().get(0).getServiceProvider().getName() + "/" + new SimpleDateFormat("dd-MM-yyyy").format(anomaly.getReportedOn()) + "/" + this.id;
+        this.formattedId = anomaly.getConsumers().get(0).getServiceProvider().getName() + "_" + new SimpleDateFormat("dd-MM-yyyy").format(anomaly.getReportedOn()) + "_" + this.id;
         List<Consumer> consumers = anomaly.getConsumers();
         if (consumers != null && consumers.size() > 0) {
 

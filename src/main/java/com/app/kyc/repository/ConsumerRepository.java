@@ -507,5 +507,8 @@ public interface ConsumerRepository
     @Query(value = "SELECT COUNT(*) FROM consumers WHERE service_provider_id = :spId", nativeQuery = true)
     long countPreviousConsumers(@Param("spId") Long spId);
 
+    long countByStatus(String status);
+    long countByStatusAndServiceProvider_Id(String status, Long spId);
+
 
 }
