@@ -2111,6 +2111,38 @@ System.out.println("Get all flagged ");
 
 
 
+    @Transactional(propagation = Propagation.REQUIRED)
+    public void checkConsumerForAirtel(List<Consumer> consumers, User user, ServiceProvider serviceProvider) {
+        if (consumers == null || consumers.isEmpty()) {
+            log.info("checkConsumerForVodacom start | operator={} consumers=0", serviceProvider.getName());
+            return;
+        }
+
+        long t0 = System.nanoTime();
+
+        try {
+
+            anomalyRepository.callInsertAirtelAnomalies();
+            anomalyRepository.insertExceedingThresholdAnomaliesForAirtel();
+            anomalyRepository.linkConsumersToExceedingAnomalies();
+
+            consumerTrackingRepository.insertMissingConsumerTracking();
+            anomalyTrackingRepository.insertMissingAnomaliesIntoTracking();
+
+
+            entityManager.flush();
+            entityManager.clear();
+
+            log.info("checkConsumerForVodacom completed for {} in {} ms",
+                    serviceProvider.getName(), (System.nanoTime() - t0) / 1_000_000);
+
+        } catch (Exception ex) {
+            log.error("checkConsumerForVodacom failed for {}: {}", serviceProvider.getName(), ex.getMessage(), ex);
+            throw ex;
+        }
+    }
+
+
 
 
 

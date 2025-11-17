@@ -504,6 +504,101 @@ public interface ConsumerRepository
     void loadVodacomCsv(@Param("filePath") String filePath);
 
 
+    @Modifying
+    @Transactional
+    @Query(value = """
+LOAD DATA LOCAL INFILE :filePath
+REPLACE INTO TABLE consumers
+CHARACTER SET utf8mb4
+FIELDS TERMINATED BY ',' 
+OPTIONALLY ENCLOSED BY '"' 
+LINES TERMINATED BY '\\n'
+IGNORE 1 ROWS
+(
+    @subscriberdetailsid,
+    @msisdn,
+    @firstname,
+    @middlename,
+    @lastname,
+    @dateofbirth,
+    @placeofbirth,
+    @nationality,
+    @gender,
+    @addressid,
+    @idtype,
+    @subscriberid,
+    @permanentaddress,
+    @idnumber,
+    @kycstatus,
+    @alternateno,
+    @alternateno2,
+    @finalstatus,
+    @createdon,
+    @updatedon,
+    @ISOLD
+)
+SET
+    service_provider_id = 27,   -- AIRTEL SP ID (change if needed)
+
+    -- Transaction ID mapped from subscriber-details-id
+    airtel_transaction_id   = LEFT(NULLIF(TRIM(@subscriberdetailsid), ''), 64),
+
+    -- MSISDN: Handle scientific notation
+    msisdn = CASE 
+                WHEN @msisdn REGEXP '^[0-9]+(\\.[0-9]+)?E[+-]?[0-9]+$'
+                    THEN FORMAT(@msisdn, 0)
+                ELSE LEFT(NULLIF(TRIM(@msisdn), ''), 20)
+             END,
+
+    first_name      = LEFT(NULLIF(TRIM(@firstname), ''), 100),
+    middle_name     = LEFT(NULLIF(TRIM(@middlename), ''), 100),
+    last_name       = LEFT(NULLIF(TRIM(@lastname), ''), 100),
+
+    birth_date = CASE
+                    WHEN @dateofbirth REGEXP '^[0-9]{2}-[0-9]{2}-[0-9]{4}$'
+                        THEN STR_TO_DATE(@dateofbirth, '%d-%m-%Y')
+                    WHEN @dateofbirth REGEXP '^[0-9]{2}/[0-9]{2}/[0-9]{4}$'
+                        THEN STR_TO_DATE(@dateofbirth, '%d/%m/%Y')
+                    ELSE NULL
+                 END,
+
+    birth_place     = LEFT(NULLIF(TRIM(@placeofbirth), ''), 255),
+    nationality     = LEFT(NULLIF(TRIM(@nationality), ''), 100),
+    gender          = LEFT(NULLIF(TRIM(@gender), ''), 20),
+
+    -- address
+    address = CASE 
+                WHEN @permanentaddress IS NULL OR @permanentaddress = '' 
+                    THEN LEFT(NULLIF(TRIM(@addressid), ''), 255)
+                ELSE LEFT(TRIM(@permanentaddress), 255)
+              END,
+
+    -- ID details
+    identification_type   = LEFT(NULLIF(TRIM(@idtype), ''), 100),
+    identification_number = LEFT(NULLIF(TRIM(@idnumber), ''), 50),
+
+    alternate_msisdn1 = LEFT(NULLIF(TRIM(@alternateno), ''), 20),
+    alternate_msisdn2 = LEFT(NULLIF(TRIM(@alternateno2), ''), 20),
+
+    -- RAW statuses
+    status = LEFT(NULLIF(TRIM(@finalstatus), ''), 20),
+
+    -- Normalize consumer_status: active/inactive
+    consumer_status = CASE
+                        WHEN LOWER(TRIM(@finalstatus)) IN ('approved','completed','active','1') 
+                            THEN 1
+                        WHEN LOWER(TRIM(@finalstatus)) IN ('rejected','inactive','0','resilie','suspendu')
+                            THEN 0
+                        ELSE 0
+                      END,
+
+    -- Timestamps
+    created_on = NOW(),
+    is_consistent = FALSE;
+""", nativeQuery = true)
+    void loadAirtelCsv(@Param("filePath") String filePath);
+
+
     @Query(value = "SELECT COUNT(*) FROM consumers WHERE service_provider_id = :spId", nativeQuery = true)
     long countPreviousConsumers(@Param("spId") Long spId);
 

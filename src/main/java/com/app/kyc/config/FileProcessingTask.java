@@ -100,15 +100,13 @@ public class FileProcessingTask {
     private void routeByParentFolder(Path file) {
         String operator = operatorFromPath(file);
         log.info("Found file: {} | Operator: {}", file, operator);
-
+        ServiceProvider sp = serviceProviderRepository.findByNameIgnoreCase(operator)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown operator: " + operator));
+        Long spId = sp.getId();
+        long existingAnomalyCount = anomalyRepository.countExistingAnomaliesByServiceProvider(spId);
         try {
             switch (operator) {
                 case "Vodacom":
-
-                    ServiceProvider sp = serviceProviderRepository.findByNameIgnoreCase(operator)
-                            .orElseThrow(() -> new IllegalArgumentException("Unknown operator: " + operator));
-                    Long spId = sp.getId();
-                    long existingAnomalyCount = anomalyRepository.countExistingAnomaliesByServiceProvider(spId);
                     if (existingAnomalyCount == 0) {
                         log.info("First CSV upload detected for operator {} — leaving all anomaly statuses as 0 (Open).",
                                 operator);
@@ -119,7 +117,13 @@ public class FileProcessingTask {
 
                     break;
                 case "Airtel":
-                    fileProcessingService.processFileAirtel(file, operator);
+                    if (existingAnomalyCount == 0) {
+                        log.info("First CSV upload detected for operator {} — leaving all anomaly statuses as 0 (Open).",
+                                operator);
+                        fileProcessingService.processFileAirtelForPerformance(file, operator);
+                    }else{
+                        fileProcessingService.processFileAirtel(file, operator);
+                    }
                     break;
                 case "Orange":
                     //fileProcessingService.processFileOrange(file, operator);

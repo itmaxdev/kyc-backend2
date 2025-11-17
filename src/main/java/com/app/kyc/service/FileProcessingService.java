@@ -355,6 +355,64 @@ public class FileProcessingService {
 
 
 
+    public void processFileAirtelForPerformance(Path filePath, String operator) throws IOException {
+
+        long t0 = System.currentTimeMillis();
+        log.info("ENTER processFileOrange: {} | operator={}", filePath, operator);
+
+        if (Files.notExists(filePath) || !Files.isRegularFile(filePath)) {
+            log.warn("File not found or not a regular file: {}", filePath);
+            return;
+        }
+
+        ServiceProvider sp = serviceProviderRepository.findByNameIgnoreCase(operator)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown operator: " + operator));
+        Long spId = sp.getId();
+        log.info("Resolved ServiceProvider id={}, name={}", spId, sp.getName());
+
+
+        String absolutePath = filePath.toAbsolutePath().toString().replace("\\", "/");
+        log.info(" Importing Airtel consumer data from file: {}", absolutePath);
+
+        consumerRepository.loadAirtelCsv(absolutePath);
+
+        log.info(" Successfully imported Airtel consumers from {}", absolutePath);
+
+
+        ProcessedFile fileLog = new ProcessedFile();
+        fileLog.setFilename(filePath.getFileName().toString());
+        fileLog.setStatus(FileStatus.IN_PROGRESS);
+        fileLog.setStartedAt(LocalDateTime.now());
+        fileLog.setRecordsProcessed(0);
+        processedFileRepository.save(fileLog);
+
+
+        boolean success = true;
+        int totalProcessed = 0;
+
+        try {
+            moveOriginal(filePath, success ? "processed" : "failed", fileLog);
+        } catch (IOException moveEx) {
+            log.error("Final move failed for {}: {}", filePath, moveEx.toString(), moveEx);
+            fileLog.setStatus(FileStatus.FAILED);
+            fileLog.setLastError("Move failed: " + moveEx.getMessage());
+            fileLog.setLastUpdated(LocalDateTime.now());
+            processedFileRepository.save(fileLog);
+        }
+
+        if (success) {
+            log.info("successs: processed={}");
+            runCheckConsumerForAirtelAsync(sp);
+        } else {
+            log.info("Failure: processed={}");
+        }
+
+        log.info("DONE: processed={} in {} ms", totalProcessed, (System.currentTimeMillis() - t0));
+
+
+        log.info("DONE: processed={} in {} ms", totalProcessed, (System.currentTimeMillis() - t0));
+    }
+
 
     public void processFileOrangeForPerormanceCheck(Path filePath, String operator) throws IOException {
         long t0 = System.currentTimeMillis();
@@ -1623,6 +1681,71 @@ public class FileProcessingService {
                     User user = userService.getUserByEmail("cadmin@itmaxglobal.com");
 
                     consumerServiceImpl.checkConsumerForVodacom(activeConsumers, user, sp);
+                    //consumerServiceImpl.updateAnomalyStatusForConsumers(activeConsumers, user, sp);
+
+                    log.info("checkConsumer completed successfully for operator {}", sp.getName());
+                } else {
+                    log.info("No active (ACTIF) consumers found for operator {}", sp.getName());
+                }
+
+            } catch (Exception ex) {
+                log.error("checkConsumer failed for operator {}: {}", sp.getName(), ex.getMessage(), ex);
+            } finally {
+                RUNNING_CHECKS.remove(spId);
+            }
+        };
+
+        // 5. Execute asynchronously
+        if (taskExecutor != null) {
+            taskExecutor.execute(job);
+        } else {
+            new Thread(job, "check-consumer-" + spId).start();
+        }
+    }
+
+
+    private void runCheckConsumerForAirtelAsync(ServiceProvider sp) {
+        log.info("Preparing to run runCheckConsumerForAirtelAsync for operator {}", sp.getName());
+        Long spId = sp.getId();
+
+        // Prevent concurrent runs for the same operator
+        if (!RUNNING_CHECKS.add(spId)) {
+            log.info("checkConsumer already running for operator {}, skipping", sp.getName());
+            return;
+        }
+
+        Runnable job = () -> {
+            try {
+                log.info("Starting checkConsumer for operator {}", sp.getName());
+
+                // 1. Fetch all consumers for the given service provider
+                List<Consumer> allConsumers = consumerRepository.findAllByServiceProvider_Id(spId);
+
+                if (allConsumers == null || allConsumers.isEmpty()) {
+                    log.warn("No consumers found for operator {}", sp.getName());
+                    return;
+                }
+
+                // 2. Filter only active consumers (estat = ACTIF)
+                List<Consumer> activeConsumers = allConsumers.stream()
+                        .filter(c -> "APPROVED".equalsIgnoreCase(c.getStatus()))
+                        .collect(Collectors.toList());
+
+                // 3. Log inactive consumers
+                allConsumers.stream()
+                        .filter(c -> !"APPROVED".equalsIgnoreCase(c.getStatus()))
+                        .forEach(c ->
+                                log.info("Skipping inactive consumer: status='{}' | TransactionId={}",
+                                        c.getStatus(), c.getOrangeTransactionId())
+                        );
+
+                // 4. Process only active consumers
+                if (!activeConsumers.isEmpty()) {
+                    log.info("Found {} active consumers for operator {}", activeConsumers.size(), sp.getName());
+
+                    User user = userService.getUserByEmail("cadmin@itmaxglobal.com");
+
+                    consumerServiceImpl.checkConsumerForAirtel(activeConsumers, user, sp);
                     //consumerServiceImpl.updateAnomalyStatusForConsumers(activeConsumers, user, sp);
 
                     log.info("checkConsumer completed successfully for operator {}", sp.getName());
