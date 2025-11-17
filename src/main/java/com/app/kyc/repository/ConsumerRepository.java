@@ -535,15 +535,18 @@ IGNORE 1 ROWS
     @finalstatus,
     @createdon,
     @updatedon,
-    @ISOLD
+    @ISOLDUSERDETAILS,
+    @junk1,
+    @junk2,
+    @junk3,
+    @junk4,
+    @junk5
 )
 SET
-    service_provider_id = 27,   -- AIRTEL SP ID (change if needed)
+    service_provider_id = 27,
 
-    -- Transaction ID mapped from subscriber-details-id
-    airtel_transaction_id   = LEFT(NULLIF(TRIM(@subscriberdetailsid), ''), 64),
+    airtel_transaction_id = LEFT(NULLIF(TRIM(@subscriberdetailsid), ''), 64),
 
-    -- MSISDN: Handle scientific notation
     msisdn = CASE 
                 WHEN @msisdn REGEXP '^[0-9]+(\\.[0-9]+)?E[+-]?[0-9]+$'
                     THEN FORMAT(@msisdn, 0)
@@ -566,37 +569,35 @@ SET
     nationality     = LEFT(NULLIF(TRIM(@nationality), ''), 100),
     gender          = LEFT(NULLIF(TRIM(@gender), ''), 20),
 
-    -- address
     address = CASE 
-                WHEN @permanentaddress IS NULL OR @permanentaddress = '' 
+                WHEN @permanentaddress IS NULL OR TRIM(@permanentaddress) = '' 
                     THEN LEFT(NULLIF(TRIM(@addressid), ''), 255)
                 ELSE LEFT(TRIM(@permanentaddress), 255)
               END,
 
-    -- ID details
     identification_type   = LEFT(NULLIF(TRIM(@idtype), ''), 100),
     identification_number = LEFT(NULLIF(TRIM(@idnumber), ''), 50),
 
     alternate_msisdn1 = LEFT(NULLIF(TRIM(@alternateno), ''), 20),
     alternate_msisdn2 = LEFT(NULLIF(TRIM(@alternateno2), ''), 20),
 
-    -- RAW statuses
-    status = LEFT(NULLIF(TRIM(@finalstatus), ''), 20),
+    -- RAW STATUS (ISOLDUSERDETAILS)
+    status = LOWER(TRIM(@ISOLDUSERDETAILS)),
 
-    -- Normalize consumer_status: active/inactive
+    -- Airtel logic: APPROVED/TRUE = FALSE (ACTIVE), REJECTED/FAILED = TRUE (INACTIVE)
     consumer_status = CASE
-                        WHEN LOWER(TRIM(@finalstatus)) IN ('approved','completed','active','1') 
+                        WHEN LOWER(TRIM(@ISOLDUSERDETAILS)) IN ('approved','completed','false','1') 
                             THEN 1
-                        WHEN LOWER(TRIM(@finalstatus)) IN ('rejected','inactive','0','resilie','suspendu')
+                        WHEN LOWER(TRIM(@ISOLDUSERDETAILS)) IN ('rejected','downstream_failed','true','0','resilie','suspendu')
                             THEN 0
                         ELSE 0
                       END,
 
-    -- Timestamps
     created_on = NOW(),
     is_consistent = FALSE;
 """, nativeQuery = true)
     void loadAirtelCsv(@Param("filePath") String filePath);
+
 
 
     @Query(value = "SELECT COUNT(*) FROM consumers WHERE service_provider_id = :spId", nativeQuery = true)

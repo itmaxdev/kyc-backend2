@@ -1726,31 +1726,44 @@ public class FileProcessingService {
                     return;
                 }
 
+
+
                 // 2. Filter only active consumers (estat = ACTIF)
+                // 1. Log start
+                log.info("Starting checkConsumer for operator {}", sp.getName());
+
+// 2. Filter ACTIVE consumers: Airtel → status = "FALSE"
                 List<Consumer> activeConsumers = allConsumers.stream()
-                        .filter(c -> "APPROVED".equalsIgnoreCase(c.getStatus()))
+                        .filter(c -> c.getStatus() != null && "FALSE".equalsIgnoreCase(c.getStatus().trim()))
                         .collect(Collectors.toList());
 
-                // 3. Log inactive consumers
-                allConsumers.stream()
-                        .filter(c -> !"APPROVED".equalsIgnoreCase(c.getStatus()))
-                        .forEach(c ->
-                                log.info("Skipping inactive consumer: status='{}' | TransactionId={}",
-                                        c.getStatus(), c.getOrangeTransactionId())
-                        );
+// Proper logging
+                log.info("activeConsumers size = {}", activeConsumers.size());
 
-                // 4. Process only active consumers
+// 3. Log inactive consumers
+                allConsumers.stream()
+                        .filter(c -> c.getStatus() == null || !"FALSE".equalsIgnoreCase(c.getStatus().trim()))
+                        .forEach(c -> log.info(
+                                "Skipping inactive consumer: status='{}' | transactionId={}",
+                                c.getStatus(),
+                                c.getAirtelTransactionId()
+                        ));
+
+// More useful log
+                log.info("Total consumers received = {}", allConsumers.size());
+
+// 4. Process only active consumers
                 if (!activeConsumers.isEmpty()) {
+
                     log.info("Found {} active consumers for operator {}", activeConsumers.size(), sp.getName());
 
                     User user = userService.getUserByEmail("cadmin@itmaxglobal.com");
 
                     consumerServiceImpl.checkConsumerForAirtel(activeConsumers, user, sp);
-                    //consumerServiceImpl.updateAnomalyStatusForConsumers(activeConsumers, user, sp);
 
                     log.info("checkConsumer completed successfully for operator {}", sp.getName());
                 } else {
-                    log.info("No active (ACTIF) consumers found for operator {}", sp.getName());
+                    log.info("No active consumers found for operator {}", sp.getName());
                 }
 
             } catch (Exception ex) {
