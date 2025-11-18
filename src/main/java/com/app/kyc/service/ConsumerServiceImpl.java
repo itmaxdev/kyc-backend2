@@ -24,7 +24,9 @@ import javax.persistence.FlushModeType;
 import javax.persistence.PersistenceContext;
 
 import com.app.kyc.entity.*;
+import com.app.kyc.model.*;
 import com.app.kyc.repository.*;
+import com.app.kyc.response.ConsumersHasSubscriptionsMsisdnResponseDTO;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.Row;
@@ -45,13 +47,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.app.kyc.Masking.MaskingContext;
 import com.app.kyc.Masking.MaskingUtil;
-import com.app.kyc.model.AnomalyStatus;
-import com.app.kyc.model.AnomlyDto;
-import com.app.kyc.model.ConsumerDto;
-import com.app.kyc.model.ConsumerHistoryDto;
-import com.app.kyc.model.DashboardObjectInterface;
-import com.app.kyc.model.ExceedingConsumers;
-import com.app.kyc.model.Pagination;
 import com.app.kyc.response.ConsumersDetailsResponseDTO;
 import com.app.kyc.response.ConsumersHasSubscriptionsResponseDTO;
 import com.app.kyc.response.FlaggedConsumersListDTO;
@@ -315,6 +310,145 @@ public class ConsumerServiceImpl implements ConsumerService {
 
 
 
+
+    @Transactional(readOnly = true)
+    public Map<String, Object> getAllConsumersforMsisdn(String params)
+            throws JsonMappingException, JsonProcessingException {
+
+        // Pageable (null-safe) + cap page size
+        final Pageable requested = Optional.ofNullable(PaginationUtil.getPageable(params))
+                .orElse(PageRequest.of(0, 50));
+        final int MAX_PAGE_SIZE = 5000;
+        final Pageable pageable = PageRequest.of(
+                requested.getPageNumber(),
+                Math.min(requested.getPageSize(), MAX_PAGE_SIZE),
+                requested.getSort()
+        );
+
+        // Filters
+        final Pagination pagination = PaginationUtil.getFilterObject(params);
+        final String type = Optional.ofNullable(pagination)
+                .map(Pagination::getFilter).map(f -> f.getType())
+                .map(String::trim).map(String::toUpperCase)
+                .orElse("ALL");
+        final Long spId = Optional.ofNullable(pagination)
+                .map(Pagination::getFilter).map(f -> f.getServiceProviderID())
+                .orElse(null);
+
+        final String searchText = Optional.ofNullable(pagination)
+                .map(Pagination::getFilter)
+                .map(f -> f.getSearchText())
+                .map(String::trim)
+                .map(String::toLowerCase)
+                .orElse(null);
+
+        // Allowed statuses for CONSISTENT/INCONSISTENT tabs
+        final List<Integer> allowedStatuses = Arrays.asList(0, 1);
+
+        // Main counters
+        final long allCount, consistentCount, inconsistentCount;
+        if (spId != null) {
+            allCount          = consumerRepository.countByServiceProviderId(spId);
+            consistentCount   = consumerRepository.countByIsConsistentTrueAndServiceProvider_Id(spId);
+            inconsistentCount = consumerRepository.countByIsConsistentFalseAndServiceProvider_Id(spId);
+        } else {
+            allCount          = consumerRepository.count();
+            consistentCount   = consumerRepository.countByIsConsistentTrue();
+            inconsistentCount = consumerRepository.countByIsConsistentFalse();
+        }
+
+        // Active / inactive counters
+        final long activeCount, inactiveCount;
+        if (spId != null) {
+            activeCount = consumerRepository.countByStatusAndServiceProvider_Id("Accepted", spId);
+            inactiveCount = consumerRepository.countByStatusAndServiceProvider_Id("Recycled", spId);
+        } else {
+            activeCount = consumerRepository.countByStatus("Accepted");
+            inactiveCount = consumerRepository.countByStatus("Recycled");
+        }
+
+        // ============================
+        // 🔥 FILTER BLOCK
+        // ============================
+        final Page<Consumer> filterData;
+        long filterCount;
+
+        if ("CONSISTENT".equals(type)) {
+
+            filterCount = consumerRepository.count(
+                    ConsumerSpecifications.withFilters(spId, searchText, true, allowedStatuses)
+            );
+            filterData = consumerRepository.findAll(
+                    ConsumerSpecifications.withFilters(spId, searchText, true, allowedStatuses),
+                    pageable
+            );
+
+        } else if ("INCONSISTENT".equals(type)) {
+
+            filterCount = consumerRepository.count(
+                    ConsumerSpecifications.withFilters(spId, searchText, false, allowedStatuses)
+            );
+            filterData = consumerRepository.findAll(
+                    ConsumerSpecifications.withFilters(spId, searchText, false, allowedStatuses),
+                    pageable
+            );
+
+        } else if ("ACTIVE".equals(type)) {
+
+            // 🔥 Active = Accepted + isConsistent = true
+            filterCount = consumerRepository.count(
+                    ConsumerSpecifications.withFilters(spId, searchText, true, Arrays.asList(0))
+            );
+
+            filterData = consumerRepository.findAll(
+                    ConsumerSpecifications.withFilters(spId, searchText, true, Arrays.asList(0)),
+                    pageable
+            );
+
+        } else if ("INACTIVE".equals(type)) {
+
+            // 🔥 Inactive = Recycled + isConsistent = false
+            filterCount = consumerRepository.count(
+                    ConsumerSpecifications.withFilters(spId, searchText, false, Arrays.asList(1))
+            );
+
+            filterData = consumerRepository.findAll(
+                    ConsumerSpecifications.withFilters(spId, searchText, false, Arrays.asList(1)),
+                    pageable
+            );
+
+        } else {
+
+            // Default = ALL
+            filterCount = consumerRepository.count(
+                    ConsumerSpecifications.withFilters(spId, searchText, null, null)
+            );
+
+            filterData = consumerRepository.findAll(
+                    ConsumerSpecifications.withFilters(spId, searchText, null, null),
+                    PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
+                            Sort.by(Sort.Direction.DESC, "isConsistent"))
+            );
+        }
+
+        // Prepare final DTO list
+        final List<ConsumersHasSubscriptionsMsisdnResponseDTO> finalData =
+                toDtoPage1(dedup(filterData.getContent()));
+
+        // Build response map
+        Map<String, Object> resp = new HashMap<>();
+        resp.put("count", filterCount);
+        resp.put("consistentCount", consistentCount);
+        resp.put("inconsistentCount", inconsistentCount);
+        resp.put("filterCount", filterCount);
+
+        resp.put("activeCount", activeCount);
+        resp.put("inactiveCount", inactiveCount);
+
+        resp.put("data", finalData);
+        return resp;
+    }
+
     @Transactional(readOnly = true)
     public Map<String, Object> getAllConsumers(String params)
             throws JsonMappingException, JsonProcessingException {
@@ -493,6 +627,35 @@ public class ConsumerServiceImpl implements ConsumerService {
 
             boolean hasSubs = consumerServiceService.countConsumersByConsumerId(c.getId()) > 0;
             data.add(new ConsumersHasSubscriptionsResponseDTO(dto, hasSubs));
+        }
+        return data;
+    }
+
+
+    private List<ConsumersHasSubscriptionsMsisdnResponseDTO> toDtoPage1(List<Consumer> consumers) {
+        if (consumers == null || consumers.isEmpty()) return Collections.emptyList();
+
+        // Bulk anomalies for this slice (avoid touching lazy collections)
+        final List<ConsumerAnomaly> sliceAnomalies = consumerAnomalyRepository.findAllByConsumerIn(consumers);
+
+        // Build notes map for anomalyTypeId = 1 (adjust if needed)
+        final long NOTES_ANOMALY_TYPE_ID = 1L;
+        final Map<Long, String> notesByConsumerId = new HashMap<>();
+        for (ConsumerAnomaly ca : sliceAnomalies) {
+            if (ca == null || ca.getAnomaly() == null || ca.getAnomaly().getAnomalyType() == null || ca.getConsumer() == null) continue;
+            if (!Objects.equals(ca.getAnomaly().getAnomalyType().getId(), NOTES_ANOMALY_TYPE_ID)) continue;
+            if (ca.getNotes() == null) continue;
+            notesByConsumerId.putIfAbsent(ca.getConsumer().getId(), ca.getNotes());
+        }
+
+        final List<ConsumersHasSubscriptionsMsisdnResponseDTO> data = new ArrayList<>(consumers.size());
+        for (Consumer c : consumers) {
+            ConsumerMsidnDto dto = new ConsumerMsidnDto(c, Collections.emptyList());
+            // IMPORTANT: ensure ConsumerDto has a Boolean isConsistent field
+            if (dto.getFirstName() == null) dto.setFirstName("");
+            if (dto.getLastName()  == null) dto.setLastName("");
+            boolean hasSubs = consumerServiceService.countConsumersByConsumerId(c.getId()) > 0;
+            data.add(new ConsumersHasSubscriptionsMsisdnResponseDTO(dto, hasSubs));
         }
         return data;
     }
@@ -2162,7 +2325,10 @@ System.out.println("Get all flagged ");
         long t0 = System.nanoTime();
 
         try {
-            //anomalyRepository.callInsertAirtelAnomalies();
+            anomalyRepository.callInsertAirtelAnomalies();
+
+            anomalyRepository.insertExceedingThresholdAnomaliesForVodacom();
+            anomalyRepository.linkConsumersToExceedingAnomalies();
 
             consumerTrackingRepository.insertMissingConsumerTracking();
             anomalyTrackingRepository.insertMissingAnomaliesIntoTracking();

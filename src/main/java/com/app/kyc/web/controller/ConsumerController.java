@@ -135,6 +135,42 @@ public class ConsumerController
       }
    }
 
+
+   @GetMapping("/getAll/getMsidnsForTracking")
+   public ResponseEntity<?> getAllConsumersForMsidns(HttpServletRequest request, @RequestParam(value = "params", required = false) String params) throws SQLException
+   {
+      //log.info("ConsumerController/getAllConsumers");
+      try
+      {
+         List<String> roles = new ArrayList<String>();
+         roles.add("SP Admin");
+         roles.add("Compliance Admin");
+         roles.add("KYC Admin");
+         roles.add("SP User");
+         if(securityHelper.hasRole(request, roles))
+         {
+            final String authorizationHeader = request.getHeader("Authorization");
+            String userName = null;
+            if(authorizationHeader != null && authorizationHeader.startsWith(("Bearer ")))
+            {
+               userName = securityHelper.getUserName(authorizationHeader.substring(7));
+            }
+            User user = userService.getUserByEmail(userName);
+            boolean ismask = userService.isUnmasked(user);
+            MaskingContext.setMasking(ismask);
+            Map<String, Object> consumers = consumerService.getAllConsumersforMsisdn(params);
+            return ResponseEntity.ok(consumers);
+         }
+         else
+            return ResponseEntity.ok("Not authorized");
+      }
+      catch(Exception e)
+      {
+         //log.info(e.getMessage());
+         return ResponseEntity.ok(e.getMessage());
+      }
+   }
+
    @GetMapping("/getAllByServiceIdAndUserId/{userId}/{serviceId}")
    public ResponseEntity<?> getAllByServiceIdAndUserId(HttpServletRequest request, @PathVariable("userId") Long userId, @PathVariable("serviceId") Long serviceId)
       throws SQLException

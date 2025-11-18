@@ -381,6 +381,23 @@ public class FileProcessingService {
 
         log.info(" Successfully imported Airtel consumers from {}", absolutePath);
 
+        log.info(" Successfully imported Vodacom consumers from {}", absolutePath);
+        List<Consumer> existing = consumerRepository.findAll();
+        for(Consumer consumer : existing){
+            String normalized = normalizeStatus(consumer.getStatus());
+
+            log.info("Raw={} | Normalized={}", consumer.getStatus(), normalized);
+
+            if ("false".equals(normalized)) {
+                consumer.setStatus("accepted");
+            } else {
+                consumer.setStatus("recycled");
+            }
+
+            consumerServiceImpl.updateConsistencyFlag(consumer);
+        }
+
+
 
         ProcessedFile fileLog = new ProcessedFile();
         fileLog.setFilename(filePath.getFileName().toString());
@@ -415,6 +432,15 @@ public class FileProcessingService {
 
         log.info("DONE: processed={} in {} ms", totalProcessed, (System.currentTimeMillis() - t0));
     }
+
+    private String normalizeStatus(String s) {
+        if (s == null) return "";
+        return s.trim()
+                .replace("\r", "")
+                .replace("\n", "")
+                .toLowerCase();
+    }
+
 
 
     public void processFileOrangeForPerormanceCheck(Path filePath, String operator) throws IOException {
@@ -1737,7 +1763,7 @@ public class FileProcessingService {
 
 // 2. Filter ACTIVE consumers: Airtel → status = "FALSE"
                 List<Consumer> activeConsumers = allConsumers.stream()
-                        .filter(c -> c.getStatus() != null && "FALSE".equalsIgnoreCase(c.getStatus().trim()))
+                        .filter(c -> c.getStatus() != null && "accepted".equalsIgnoreCase(c.getStatus().trim()))
                         .collect(Collectors.toList());
 
 // Proper logging
@@ -1745,7 +1771,7 @@ public class FileProcessingService {
 
 // 3. Log inactive consumers
                 allConsumers.stream()
-                        .filter(c -> c.getStatus() == null || !"FALSE".equalsIgnoreCase(c.getStatus().trim()))
+                        .filter(c -> c.getStatus() == null || !"accepted".equalsIgnoreCase(c.getStatus().trim()))
                         .forEach(c -> log.info(
                                 "Skipping inactive consumer: status='{}' | transactionId={}",
                                 c.getStatus(),

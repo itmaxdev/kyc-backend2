@@ -16,6 +16,8 @@ public interface ConsumerService
    ConsumerDto getConsumerById(Long id);
 
    Map<String, Object> getAllConsumers(String params) throws JsonMappingException, JsonProcessingException;
+    Map<String, Object> getAllConsumersforMsisdn(String params) throws JsonMappingException, JsonProcessingException;
+
 
    Map<String, Object> getAllFlaggedConsumers(String params);
 
