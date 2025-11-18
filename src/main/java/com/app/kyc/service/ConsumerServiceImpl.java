@@ -338,18 +338,18 @@ public class ConsumerServiceImpl implements ConsumerService {
         final Long spId = Optional.ofNullable(pagination)
                 .map(Pagination::getFilter).map(f -> f.getServiceProviderID())
                 .orElse(null);
-        
-        final String searchText = Optional.ofNullable(pagination)              
-                .map(Pagination::getFilter)                            
-                .map(f -> f.getSearchText())                          
-                .map(String::trim)                                     
-                .map(String::toLowerCase)                              
+
+        final String searchText = Optional.ofNullable(pagination)
+                .map(Pagination::getFilter)
+                .map(f -> f.getSearchText())
+                .map(String::trim)
+                .map(String::toLowerCase)
                 .orElse(null);
 
-        // Statuses we allow
+        // Allowed statuses for CONSISTENT/INCONSISTENT tabs
         final List<Integer> allowedStatuses = Arrays.asList(0, 1);
 
-        // Counters
+        // Main counters
         final long allCount, consistentCount, inconsistentCount;
         if (spId != null) {
             allCount          = consumerRepository.countByServiceProviderId(spId);
@@ -361,8 +361,8 @@ public class ConsumerServiceImpl implements ConsumerService {
             inconsistentCount = consumerRepository.countByIsConsistentFalse();
         }
 
+        // Active / inactive counters
         final long activeCount, inactiveCount;
-
         if (spId != null) {
             activeCount = consumerRepository.countByStatusAndServiceProvider_Id("Accepted", spId);
             inactiveCount = consumerRepository.countByStatusAndServiceProvider_Id("Recycled", spId);
@@ -371,47 +371,88 @@ public class ConsumerServiceImpl implements ConsumerService {
             inactiveCount = consumerRepository.countByStatus("Recycled");
         }
 
-		final Page<Consumer> filterData;
-		long filterCount;
-		if ("CONSISTENT".equals(type)) {
-			filterCount  = consumerRepository.count(
-	                ConsumerSpecifications.withFilters(spId, searchText, true ,allowedStatuses)
-			        );
-			filterData = consumerRepository
-					.findAll(ConsumerSpecifications.withFilters(spId, searchText, true, allowedStatuses), pageable);
-		} else if ("INCONSISTENT".equals(type)) {
-			filterCount = consumerRepository.count(
-	                ConsumerSpecifications.withFilters(spId, searchText, false ,allowedStatuses)
-			        );
-			filterData = consumerRepository
-					.findAll(ConsumerSpecifications.withFilters(spId, searchText, false, allowedStatuses), pageable);
-		} else {
-			filterCount = consumerRepository.count(
-	                ConsumerSpecifications.withFilters(spId, searchText, null ,null)
-	        );
+        // ============================
+        // 🔥 FILTER BLOCK
+        // ============================
+        final Page<Consumer> filterData;
+        long filterCount;
+
+        if ("CONSISTENT".equals(type)) {
+
+            filterCount = consumerRepository.count(
+                    ConsumerSpecifications.withFilters(spId, searchText, true, allowedStatuses)
+            );
+            filterData = consumerRepository.findAll(
+                    ConsumerSpecifications.withFilters(spId, searchText, true, allowedStatuses),
+                    pageable
+            );
+
+        } else if ("INCONSISTENT".equals(type)) {
+
+            filterCount = consumerRepository.count(
+                    ConsumerSpecifications.withFilters(spId, searchText, false, allowedStatuses)
+            );
+            filterData = consumerRepository.findAll(
+                    ConsumerSpecifications.withFilters(spId, searchText, false, allowedStatuses),
+                    pageable
+            );
+
+        } else if ("ACTIVE".equals(type)) {
+
+            // 🔥 Active = Accepted + isConsistent = true
+            filterCount = consumerRepository.count(
+                    ConsumerSpecifications.withFilters(spId, searchText, true, Arrays.asList(0))
+            );
+
+            filterData = consumerRepository.findAll(
+                    ConsumerSpecifications.withFilters(spId, searchText, true, Arrays.asList(0)),
+                    pageable
+            );
+
+        } else if ("INACTIVE".equals(type)) {
+
+            // 🔥 Inactive = Recycled + isConsistent = false
+            filterCount = consumerRepository.count(
+                    ConsumerSpecifications.withFilters(spId, searchText, false, Arrays.asList(1))
+            );
+
+            filterData = consumerRepository.findAll(
+                    ConsumerSpecifications.withFilters(spId, searchText, false, Arrays.asList(1)),
+                    pageable
+            );
+
+        } else {
+
+            // Default = ALL
+            filterCount = consumerRepository.count(
+                    ConsumerSpecifications.withFilters(spId, searchText, null, null)
+            );
 
             filterData = consumerRepository.findAll(
                     ConsumerSpecifications.withFilters(spId, searchText, null, null),
                     PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
                             Sort.by(Sort.Direction.DESC, "isConsistent"))
             );
-
         }
-		
-		final List<ConsumersHasSubscriptionsResponseDTO> finalData = toDtoPage(dedup(filterData.getContent()));
 
+        // Prepare final DTO list
+        final List<ConsumersHasSubscriptionsResponseDTO> finalData =
+                toDtoPage(dedup(filterData.getContent()));
+
+        // Build response map
         Map<String, Object> resp = new HashMap<>();
         resp.put("count", filterCount);
         resp.put("consistentCount", consistentCount);
         resp.put("inconsistentCount", inconsistentCount);
         resp.put("filterCount", filterCount);
 
-        resp.put("activeCount", activeCount);       // NEW
-        resp.put("inactiveCount", inactiveCount);   // NEW
+        resp.put("activeCount", activeCount);
+        resp.put("inactiveCount", inactiveCount);
 
         resp.put("data", finalData);
         return resp;
     }
+
 
 // --- helpers ---
 
@@ -2916,6 +2957,7 @@ System.out.println("Get all flagged ");
             log.info("Consumer id={} is CONSISTENT", consumer.getId());
         }
 
+        consumerRepository.save(consumer);
 
         System.out.println("updateConsistencyFlag values finishing  :  "+consumer.getMsisdn() +" inconsigtent value "+consumer.getIsConsistent());
         System.out.println("updateConsistencyFlag getConsistentOn finishing :  "+consumer.getConsistentOn());

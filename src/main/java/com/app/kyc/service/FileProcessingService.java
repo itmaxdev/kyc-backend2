@@ -317,8 +317,11 @@ public class FileProcessingService {
         consumerRepository.loadVodacomCsv(absolutePath);
 
         log.info(" Successfully imported Vodacom consumers from {}", absolutePath);
-
-
+        List<Consumer> existing = consumerRepository.findAll();
+        for(Consumer consumer : existing){
+            consumerServiceImpl.updateConsistencyFlag(consumer);
+        }
+        //consumerRepository.saveAll(existing);
         ProcessedFile fileLog = new ProcessedFile();
         fileLog.setFilename(filePath.getFileName().toString());
         fileLog.setStatus(FileStatus.IN_PROGRESS);
