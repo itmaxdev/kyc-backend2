@@ -35,6 +35,10 @@ public class ConsumerMsidnDto {
     @Mask(MaskType.IDENTITY)
     private String identificationNumber;
     private String identificationType;
+    private Boolean isConsistent;
+    private String consistentOn;
+
+    private ServiceProvider serviceProvider;
 
     // ---------------- CONSTRUCTOR 1 (with anomalies) ----------------
     public ConsumerMsidnDto(Consumer consumer, List<Anomaly> anomlies) {
@@ -48,6 +52,9 @@ public class ConsumerMsidnDto {
         this.identificationNumber = consumer.getIdentificationNumber();
         this.identificationType = consumer.getIdentificationType();
         this.middleName = consumer.getMiddleName();
+        this.serviceProvider=consumer.getServiceProvider();
+        this.isConsistent = consumer.getIsConsistent();
+        this.consistentOn=consumer.getConsistentOn();
     }
 
     // ---------------- CONSTRUCTOR 2 ----------------
@@ -60,6 +67,9 @@ public class ConsumerMsidnDto {
         this.identificationNumber = consumer.getIdentificationNumber();
         this.identificationType = consumer.getIdentificationType();
         this.middleName = consumer.getMiddleName();
+        this.serviceProvider=consumer.getServiceProvider();
+        this.isConsistent = consumer.getIsConsistent();
+        this.consistentOn=consumer.getConsistentOn();
     }
 
     // ---------------- equals/hashCode ----------------
