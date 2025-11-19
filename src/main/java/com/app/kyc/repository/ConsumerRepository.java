@@ -83,6 +83,9 @@ public interface ConsumerRepository
 
     Page<Consumer> findByServiceProvider_Id(Long serviceProviderId, Pageable pageable);
 
+    List<Consumer> findByServiceProvider_Id(Long serviceProviderId);
+
+
     List<Consumer> findByServiceProviderId(Long serviceProviderId);
 
     Consumer findByIdAndConsumerStatus(long id, int consumerStatus);
@@ -595,9 +598,9 @@ SET
 
     /* ------------------ CONSUMER STATUS LOGIC --------------------- */
     consumer_status = CASE
-                        WHEN LOWER(TRIM(@ISOLDUSERDETAILS)) IN ('approved','completed','false','1') 
+                        WHEN LOWER(TRIM(@ISOLDUSERDETAILS)) IN ('completed','false','1') 
                             THEN 1     -- accepted
-                        WHEN LOWER(TRIM(@ISOLDUSERDETAILS)) IN ('rejected','downstream_failed','true','0','resilie','suspendu')
+                        WHEN LOWER(TRIM(@ISOLDUSERDETAILS)) IN ('rejected','true','0','resilie','suspendu')
                             THEN 0     -- recycled
                         ELSE 0
                       END,

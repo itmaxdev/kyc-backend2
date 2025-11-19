@@ -831,7 +831,7 @@ public class FileProcessingService {
 
                 if (isHeader) {
                     isHeader = false;
-                    log.info("Header column count: {}", row.length);
+                    log.info("Header column count for airtel : {}", row.length);
                     continue;
                 }
                 if (row.length == 0) continue;
@@ -1531,6 +1531,13 @@ public class FileProcessingService {
                 System.out.println("Updating getStatus for consumer id=" + consumer.getId() +
                         " from " + consumer.getStatus() + " → " + r.status);
             }
+
+            String normalized = normalizeStatus(r.status);
+            if ("false".equals(normalized)) {
+                r.status = "accepted";
+            } else {
+                r.status = "recycled";
+            }
             consumer.setStatus(r.status);
         }
 
@@ -2034,7 +2041,7 @@ public class FileProcessingService {
         r.createdOnTs         =  idx(f, 18);
         r.serviceProviderId   = spId;
         r.airtelTransactionId=  idx(f, 0);
-        r.status=  idx(f, 17);
+        r.status=  idx(f, 20);
         System.out.println("registrationDateStr is "+r.registrationDateStr);
         return r;
     }

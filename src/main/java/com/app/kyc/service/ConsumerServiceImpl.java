@@ -3618,84 +3618,53 @@ System.out.println("Get all flagged ");
 
 
 
-    @Transactional
-    public void updateAnomalyStatusForConsumers(List<Consumer> consumers, User user, ServiceProvider sp) {
 
-        if (consumers == null || consumers.isEmpty()) {
+    @Transactional
+    public void updateAnomalyStatusForConsumers(List<Consumer> newConsumers,
+                                                User user,
+                                                ServiceProvider sp) {
+
+        if (newConsumers == null || newConsumers.isEmpty()) {
             log.info("No consumers found for service provider {}", sp.getName());
             return;
         }
 
+        // 1) Get all links for these consumers
         List<ConsumerAnomaly> consumerAnomalies =
-                consumerAnomalyRepository.findAllByConsumerIn(consumers);
+                consumerAnomalyRepository.findAllByConsumerIn(newConsumers);
 
         if (consumerAnomalies == null || consumerAnomalies.isEmpty()) {
             log.info("No consumer anomalies found for service provider {}", sp.getName());
             return;
         }
 
-        List<Long> anomalyIds = consumerAnomalies.stream()
-                .map(ca -> ca.getAnomaly().getId())
-                .distinct()
-                .collect(Collectors.toList());
+        // 2) Group by anomaly
+        Map<Long, List<ConsumerAnomaly>> anomaliesById =
+                consumerAnomalies.stream()
+                        .collect(Collectors.groupingBy(ca -> ca.getAnomaly().getId()));
 
-        for (Long anomalyId : anomalyIds) {
+        // 3) Process each anomaly group
+        for (Map.Entry<Long, List<ConsumerAnomaly>> entry : anomaliesById.entrySet()) {
+
+            Long anomalyId = entry.getKey();
+            List<ConsumerAnomaly> links = entry.getValue();
 
             Anomaly anomaly = anomalyRepository.findById(anomalyId).orElse(null);
-            if (anomaly == null) continue;
-
-            List<ConsumerAnomaly> links =
-                    consumerAnomalyRepository.findByAnomaly_Id(anomalyId);
-
-            Consumer consumer = links.get(0).getConsumer();
-            boolean isConsistent = Boolean.TRUE.equals(consumer.getIsConsistent());
-
-            String statusText = (consumer.getStatus() == null) ?
-                    "" : consumer.getStatus().trim();
-
-            log.info("Evaluating anomaly {} → consumer={} status='{}' consistent={}",
-                    anomalyId, consumer.getId(), statusText, isConsistent);
-
-
-            // ---------------------------------------------------------
-            // RULE 1 — Accepted → FULLY or PARTIALLY resolved
-            // ---------------------------------------------------------
-            if (statusText.equalsIgnoreCase("Accepted")) {
-
-                if (isConsistent) {
-                    anomaly.setStatus(AnomalyStatus.RESOLVED_FULLY);     // 6
-                } else {
-                    anomaly.setStatus(AnomalyStatus.RESOLVED_PARTIALLY); // 5
-                }
+            if (anomaly == null) {
+                continue;
             }
 
-            // ---------------------------------------------------------
-            // RULE 2 — Recycled → ALWAYS WITHDRAWN
-            // ---------------------------------------------------------
-            else if (statusText.equalsIgnoreCase("Recycled")) {
+            AnomalyStatus newStatus = computeGroupStatus(anomaly, links, user, sp);
 
-                log.info("Consumer {} is RECYCLED → anomaly {} marked WITHDRAWN",
-                        consumer.getId(), anomalyId);
-
-                anomaly.setStatus(AnomalyStatus.WITHDRAWN);
+            if (newStatus != null) {
+                anomaly.setStatus(newStatus);
             }
 
-            // ---------------------------------------------------------
-            // RULE 3 — Others → fallback consistency engine
-            // ---------------------------------------------------------
-            else {
-                AnomalyStatus computed = checkAnomalies(links, user, sp);
-                if (computed != null)
-                    anomaly.setStatus(computed);
-            }
-
-
-            // Save anomaly
             anomaly.setUpdatedOn(new Date());
             anomaly.setUpdateBy(user.getFirstName() + " " + user.getLastName());
             anomalyRepository.save(anomaly);
 
-            // Add tracking entry
+            // Tracking row
             anomalyTrackingRepository.save(
                     new AnomalyTracking(
                             anomaly,
@@ -3707,15 +3676,128 @@ System.out.println("Get all flagged ");
                     )
             );
 
+            // keep your existing statistics logic
             addAnomalyStaticsV1(anomaly.getId());
         }
     }
 
+    /**
+     * Compute status of a single anomaly based on the group of linked consumers.
+     */
+    private AnomalyStatus computeGroupStatus(Anomaly anomaly,
+                                             List<ConsumerAnomaly> links,
+                                             User user,
+                                             ServiceProvider sp) {
+
+        if (links == null || links.isEmpty()) {
+            return anomaly.getStatus(); // nothing to change
+        }
+
+        Long anomalyTypeId = anomaly.getAnomalyType().getId();
+
+        // Only apply group rules for:
+        // 1 = Missing Mandatory, 2 = Duplicate, 4 = Exceeding Threshold
+        if (anomalyTypeId != null &&
+                (anomalyTypeId == 1L || anomalyTypeId == 2L || anomalyTypeId == 4L)) {
+
+            int total = links.size();
+            int recycledCount = 0;
+            int acceptedInconsistent = 0;
+            int acceptedConsistent = 0;
+
+            for (ConsumerAnomaly ca : links) {
+                Consumer c = ca.getConsumer();
+                if (c == null) continue;
+
+                String statusText = (c.getStatus() == null) ? "" : c.getStatus().trim();
+                boolean isAccepted = statusText.equalsIgnoreCase("Accepted");
+                boolean isRecycled = statusText.equalsIgnoreCase("Recycled");
+                boolean isConsistent = Boolean.TRUE.equals(c.getIsConsistent());
+
+                if (isRecycled) {
+                    recycledCount++;
+                }
+
+                if (isAccepted) {
+                    if (isConsistent) {
+                        acceptedConsistent++;
+                    } else {
+                        acceptedInconsistent++;
+                    }
+                }
+            }
+
+            log.info("computeGroupStatus anomaly={} type={} total={} recyc={} accCons={} accIncons={}",
+                    anomaly.getId(), anomalyTypeId, total, recycledCount,
+                    acceptedConsistent, acceptedInconsistent);
+
+            // ✅ All consumers recycled → WITHDRAWN
+            if (recycledCount == total) {
+                return AnomalyStatus.WITHDRAWN; // 7
+            }
+
+            // ✅ Nothing improved (all accepted are still inconsistent)
+            if (acceptedInconsistent == total && acceptedConsistent == 0 && recycledCount == 0) {
+                return AnomalyStatus.REPORTED; // 0
+            }
+
+            // ✅ Partially resolved (mix of consistent + inconsistent / recycled)
+            if (acceptedInconsistent > 0) {
+                return AnomalyStatus.RESOLVED_PARTIALLY; // 5
+            }
+
+            // ✅ Fully resolved (no inconsistent accepted left)
+            if (acceptedInconsistent == 0 && (acceptedConsistent > 0 || recycledCount > 0)) {
+                return AnomalyStatus.RESOLVED_FULLY; // 6
+            }
+
+            // Fallback to previous status if logic didn't decide
+            return anomaly.getStatus();
+        }
+
+        // For all other anomaly types → use your existing engine
+        AnomalyStatus computed = checkAnomalies(links, user, sp);
+        return computed != null ? computed : anomaly.getStatus();
+    }
 
 
+    private boolean isAnomalyResolved(Consumer oldC, Consumer newC) {
+
+        if (oldC == null || newC == null)
+            return false;
+
+        boolean msisdnResolved =
+                Objects.equals(oldC.getMsisdn(), newC.getMsisdn());
+
+        boolean idResolved =
+                Objects.equals(oldC.getIdentificationNumber(), newC.getIdentificationNumber()) &&
+                        Objects.equals(oldC.getIdentificationType(), newC.getIdentificationType());
+
+        return msisdnResolved && idResolved;
+    }
 
 
+    /**
+     * Create a deep clone of Consumer object so that original values are preserved.
+     * Only clone the fields relevant for anomaly resolution.
+     */
+    private Consumer cloneConsumer(Consumer c) {
 
+        if (c == null) return null;
+
+        Consumer copy = new Consumer();
+
+        copy.setId(c.getId());
+        copy.setMsisdn(c.getMsisdn());
+        copy.setIdentificationNumber(c.getIdentificationNumber());
+        copy.setIdentificationType(c.getIdentificationType());
+        copy.setStatus(c.getStatus());
+        copy.setIsConsistent(c.getIsConsistent());
+
+        // copy other fields if needed later
+
+        return copy;
+    }
 
 
 }
