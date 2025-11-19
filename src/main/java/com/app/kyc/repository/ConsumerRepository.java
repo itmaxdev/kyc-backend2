@@ -547,6 +547,7 @@ SET
 
     airtel_transaction_id = LEFT(NULLIF(TRIM(@subscriberdetailsid), ''), 64),
 
+    /* ------------------------- MSISDN FIX ------------------------- */
     msisdn = CASE 
                 WHEN @msisdn REGEXP '^[0-9]+(\\.[0-9]+)?E[+-]?[0-9]+$'
                     THEN FORMAT(@msisdn, 0)
@@ -557,11 +558,18 @@ SET
     middle_name     = LEFT(NULLIF(TRIM(@middlename), ''), 100),
     last_name       = LEFT(NULLIF(TRIM(@lastname), ''), 100),
 
+    /* ----------------------- BIRTH DATE FIX ----------------------- */
     birth_date = CASE
-                    WHEN @dateofbirth REGEXP '^[0-9]{2}-[0-9]{2}-[0-9]{4}$'
-                        THEN STR_TO_DATE(@dateofbirth, '%d-%m-%Y')
-                    WHEN @dateofbirth REGEXP '^[0-9]{2}/[0-9]{2}/[0-9]{4}$'
-                        THEN STR_TO_DATE(@dateofbirth, '%d/%m/%Y')
+                    WHEN REGEXP_REPLACE(@dateofbirth, '[^0-9]', '') REGEXP '^[0-9]{8}$' THEN
+                        CASE
+                            /* Format 19880916 → YYYY-MM-DD */
+                            WHEN REGEXP_REPLACE(@dateofbirth, '[^0-9]', '') BETWEEN '10000000' AND '99999999'
+                                AND SUBSTRING(REGEXP_REPLACE(@dateofbirth, '[^0-9]', ''),1,4) BETWEEN '1900' AND '2100'
+                                THEN STR_TO_DATE(REGEXP_REPLACE(@dateofbirth, '[^0-9]', ''), '%Y%m%d')
+
+                            /* Format 16091988 → DDMMYYYY */
+                            ELSE STR_TO_DATE(REGEXP_REPLACE(@dateofbirth, '[^0-9]', ''), '%d%m%Y')
+                        END
                     ELSE NULL
                  END,
 
@@ -569,6 +577,7 @@ SET
     nationality     = LEFT(NULLIF(TRIM(@nationality), ''), 100),
     gender          = LEFT(NULLIF(TRIM(@gender), ''), 20),
 
+    /* ----------------------- ADDRESS FIX -------------------------- */
     address = CASE 
                 WHEN @permanentaddress IS NULL OR TRIM(@permanentaddress) = '' 
                     THEN LEFT(NULLIF(TRIM(@addressid), ''), 255)
@@ -581,22 +590,26 @@ SET
     alternate_msisdn1 = LEFT(NULLIF(TRIM(@alternateno), ''), 20),
     alternate_msisdn2 = LEFT(NULLIF(TRIM(@alternateno2), ''), 20),
 
-    -- RAW STATUS (ISOLDUSERDETAILS)
+    /* ------------------ RAW STATUS FROM CSV ----------------------- */
     status = LOWER(TRIM(@ISOLDUSERDETAILS)),
 
-    -- Airtel logic: APPROVED/TRUE = FALSE (ACTIVE), REJECTED/FAILED = TRUE (INACTIVE)
+    /* ------------------ CONSUMER STATUS LOGIC --------------------- */
     consumer_status = CASE
                         WHEN LOWER(TRIM(@ISOLDUSERDETAILS)) IN ('approved','completed','false','1') 
-                            THEN 1
+                            THEN 1     -- accepted
                         WHEN LOWER(TRIM(@ISOLDUSERDETAILS)) IN ('rejected','downstream_failed','true','0','resilie','suspendu')
-                            THEN 0
+                            THEN 0     -- recycled
                         ELSE 0
                       END,
+
+    /* ---------------------- REGISTRATION DATE --------------------- */
+    registration_date = CURDATE(),
 
     created_on = NOW(),
     is_consistent = FALSE;
 """, nativeQuery = true)
     void loadAirtelCsv(@Param("filePath") String filePath);
+
 
 
 
