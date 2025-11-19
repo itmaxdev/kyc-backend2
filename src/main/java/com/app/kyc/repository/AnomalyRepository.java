@@ -458,13 +458,14 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
         4 AS anomaly_type_id,
         0 AS status,
         CONCAT(
-            'Exceeding Anomaly: You can''t have more than two active records per operator for a given combination of (ID Card Type + ID Number + ServiceProviderName): (',
-            c.identification_type, ' + ', c.identification_number, ')'
+            'Exceeding Anomaly: You can''t have more than two active records for (ID Card Type + ID Number): ',
+            c.identification_type, ' + ', c.identification_number
         ) AS note
     FROM (
         SELECT identification_type, identification_number
         FROM consumers
-        WHERE LOWER(TRIM(status)) = 'accepted'  -- ✅ Vodacom: only include active consumers
+        WHERE service_provider_id = 24                    -- VODACOM ONLY
+          AND LOWER(TRIM(status)) = 'accepted'            -- Active Vodacom records
           AND identification_type IS NOT NULL
           AND TRIM(identification_type) <> ''
           AND identification_number IS NOT NULL
@@ -477,11 +478,11 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
         FROM anomalies a
         WHERE a.anomaly_type_id = 4
           AND a.note = CONCAT(
-              'Exceeding Anomaly: You can''t have more than two active records per operator for a given combination of (ID Card Type + ID Number + ServiceProviderName): (',
-              c.identification_type, ' + ', c.identification_number, ')'
+              'Exceeding Anomaly: You can''t have more than two active records for (ID Card Type + ID Number): ',
+              c.identification_type, ' + ', c.identification_number
           )
     )
-    """, nativeQuery = true)
+""", nativeQuery = true)
 	int insertExceedingThresholdAnomaliesForVodacom();
 
 
