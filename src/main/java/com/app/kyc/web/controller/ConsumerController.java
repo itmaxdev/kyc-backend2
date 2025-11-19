@@ -77,6 +77,41 @@ public class ConsumerController
       }
    }
 
+
+
+   @GetMapping("/getMsisdnTracking/{id}")
+   public ResponseEntity<?> getConsumerMsisdnTrackingById(HttpServletRequest request, @PathVariable("id") Long id) throws SQLException
+   {
+      //log.info("ConsumerController/getConsumerById");
+      try
+      {
+         List<String> roles = new ArrayList<String>();
+         roles.add("SP Admin");
+         roles.add("Compliance Admin");
+         roles.add("KYC Admin");
+         roles.add("SP User");
+         if(securityHelper.hasRole(request, roles)) {
+
+            final String authorizationHeader = request.getHeader("Authorization");
+            String userName = null;
+            if(authorizationHeader != null && authorizationHeader.startsWith(("Bearer ")))
+            {
+               userName = securityHelper.getUserName(authorizationHeader.substring(7));
+            }
+            User user = userService.getUserByEmail(userName);
+            boolean ismask = userService.isUnmasked(user);
+            MaskingContext.setMasking(ismask);
+            return ResponseEntity.ok(consumerService.getConsumerById(id));
+         }else
+            return ResponseEntity.ok("Not authorized");
+      }
+      catch(Exception e)
+      {
+         //log.info(e.getMessage());
+         return ResponseEntity.ok(e.getMessage());
+      }
+   }
+
    @GetMapping("/withSubscriptions/{id}")
    public ResponseEntity<?> getConsumerByIdwithSubscriptions(HttpServletRequest request, @PathVariable("id") Long id) throws SQLException
    {
