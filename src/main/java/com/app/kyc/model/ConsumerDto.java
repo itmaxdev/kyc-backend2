@@ -53,6 +53,7 @@ public class ConsumerDto {
     private String vendorCode;
     private Boolean isConsistent;
     private List<ConsumerHistoryDto> consumerHistory;
+    private String status;
     public  ConsumerDto(Consumer consumer,List<Anomaly> anomlies){
         this.id = consumer.getId();
         this.firstName = consumer.getFirstName();
@@ -78,6 +79,7 @@ public class ConsumerDto {
         this.isConsistent = consumer.getIsConsistent();
         this.consistentOn=consumer.getConsistentOn();
         this.vendorCode=consumer.getVendorCode();
+        this.status = consumer.getStatus();
         
         
         if(anomlies!=null&& anomlies.size()>0){
@@ -111,6 +113,7 @@ public class ConsumerDto {
         this.isConsistent = consumer.getIsConsistent();
         this.consistentOn=consumer.getConsistentOn();
         this.vendorCode=consumer.getVendorCode();
+        this.status = consumer.getStatus();
 
     }
 
