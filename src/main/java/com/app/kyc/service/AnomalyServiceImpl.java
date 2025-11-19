@@ -5,6 +5,7 @@ import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import com.app.kyc.entity.*;
@@ -356,7 +357,48 @@ public class AnomalyServiceImpl implements AnomalyService
               : new AnomlyDto(anomaly);
 
       // 2️⃣ Tracking
-      List<AnomalyTrackingDto> anomalyTracking = anomalyTrackingRepository
+
+      List<AnomalyTrackingDto> anomalyTracking =
+              anomalyTrackingRepository.findDistinctByAnomalyIdOrderByCreatedOnDesc(id)
+                      .stream()
+
+                      // 🔥 Step 1: Keep only ONE REPORTED entry (the newest, because list is sorted DESC)
+                      .filter(new Predicate<AnomalyTracking>() {
+                         boolean reportedFound = false;
+
+                         @Override
+                         public boolean test(AnomalyTracking at) {
+                            if (at.getStatus() == AnomalyStatus.REPORTED) {
+                               if (reportedFound) {
+                                  return false;  // skip duplicates
+                               }
+                               reportedFound = true; // first time we found REPORTED
+                               return true;          // allow first REPORTED only
+                            }
+                            return true;  // allow all other statuses
+                         }
+                      })
+
+                      .map(c -> {
+                         String finalNote;
+
+                         if (c.getNote() != null && !c.getNote().isBlank()) {
+                            finalNote = maskNoteByType(c.getNote());
+                         }
+                         else if (c.getStatus() == AnomalyStatus.REPORTED) {
+                            finalNote = "Anomaly flagged by " + c.getUpdateBy();
+                         }
+                         else if (c.getStatus() == AnomalyStatus.RESOLVED_PARTIALLY) {
+                            finalNote = "Anomaly Resolved Partially by " + c.getUpdateBy();
+                         }
+                         else if (c.getStatus() == AnomalyStatus.RESOLVED_FULLY) {
+                            finalNote = "Anomaly Resolved by " + c.getUpdateBy();
+                         }
+                         else {
+                            finalNote = "";
+                         }
+
+      /*List<AnomalyTrackingDto> anomalyTracking = anomalyTrackingRepository
               .findDistinctByAnomalyIdOrderByCreatedOnDesc(id)
               .stream()
               .map(c -> {
@@ -371,7 +413,7 @@ public class AnomalyServiceImpl implements AnomalyService
                     finalNote = "Anomaly Resolved by " + c.getUpdateBy();
                  } else {
                     finalNote = "";
-                 }
+                 }*/
 
 
                  Anomaly anomalyEntity = c.getAnomaly();
