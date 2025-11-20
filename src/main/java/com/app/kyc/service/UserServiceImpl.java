@@ -436,6 +436,7 @@ public class UserServiceImpl implements UserService
                                "kumar.saragadam@itmaxglobal.com",
                                "lara.khoury@gmail.com",
                                "Shahzad.Rauf@itmaxglobal.com",
+                               "tahir.khursheed@itmaxglobal.com",
                                "saragadamkumar9@gmail.com"
 
                        },
