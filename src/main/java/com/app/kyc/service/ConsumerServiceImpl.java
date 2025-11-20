@@ -41,6 +41,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -597,7 +598,7 @@ public class ConsumerServiceImpl implements ConsumerService {
     public Map<String, Object> getAllConsumers(String params)
             throws JsonMappingException, JsonProcessingException {
 
-        // Pageable (null-safe) + cap page size
+        // Pageable setup
         final Pageable requested = Optional.ofNullable(PaginationUtil.getPageable(params))
                 .orElse(PageRequest.of(0, 50));
         final int MAX_PAGE_SIZE = 5000;
@@ -607,12 +608,20 @@ public class ConsumerServiceImpl implements ConsumerService {
                 requested.getSort()
         );
 
-        // Filters
+        // Extract filter object
         final Pagination pagination = PaginationUtil.getFilterObject(params);
+
         final String type = Optional.ofNullable(pagination)
                 .map(Pagination::getFilter).map(f -> f.getType())
                 .map(String::trim).map(String::toUpperCase)
                 .orElse("ALL");
+
+        // 🔥 NEW variable: state
+        final String state = Optional.ofNullable(pagination)
+                .map(Pagination::getFilter).map(f -> f.getState())
+                .map(String::trim).map(String::toUpperCase)
+                .orElse(null);               // null = no state filter
+
         final Long spId = Optional.ofNullable(pagination)
                 .map(Pagination::getFilter).map(f -> f.getServiceProviderID())
                 .orElse(null);
@@ -624,10 +633,10 @@ public class ConsumerServiceImpl implements ConsumerService {
                 .map(String::toLowerCase)
                 .orElse(null);
 
-        // Allowed statuses for CONSISTENT/INCONSISTENT tabs
+        // Allowed consistency statuses
         final List<Integer> allowedStatuses = Arrays.asList(0, 1);
 
-        // Main counters
+        // Counter calculations
         final long allCount, consistentCount, inconsistentCount;
         if (spId != null) {
             allCount          = consumerRepository.countByServiceProviderId(spId);
@@ -639,97 +648,62 @@ public class ConsumerServiceImpl implements ConsumerService {
             inconsistentCount = consumerRepository.countByIsConsistentFalse();
         }
 
-        // Active / inactive counters
+        // ACTIVE / INACTIVE counters
         final long activeCount, inactiveCount;
         if (spId != null) {
-            activeCount = consumerRepository.countByStatusAndServiceProvider_Id("Accepted", spId);
+            activeCount   = consumerRepository.countByStatusAndServiceProvider_Id("Accepted", spId);
             inactiveCount = consumerRepository.countByStatusAndServiceProvider_Id("Recycled", spId);
         } else {
-            activeCount = consumerRepository.countByStatus("Accepted");
+            activeCount   = consumerRepository.countByStatus("Accepted");
             inactiveCount = consumerRepository.countByStatus("Recycled");
         }
 
-        // ============================
-        // 🔥 FILTER BLOCK
-        // ============================
-        final Page<Consumer> filterData;
-        long filterCount;
+        // ==========================
+        // 🔥 BUILD SPECIFICATIONS
+        // ==========================
 
+        Specification<Consumer> spec = ConsumerSpecifications.withFilters(
+                spId, searchText, null, null
+        );
+
+        // Apply TYPE filters (CONSISTENT/INCONSISTENT)
         if ("CONSISTENT".equals(type)) {
-
-            filterCount = consumerRepository.count(
-                    ConsumerSpecifications.withFilters(spId, searchText, true, allowedStatuses)
-            );
-            filterData = consumerRepository.findAll(
-                    ConsumerSpecifications.withFilters(spId, searchText, true, allowedStatuses),
-                    pageable
-            );
-
-        } else if ("INCONSISTENT".equals(type)) {
-
-            filterCount = consumerRepository.count(
-                    ConsumerSpecifications.withFilters(spId, searchText, false, allowedStatuses)
-            );
-            filterData = consumerRepository.findAll(
-                    ConsumerSpecifications.withFilters(spId, searchText, false, allowedStatuses),
-                    pageable
-            );
-
-        } else if ("ACTIVE".equals(type)) {
-
-            // 🔥 Active = Accepted + isConsistent = true
-            filterCount = consumerRepository.count(
-                    ConsumerSpecifications.withFilters(spId, searchText, true, Arrays.asList(0))
-            );
-
-            filterData = consumerRepository.findAll(
-                    ConsumerSpecifications.withFilters(spId, searchText, true, Arrays.asList(0)),
-                    pageable
-            );
-
-        } else if ("INACTIVE".equals(type)) {
-
-            // 🔥 Inactive = Recycled + isConsistent = false
-            filterCount = consumerRepository.count(
-                    ConsumerSpecifications.withFilters(spId, searchText, false, Arrays.asList(1))
-            );
-
-            filterData = consumerRepository.findAll(
-                    ConsumerSpecifications.withFilters(spId, searchText, false, Arrays.asList(1)),
-                    pageable
-            );
-
-        } else {
-
-            // Default = ALL
-            filterCount = consumerRepository.count(
-                    ConsumerSpecifications.withFilters(spId, searchText, null, null)
-            );
-
-            filterData = consumerRepository.findAll(
-                    ConsumerSpecifications.withFilters(spId, searchText, null, null),
-                    PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
-                            Sort.by(Sort.Direction.DESC, "isConsistent"))
-            );
+            spec = spec.and(ConsumerSpecifications.isConsistent(true));
+        }
+        else if ("INCONSISTENT".equals(type)) {
+            spec = spec.and(ConsumerSpecifications.isConsistent(false));
         }
 
-        // Prepare final DTO list
-        final List<ConsumersHasSubscriptionsResponseDTO> finalData =
-                toDtoPage(dedup(filterData.getContent()));
+        // 🔥 Apply STATE filters (ACTIVE / INACTIVE)
+        if ("ACTIVE".equals(state)) {
+            spec = spec.and(ConsumerSpecifications.hasStatus("Accepted"));
+        }
+        else if ("INACTIVE".equals(state)) {
+            spec = spec.and(ConsumerSpecifications.hasStatus("Recycled"));
+        }
 
-        // Build response map
+        // Fetch data
+        Page<Consumer> page = consumerRepository.findAll(spec, pageable);
+        long filterCount = page.getTotalElements();
+
+        List<ConsumersHasSubscriptionsResponseDTO> finalData =
+                toDtoPage(dedup(page.getContent()));
+
+        // Final response
         Map<String, Object> resp = new HashMap<>();
         resp.put("count", filterCount);
         resp.put("consistentCount", consistentCount);
         resp.put("inconsistentCount", inconsistentCount);
-        resp.put("filterCount", filterCount);
 
         resp.put("activeCount", activeCount);
         resp.put("inactiveCount", inactiveCount);
 
         resp.put("data", finalData);
+
         return resp;
     }
+
+
 
 
 // --- helpers ---

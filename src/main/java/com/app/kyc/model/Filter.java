@@ -17,7 +17,9 @@ public class Filter {
     // NEW: "ALL" | "CONSISTENT" | "INCONSISTENT"
     @JsonAlias({"type"})
     private String type;
-    
+
+    @JsonAlias({"state"})
+    private String state;
     @JsonAlias({"anomalyStatus"})
     private AnomalyStatus anomalyStatus;
     
@@ -53,4 +55,20 @@ public class Filter {
 	
 	public String getSearchText() {return searchText;}
 	public void setSearchText(String searchText) {this.searchText = searchText;}
+
+    public Boolean getResolved() {
+        return isResolved;
+    }
+
+    public void setResolved(Boolean resolved) {
+        isResolved = resolved;
+    }
+
+    public String getState() {
+        return state;
+    }
+
+    public void setState(String state) {
+        this.state = state;
+    }
 }

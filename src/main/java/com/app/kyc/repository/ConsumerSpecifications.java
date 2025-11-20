@@ -59,4 +59,16 @@ public class ConsumerSpecifications {
             return cb.and(predicates.toArray(new Predicate[0]));
         };
     }
+
+
+    public static Specification<Consumer> hasStatus(String status) {
+        return (root, query, cb) ->
+                cb.equal(cb.lower(root.get("status")), status.toLowerCase());
+    }
+
+    public static Specification<Consumer> isConsistent(Boolean value) {
+        return (root, query, cb) ->
+                cb.equal(root.get("isConsistent"), value);
+    }
+
 }
