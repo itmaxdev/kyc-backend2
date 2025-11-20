@@ -255,6 +255,150 @@ public class ConsumerServiceImpl implements ConsumerService {
         }
     }
 
+
+    @Override
+    public ConsumerDto getConsumerByMsisdnId(Long id) {
+        try {
+            Optional<Consumer> consumerOpt =
+                    consumerRepository.findByIdAndConsumerStatusIn(id, Arrays.asList(0, 1));
+            if (!consumerOpt.isPresent()) {
+                consumerOpt = consumerRepository.findById(id);
+            }
+            if (!consumerOpt.isPresent()) {
+                log.warn("getConsumerById: no consumer found for id={}", id);
+                return null;
+            }
+
+            final Consumer c = consumerOpt.get();
+            final List<Anomaly> anomalies = Optional.ofNullable(c.getAnomalies())
+                    .orElse(Collections.emptyList());
+            final Optional<Anomaly> firstAnomalyOpt = anomalies.stream().findFirst();
+            final AnomalyType primaryAnomalyType = firstAnomalyOpt.map(Anomaly::getAnomalyType).orElse(null);
+
+            // Build DTO (includes anomalies list)
+            ConsumerDto dto = new ConsumerDto(c, anomalies);
+            dto.setStatus(c.getStatus());
+            // --- Mask notes inside dto.getAnomlies() based on each anomaly's type ---
+            if (dto.getAnomlies() != null) {
+                for (AnomlyDto a : dto.getAnomlies()) {
+                    if (a == null) continue;
+                    String note = a.getNote();
+                    AnomalyType type = a.getAnomalyType(); // may be null
+                    if (note != null && !note.isBlank()) {
+                        a.setNote(maskNoteByType(note, type));
+                    }
+                }
+            }
+
+            // Build history from latest consistent & inconsistent trackings
+            List<ConsumerHistoryDto> history = new ArrayList<>();
+            List<ConsumerTracking> trackings = new ArrayList<>();
+            try {
+                ConsumerTracking latestConsistent =
+                        consumerTrackingRepository.findFirstByConsumerIdAndIsConsistentTrueOrderByCreatedOnDesc(c.getId());
+                ConsumerTracking latestInconsistent =
+                        consumerTrackingRepository.findFirstByConsumerIdAndIsConsistentFalseOrderByCreatedOnDesc(c.getId());
+                if (latestConsistent != null)   trackings.add(latestConsistent);
+                if (latestInconsistent != null) trackings.add(latestInconsistent);
+            } catch (Exception e) {
+                log.error("Failed fetching trackings for consumer id={}", c.getId(), e);
+            }
+
+            final String safe = "";
+            final String firstName  = Optional.ofNullable(c.getFirstName()).orElse(safe);
+            final String middleName = Optional.ofNullable(c.getMiddleName()).orElse(safe);
+            final String lastName   = Optional.ofNullable(c.getLastName()).orElse(safe);
+
+            String fullName;
+            try {
+                if (!MaskingContext.isMasking()) {
+                    fullName = (MaskingUtil.maskName(firstName) + " "
+                            + MaskingUtil.maskName(middleName) + " "
+                            + MaskingUtil.maskName(lastName)).trim();
+                } else {
+                    fullName = (firstName + " " + middleName + " " + lastName).trim();
+                }
+                fullName = fullName.replaceAll("\\s{2,}", " ");
+            } catch (Exception e) {
+                log.warn("Masking failed for consumer id={}, using raw names", c.getId(), e);
+                fullName = (firstName + " " + middleName + " " + lastName).trim().replaceAll("\\s{2,}", " ");
+            }
+
+            String providerName = Optional.ofNullable(c.getServiceProvider())
+                    .map(ServiceProvider::getName)
+                    .orElse("Unknown");
+            String normalizedProvider = "Unknown";
+            try {
+                normalizedProvider = providerName.substring(0, 1).toUpperCase()
+                        + providerName.substring(1).toLowerCase();
+            } catch (Exception ignore) {}
+
+            for (ConsumerTracking t : trackings) {
+                try {
+                    boolean isConsistent = Boolean.TRUE.equals(t.getIsConsistent());
+                    String consistencyStatus = isConsistent ? "Consistent" : "Inconsistent";
+
+                    // These are Strings already in your model
+                    String inconsistentOn = Optional.ofNullable(c.getCreatedOn())
+                            .filter(s -> !s.isBlank()).orElse("N/A");
+                    String consistentOn = Optional.ofNullable(t.getConsistentOn())
+                            .map(Object::toString).filter(s -> !s.isBlank()).orElse("N/A");
+
+                    String note;
+                    String vendorCodeForHistory;
+
+                    if (!firstAnomalyOpt.isPresent()) {
+                        note = fullName + " belonging to " + providerName;
+                        //note = fullName + " belonging to " + normalizedProvider;
+                        //vendorCodeForHistory = Optional.ofNullable(c.getVendorCode()).orElse("");
+                        vendorCodeForHistory = providerName;
+                    } else {
+                        Anomaly first = firstAnomalyOpt.get();
+
+                        String datePart = Optional.ofNullable(first.getReportedOn())
+                                .map(Object::toString).orElse("NODATE");
+
+                        Long anomalyId = Optional.ofNullable(first.getId()).orElse(0L);
+                        String formattedId = normalizedProvider + "-" + datePart + "-" + anomalyId;
+
+                        note = fullName + (isConsistent ? " previously linked to anomaly " : " linked to anomaly ")
+                                + formattedId;
+
+                        vendorCodeForHistory = Optional.ofNullable(first.getAnomalyFormattedId())
+                                .filter(v -> !v.isBlank())
+                                .orElse(Optional.ofNullable(c.getVendorCode()).orElse(""));
+                    }
+
+                    // Mask constructed note using the primary anomaly type context
+                    note = maskNoteByType(note, primaryAnomalyType);
+
+                    history.add(new ConsumerHistoryDto(
+                            consistencyStatus, note, inconsistentOn, consistentOn, vendorCodeForHistory));
+
+                } catch (Exception perTrackEx) {
+                    log.error("Error building history for consumer id={}, tracking id={}",
+                            c.getId(),
+                            Optional.ofNullable(t.getId()).orElse(null),
+                            perTrackEx);
+                }
+            }
+
+            // Prefer consumer.vendorCode, else first anomaly’s anomalyFormattedId, else ""
+            String dtoVendorCode = Optional.ofNullable(c.getVendorCode())
+                    .filter(v -> !v.isBlank())
+                    .orElse(firstAnomalyOpt.map(Anomaly::getAnomalyFormattedId).orElse(""));
+
+            //dto.setConsumerHistory(history);
+            dto.setVendorCode(dtoVendorCode);
+
+            return dto;
+
+        } catch (Exception e) {
+            log.error("getConsumerById failed for id={}", id, e);
+            return null;
+        }
+    }
+
     /* ===================== Masking helpers ===================== */
 
     private static String maskNoteByType(String note, AnomalyType type) {

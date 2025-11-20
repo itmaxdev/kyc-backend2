@@ -101,7 +101,7 @@ public class ConsumerController
             User user = userService.getUserByEmail(userName);
             boolean ismask = userService.isUnmasked(user);
             MaskingContext.setMasking(ismask);
-            return ResponseEntity.ok(consumerService.getConsumerById(id));
+            return ResponseEntity.ok(consumerService.getConsumerByMsisdnId(id));
          }else
             return ResponseEntity.ok("Not authorized");
       }

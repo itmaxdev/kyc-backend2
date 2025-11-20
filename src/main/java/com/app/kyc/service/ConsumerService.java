@@ -14,6 +14,8 @@ import java.util.*;
 public interface ConsumerService
 {
    ConsumerDto getConsumerById(Long id);
+    ConsumerDto getConsumerByMsisdnId(Long id);
+
 
    Map<String, Object> getAllConsumers(String params) throws JsonMappingException, JsonProcessingException;
     Map<String, Object> getAllConsumersforMsisdn(String params) throws JsonMappingException, JsonProcessingException;
