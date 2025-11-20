@@ -1523,24 +1523,41 @@ public class FileProcessingService {
             consumer.setIdentificationType(r.idType);
         }
 
+        if (notEmpty(r.airtelTransactionId)) {
+            if (notEmpty(r.status)) {
+                System.out.println("Setting getStatus for airtel consumer id=" + consumer.getId() + " → " + r.status);
+                if (consumer.getStatus() == null || consumer.getStatus().isBlank()) {
+                    System.out.println("Setting getStatus for consumer id=" + consumer.getId() + " → " + r.status);
+                } else if (!consumer.getStatus().equals(r.status)) {
+                    System.out.println("Updating getStatus for consumer id=" + consumer.getId() +
+                            " from " + consumer.getStatus() + " → " + r.status);
+                }
 
-        if (notEmpty(r.status)) {
-            if (consumer.getStatus() == null || consumer.getStatus().isBlank()) {
-                System.out.println("Setting getStatus for consumer id=" + consumer.getId() + " → " + r.status);
-            } else if (!consumer.getStatus().equals(r.status)) {
-                System.out.println("Updating getStatus for consumer id=" + consumer.getId() +
-                        " from " + consumer.getStatus() + " → " + r.status);
+                String normalized = normalizeStatus(r.status);
+                if ("false".equals(normalized)) {
+                    r.status = "accepted";
+                } else {
+                    r.status = "recycled";
+                }
+                consumer.setStatus(r.status);
             }
-
-            String normalized = normalizeStatus(r.status);
-            if ("false".equals(normalized)) {
-                r.status = "accepted";
-            } else {
-                r.status = "recycled";
-            }
-            consumer.setStatus(r.status);
         }
 
+        if (notEmpty(r.vodacomTransactionId)) {
+            if (notEmpty(r.status)) {
+                System.out.println("Setting getStatus for Vodacom consumer id=" + consumer.getId() + " → " + r.status);
+                String s = r.status.trim().toLowerCase();
+
+                if (s.equalsIgnoreCase("accepted") || s.equals("1")) {
+                    consumer.setStatus("accepted");
+                } else if (s.equalsIgnoreCase("recycled") || s.equals("0")) {
+                    consumer.setStatus("recycled");
+                } else {
+                    // fallback if unknown
+                    consumer.setStatus("recycled");
+                }
+            }
+        }
 
         if (notEmpty(r.vodacomTransactionId)) {
             if (consumer.getVodacomTransactionId() == null ||
