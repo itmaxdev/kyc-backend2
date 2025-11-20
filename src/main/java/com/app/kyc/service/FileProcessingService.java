@@ -57,6 +57,8 @@ public class FileProcessingService {
     private static final Logger log = LoggerFactory.getLogger(FileProcessingService.class);
 
     private final ProcessedFileRepository processedFileRepository;
+    private final MsisdnTrackingRepository msisdnTrackingRepository;
+
     private final ServiceProviderRepository serviceProviderRepository;
     private final ConsumerRepository consumerRepository;
     private final ConsumerAnomalyRepository consumerAnomalyRepository;
@@ -315,6 +317,7 @@ public class FileProcessingService {
         log.info(" Importing Vodacom consumer data from file: {}", absolutePath);
 
         consumerRepository.loadVodacomCsv(absolutePath);
+        msisdnTrackingRepository.insertRecycledMsisdns();
 
         log.info(" Successfully imported Vodacom consumers from {}", absolutePath);
         List<Consumer> existing = consumerRepository.findAll();

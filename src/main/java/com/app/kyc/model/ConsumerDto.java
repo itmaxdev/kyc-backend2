@@ -54,6 +54,7 @@ public class ConsumerDto {
     private Boolean isConsistent;
     private List<ConsumerHistoryDto> consumerHistory;
     private String status;
+    private List<MsisdnTrackingDto> msisdnTrackingDto;
     public  ConsumerDto(Consumer consumer,List<Anomaly> anomlies){
         this.id = consumer.getId();
         this.firstName = consumer.getFirstName();
