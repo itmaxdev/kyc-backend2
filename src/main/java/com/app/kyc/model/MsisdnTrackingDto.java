@@ -10,6 +10,7 @@ import lombok.NoArgsConstructor;
 public class MsisdnTrackingDto {
     private String msisdn;
     private String firstName;
+    private String middleName;
     private String lastName;
     private String status;
     private String createdOn;

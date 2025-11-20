@@ -25,6 +25,10 @@ public class MsisdnTracking {
     @Column(name = "first_name", length = 100)
     private String firstName;
 
+    @Column(name = "middle_name", length = 100)
+    private String middleName;
+
+
     @Column(name = "last_name", length = 100)
     private String lastName;
 

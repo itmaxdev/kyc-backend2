@@ -37,6 +37,7 @@ public class ConsumerMsidnDto {
     private String identificationType;
     private Boolean isConsistent;
     private String consistentOn;
+    private String status;
 
     private ServiceProvider serviceProvider;
 
@@ -55,6 +56,7 @@ public class ConsumerMsidnDto {
         this.serviceProvider=consumer.getServiceProvider();
         this.isConsistent = consumer.getIsConsistent();
         this.consistentOn=consumer.getConsistentOn();
+        this.status = consumer.getStatus();
     }
 
     // ---------------- CONSTRUCTOR 2 ----------------
@@ -70,6 +72,7 @@ public class ConsumerMsidnDto {
         this.serviceProvider=consumer.getServiceProvider();
         this.isConsistent = consumer.getIsConsistent();
         this.consistentOn=consumer.getConsistentOn();
+        this.status = consumer.getStatus();
     }
 
     // ---------------- equals/hashCode ----------------

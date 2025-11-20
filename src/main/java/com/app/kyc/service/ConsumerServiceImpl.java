@@ -300,7 +300,10 @@ public class ConsumerServiceImpl implements ConsumerService {
             // ⭐ NEW: MSISDN Tracking
             // -------------------------
             List<MsisdnTrackingDto> msisdnTrackingList = new ArrayList<>();
-            try {
+
+            DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+            if (c.getMsisdn() != null) {
                 List<MsisdnTracking> trackingRows =
                         msisdnTrackingRepository.findByMsisdnOrderByCreatedOnDesc(c.getMsisdn());
 
@@ -309,8 +312,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                     String createdOnStr = "";
                     try {
                         if (t.getCreatedOn() != null) {
-                            createdOnStr = t.getCreatedOn()
-                                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+                            createdOnStr = t.getCreatedOn().format(fmt);
                         }
                     } catch (Exception e) {
                         createdOnStr = t.getCreatedOn() != null ? t.getCreatedOn().toString() : "";
@@ -320,15 +322,13 @@ public class ConsumerServiceImpl implements ConsumerService {
                             new MsisdnTrackingDto(
                                     t.getMsisdn(),
                                     t.getFirstName(),
+                                    t.getMiddleName(),   // ✅ Added middleName
                                     t.getLastName(),
                                     t.getStatus(),
                                     createdOnStr
                             )
                     );
                 }
-
-            } catch (Exception ex) {
-                log.error("Failed fetching MSISDN tracking for {}", c.getMsisdn(), ex);
             }
 
             dto.setMsisdnTrackingDto(msisdnTrackingList);
