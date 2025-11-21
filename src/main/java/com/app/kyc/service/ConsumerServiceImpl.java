@@ -3799,6 +3799,7 @@ System.out.println("Get all flagged ");
                     recycledCount++;
                 }
 
+
                 if (isAccepted) {
                     if (isConsistent) {
                         acceptedConsistent++;
@@ -3814,7 +3815,7 @@ System.out.println("Get all flagged ");
 
             // ✅ All consumers recycled → WITHDRAWN
             if (recycledCount == total) {
-                return AnomalyStatus.WITHDRAWN; // 7
+                return AnomalyStatus.REPORTED; // 7
             }
 
             // ✅ Nothing improved (all accepted are still inconsistent)
@@ -3831,6 +3832,8 @@ System.out.println("Get all flagged ");
             if (acceptedInconsistent == 0 && (acceptedConsistent > 0 || recycledCount > 0)) {
                 return AnomalyStatus.RESOLVED_FULLY; // 6
             }
+
+
 
             // Fallback to previous status if logic didn't decide
             return anomaly.getStatus();
