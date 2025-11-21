@@ -1679,6 +1679,8 @@ public class FileProcessingService {
                 consumerAnomalyRepository.findAllByConsumerIn(list);
                 consumerServiceImpl.updateAnomalyStatusForConsumers(list, user, sp);
 
+                consumerServiceImpl.withdrawReportedAnomaliesForRecycledConsumers(sp.getId(),user);
+
                 log.info("Finished checkConsumer for operator {}", sp.getName());
             } catch (Exception ex) {
                 log.error("checkConsumer failed for operator {}: {}", sp.getName(), ex.toString(), ex);

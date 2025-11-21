@@ -3845,6 +3845,69 @@ System.out.println("Get all flagged ");
     }
 
 
+    @Transactional
+    public void withdrawReportedAnomaliesForRecycledConsumers(Long serviceProviderId, User user) {
+
+        // 1️⃣ Get all consumers for this service provider
+        List<Consumer> consumers = consumerRepository.findByServiceProvider_Id(serviceProviderId);
+
+        if (consumers == null || consumers.isEmpty()) {
+            log.info("No consumers found for spId={}", serviceProviderId);
+            return;
+        }
+
+        for (Consumer consumer : consumers) {
+
+            // 2️⃣ Check if this consumer is Recycled
+            if (!"Recycled".equalsIgnoreCase(consumer.getStatus())) {
+                continue; // skip non-recycled consumers
+            }
+
+            // 3️⃣ Fetch anomalies linked to this consumer
+            List<ConsumerAnomaly> links =
+                    consumerAnomalyRepository.findAllByConsumer(consumer);
+
+            if (links == null || links.isEmpty()) {
+                continue;
+            }
+
+            for (ConsumerAnomaly link : links) {
+                Anomaly anomaly = link.getAnomaly();
+
+                if (anomaly == null) continue;
+
+                // 4️⃣ If anomaly is REPORTED → mark it as WITHDRAWN
+                if (anomaly.getStatus() == AnomalyStatus.REPORTED) {
+
+                    log.info("Marking anomaly {} as WITHDRAWN because consumer {} is recycled",
+                            anomaly.getId(), consumer.getId());
+
+                    anomaly.setStatus(AnomalyStatus.WITHDRAWN);
+                    anomaly.setUpdatedOn(new Date());
+                    anomaly.setUpdateBy(user.getFirstName() + " " + user.getLastName());
+                    anomalyRepository.save(anomaly);
+
+                    // 5️⃣ Insert tracking row
+                    anomalyTrackingRepository.save(
+                            new AnomalyTracking(
+                                    anomaly,
+                                    new Date(),
+                                    AnomalyStatus.WITHDRAWN,
+                                    "Auto-withdrawn because consumer recycled",
+                                    user.getFirstName() + " " + user.getLastName(),
+                                    new Date()
+                            )
+                    );
+
+                    // 6️⃣ Update stats if needed
+                    addAnomalyStaticsV1(anomaly.getId());
+                }
+            }
+        }
+    }
+
+
+
     private boolean isAnomalyResolved(Consumer oldC, Consumer newC) {
 
         if (oldC == null || newC == null)

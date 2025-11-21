@@ -94,5 +94,5 @@ public interface ConsumerAnomalyRepository extends JpaRepository<ConsumerAnomaly
     int linkConsumersToAnomaliesByOperator(@Param("spName") String serviceProviderName);
 
 
-
+    List<ConsumerAnomaly> findAllByConsumer(Consumer consumer);
 }
