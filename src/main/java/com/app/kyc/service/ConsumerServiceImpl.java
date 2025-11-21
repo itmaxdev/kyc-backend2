@@ -3710,7 +3710,6 @@ System.out.println("Get all flagged ");
             return;
         }
 
-        // 1) Get all links for these consumers
         List<ConsumerAnomaly> consumerAnomalies =
                 consumerAnomalyRepository.findAllByConsumerIn(newConsumers);
 
@@ -3719,21 +3718,34 @@ System.out.println("Get all flagged ");
             return;
         }
 
-        // 2) Group by anomaly
         Map<Long, List<ConsumerAnomaly>> anomaliesById =
                 consumerAnomalies.stream()
                         .collect(Collectors.groupingBy(ca -> ca.getAnomaly().getId()));
 
-        // 3) Process each anomaly group
         for (Map.Entry<Long, List<ConsumerAnomaly>> entry : anomaliesById.entrySet()) {
 
             Long anomalyId = entry.getKey();
             List<ConsumerAnomaly> links = entry.getValue();
 
             Anomaly anomaly = anomalyRepository.findById(anomalyId).orElse(null);
-            if (anomaly == null) {
-                continue;
+            if (anomaly == null) continue;
+
+            // -----------------------------------------------------
+            // 🚫 NEW: Skip if all consumers are Recycled
+            // -----------------------------------------------------
+            boolean allRecycled = links.stream()
+                    .map(ConsumerAnomaly::getConsumer)
+                    .filter(Objects::nonNull)
+                    .allMatch(c ->
+                            c.getStatus() != null &&
+                                    c.getStatus().equalsIgnoreCase("Recycled")
+                    );
+
+            if (allRecycled) {
+                log.info("Skipping anomaly update for anomalyId={} because all linked consumers are Recycled", anomalyId);
+                continue; // 🚀 Do NOT update anomaly and do NOT insert tracking row
             }
+            // -----------------------------------------------------
 
             AnomalyStatus newStatus = computeGroupStatus(anomaly, links, user, sp);
 
@@ -3745,7 +3757,7 @@ System.out.println("Get all flagged ");
             anomaly.setUpdateBy(user.getFirstName() + " " + user.getLastName());
             anomalyRepository.save(anomaly);
 
-            // Tracking row
+            // Tracking row — only for non-recycled updates
             anomalyTrackingRepository.save(
                     new AnomalyTracking(
                             anomaly,
@@ -3757,10 +3769,10 @@ System.out.println("Get all flagged ");
                     )
             );
 
-            // keep your existing statistics logic
             addAnomalyStaticsV1(anomaly.getId());
         }
     }
+
 
     /**
      * Compute status of a single anomaly based on the group of linked consumers.
@@ -3815,7 +3827,7 @@ System.out.println("Get all flagged ");
 
             // ✅ All consumers recycled → WITHDRAWN
             if (recycledCount == total) {
-                return AnomalyStatus.REPORTED; // 7
+                return AnomalyStatus.WITHDRAWN; // 7
             }
 
             // ✅ Nothing improved (all accepted are still inconsistent)
