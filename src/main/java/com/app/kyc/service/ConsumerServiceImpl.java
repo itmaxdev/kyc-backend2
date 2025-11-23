@@ -612,8 +612,8 @@ public class ConsumerServiceImpl implements ConsumerService {
             System.out.println("inconsistentCount "+inconsistentCount);
         } else {
             System.out.println("get all consumers 1");
-            consistentCount   = consumerRepository.countByIsConsistentTrueAndStatus("Accepted");
-            inconsistentCount = consumerRepository.countByIsConsistentFalseAndStatus("Recycled");
+            consistentCount   = consumerRepository.countByIsConsistentTrueAndStatus("Recycled");
+            inconsistentCount = consumerRepository.countByIsConsistentFalseAndStatus("Accepted");
         }
 
         // ACTIVE / INACTIVE counters

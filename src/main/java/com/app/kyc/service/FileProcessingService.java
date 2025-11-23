@@ -989,9 +989,13 @@ public class FileProcessingService {
 
         try (InputStream in = Files.newInputStream(workingCopy);
              Reader reader = new InputStreamReader(in, cs);
-             CSVReader csv = new CSVReaderBuilder(reader)
+           /*  CSVReader csv = new CSVReaderBuilder(reader)
                      .withCSVParser(new CSVParserBuilder().withSeparator(sep).build())
-                     .build()) {
+                     .build()) {*/
+
+            CSVReader csv = new CSVReaderBuilder(reader)
+                    .withCSVParser(new CSVParserBuilder().withSeparator(';').build())
+                    .build()){
 
             String[] row;
             boolean isHeader = true;
@@ -1294,7 +1298,9 @@ public class FileProcessingService {
                         " → id=" + consumer.getId());
                 return consumer;
             } else {
-                System.out.println("New consumer for orangeTransactionId=" + r.orangeTransactionId);
+                System.out.println("New consumer for orangeTransactionId =" + r.orangeTransactionId);
+                System.out.println("New consumer for orangeTransactionId gender=" + r.gender);
+                System.out.println("New consumer for orangeTransactionId status =" + r.status);
                 Consumer consumer = new Consumer();
                 consumer.setOrangeTransactionId(r.orangeTransactionId.trim());
                 return consumer;
@@ -1386,6 +1392,7 @@ public class FileProcessingService {
 
     private void mergeConsumerFields(Consumer consumer, FileProcessingService.RowData r, Timestamp nowTs, Long spId) {
         // Handle MSISDN updates anchored on transaction IDs
+        System.out.println("mergeConsumerFields "+consumer.getGender());
         if (notEmpty(r.vodacomTransactionId) || notEmpty(r.airtelTransactionId ) || notEmpty(r.orangeTransactionId )) {
             if (notEmpty(r.msisdn)) {
                 if (consumer.getMsisdn() == null) {
@@ -1519,6 +1526,8 @@ public class FileProcessingService {
             }
         }
 
+        System.out.println("mergeConsumerFields "+consumer.getGender());
+        System.out.println("mergeConsumerFields with row "+r.gender);
         // Apply other fields only if empty (don’t overwrite existing good data)
         applyIfEmpty(consumer::getFirstName, consumer::setFirstName, r.firstName);
         applyIfEmpty(consumer::getLastName, consumer::setLastName, r.lastName);
@@ -2020,7 +2029,7 @@ public class FileProcessingService {
         return r;
     }
 
-    private RowData mapRowOrange(String[] f, Long spId, Timestamp nowTs) {
+    /*private RowData mapRowOrange(String[] f, Long spId, Timestamp nowTs) {
         RowData r = new RowData();
         r.orangeTransactionId =idx(f, 0);
         r.msisdn              = idx(f, 1);
@@ -2036,6 +2045,32 @@ public class FileProcessingService {
         r.idType =  idx(f, 9);
         r.idNumber =  idx(f, 10);
         r.status   =  idx(f, 11);;
+
+        return r;
+    }*/
+
+    private RowData mapRowOrange(String[] f, Long spId, Timestamp nowTs) {
+        RowData r = new RowData();
+
+        r.orangeTransactionId = idx(f, 0); // numero_contrat
+        r.msisdn              = idx(f, 1); // msisdn
+
+        r.registrationDateStr = idx(f, 2); // date_creation (string)
+        r.createdOnTs         = String.valueOf(nowTs);     // NOT string
+
+        r.lastName            = idx(f, 3); // nom
+        r.firstName           = idx(f, 4); // prenom
+
+        r.gender              = idx(f, 5); // genre
+        r.birthDateStr        = idx(f, 6); // date_naissance
+        r.birthPlace          = idx(f, 7); // lieu_naissance
+        r.address             = idx(f, 8); // adresse
+
+        r.idType              = idx(f, 9);  // type_piece
+        r.idNumber            = idx(f, 10); // numero_piece
+        r.status              = idx(f, 11); // etat (ACTIF / RESILIE)
+
+        r.serviceProviderId   = spId;
 
         return r;
     }
@@ -2109,22 +2144,6 @@ public class FileProcessingService {
 
     }
 
-    private String computeSignature(FileProcessingService.RowData r) {
-        StringBuilder base = new StringBuilder();
-
-        // Core identifiers
-        base.append(safe(r.msisdn, "NO_MSISDN")).append("|")
-                .append(safe(r.firstName, "NO_FNAME")).append("|")
-                .append(safe(r.lastName, "NO_LNAME")).append("|")
-                .append(safe(r.birthDateStr, "NO_DOB")).append("|")
-                .append(safe(String.valueOf(r.serviceProviderId), "NO_SP"));
-
-        // Always append IDs (with placeholders if null)
-        base.append("|").append(safe(r.idNumber, "NO_ID"));
-        base.append("|").append(safe(r.idType, "NO_TYPE"));
-
-        return DigestUtils.sha256Hex(base.toString());
-    }
 
     private String safe(String value, String placeholder) {
         return (value == null || value.trim().isEmpty()) ? placeholder : value.trim();
