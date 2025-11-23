@@ -459,6 +459,8 @@ public class ConsumerServiceImpl implements ConsumerService {
             allCount          = consumerRepository.countByServiceProviderId(spId);
             consistentCount   = consumerRepository.countByIsConsistentTrueAndServiceProvider_IdAndStatus(spId,"Recycled");
             inconsistentCount = consumerRepository.countByIsConsistentFalseAndServiceProvider_IdAndStatus(spId,"Accepted");
+            System.out.println("consistentCount "+consistentCount);
+            System.out.println("inconsistentCount "+inconsistentCount);
         } else {
             allCount          = consumerRepository.count();
             consistentCount   = consumerRepository.countByIsConsistentTrue();
@@ -603,13 +605,15 @@ public class ConsumerServiceImpl implements ConsumerService {
         // Counter calculations
         final long  consistentCount, inconsistentCount;
         if (spId != null) {
+            System.out.println("get all consumers 1");
             consistentCount   = consumerRepository.countByIsConsistentTrueAndServiceProvider_IdAndStatus(spId,"Recycled");
             inconsistentCount = consumerRepository.countByIsConsistentFalseAndServiceProvider_IdAndStatus(spId,"Accepted");
             System.out.println("consistentCount "+consistentCount);
             System.out.println("inconsistentCount "+inconsistentCount);
         } else {
-            consistentCount   = consumerRepository.countByIsConsistentTrue();
-            inconsistentCount = consumerRepository.countByIsConsistentFalse();
+            System.out.println("get all consumers 1");
+            consistentCount   = consumerRepository.countByIsConsistentTrueAndStatus("Accepted");
+            inconsistentCount = consumerRepository.countByIsConsistentFalseAndStatus("Recycled");
         }
 
         // ACTIVE / INACTIVE counters

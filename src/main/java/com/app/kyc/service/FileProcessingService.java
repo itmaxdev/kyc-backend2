@@ -373,7 +373,7 @@ public class FileProcessingService {
 
         if (success) {
             log.info("successs: processed={}");
-            runCheckConsumerForOrangeAsync(sp);
+            runCheckConsumerAsync(sp);
         } else {
             log.info("Failure: processed={}");
         }

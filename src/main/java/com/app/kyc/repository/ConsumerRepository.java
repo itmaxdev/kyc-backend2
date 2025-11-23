@@ -144,7 +144,8 @@ public interface ConsumerRepository
 
     long countByIsConsistentTrue();
     long countByIsConsistentFalse();
-
+    long countByIsConsistentTrueAndStatus(String status);
+    long countByIsConsistentFalseAndStatus(String status);
 
     @Transactional
     void deleteByServiceProvider(ServiceProvider serviceProvider);
