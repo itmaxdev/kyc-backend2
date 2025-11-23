@@ -126,8 +126,13 @@ public class FileProcessingTask {
                     }
                     break;
                 case "Orange":
-                    //fileProcessingService.processFileOrange(file, operator);
-                    fileProcessingService.processFileOrangeForPerormanceCheck(file, operator);
+                    if (existingAnomalyCount == 0) {
+                        log.info("First CSV upload detected for operator {} — leaving all anomaly statuses as 0 (Open).",
+                                operator);
+                        fileProcessingService.processFileOrangeForPerormanceCheck(file, operator);
+                    }else{
+                        fileProcessingService.processFileOrange(file, operator);
+                    }
                     break;
                 case "Africell":
                     // make sure this exists; if not, add it or map to a generic handler

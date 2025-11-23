@@ -297,6 +297,94 @@ public class FileProcessingService {
     }
 
 
+    public void processFileOrange(Path filePath, String operator) throws IOException {
+        long t0 = System.currentTimeMillis();
+        log.info("ENTER processFileOrange: {} | operator={}", filePath, operator);
+
+        if (Files.notExists(filePath) || !Files.isRegularFile(filePath)) {
+            log.warn("File not found or not a regular file: {}", filePath);
+            return;
+        }
+
+        ServiceProvider sp = serviceProviderRepository.findByNameIgnoreCase(operator)
+                .orElseThrow(() -> new IllegalArgumentException("Unknown operator: " + operator));
+        Long spId = sp.getId();
+        log.info("Resolved ServiceProvider id={}, name={}", spId, sp.getName());
+
+
+        ServiceProvider sp1 = serviceProviderRepository.findById(spId).orElse(null);
+        if (sp1 == null || sp1.isDeleted()) {
+            log.info("Skipping file processing for deleted service provider: {}", spId);
+            return; // Stop processing
+        }
+
+        ProcessedFile fileLog = new ProcessedFile();
+        fileLog.setFilename(filePath.getFileName().toString());
+        fileLog.setStatus(FileStatus.IN_PROGRESS);
+        fileLog.setStartedAt(LocalDateTime.now());
+        fileLog.setRecordsProcessed(0);
+        processedFileRepository.save(fileLog);
+
+        Path workingCopy = null;
+        boolean success = false;
+        int totalProcessed = 0;
+
+        try {
+            workingCopy = Files.copy(filePath, Files.createTempFile("kyc-working", ".work"),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+
+            Charset cs = Charset.forName("UTF-8");
+            char sep = ',';
+
+            // ✅ call the transactional bean (ensures @Transactional works)
+            //totalProcessed = orangeIngestionService.ingestFileTxOrange(workingCopy, spId, sep, cs);
+            //success = true;
+
+            totalProcessed = ingestFileTxOrange(workingCopy, spId, sep, cs);
+            success = true;
+
+
+            fileLog.setRecordsProcessed(totalProcessed);
+            fileLog.setStatus(FileStatus.COMPLETE);
+            fileLog.setCompletedAt(LocalDateTime.now());
+        } catch (Exception ex) {
+            log.error("Ingest failed for {}: {}", filePath, ex.toString(), ex);
+            fileLog.setStatus(FileStatus.FAILED);
+            fileLog.setLastError(ex.getMessage());
+        } finally {
+            fileLog.setLastUpdated(LocalDateTime.now());
+            processedFileRepository.save(fileLog);
+
+            if (workingCopy != null) {
+                try { Files.deleteIfExists(workingCopy); }
+                catch (IOException ignore) {}
+            }
+        }
+
+        try {
+            moveOriginal(filePath, success ? "processed" : "failed", fileLog);
+        } catch (IOException moveEx) {
+            log.error("Final move failed for {}: {}", filePath, moveEx.toString(), moveEx);
+            fileLog.setStatus(FileStatus.FAILED);
+            fileLog.setLastError("Move failed: " + moveEx.getMessage());
+            fileLog.setLastUpdated(LocalDateTime.now());
+            processedFileRepository.save(fileLog);
+        }
+
+        if (success) {
+            log.info("successs: processed={}");
+            runCheckConsumerForOrangeAsync(sp);
+        } else {
+            log.info("Failure: processed={}");
+        }
+
+        log.info("DONE: processed={} in {} ms", totalProcessed, (System.currentTimeMillis() - t0));
+
+
+        log.info("DONE: processed={} in {} ms", totalProcessed, (System.currentTimeMillis() - t0));
+    }
+
+
     public void processFileVodacomForPerformance(Path filePath, String operator) throws IOException {
 
         long t0 = System.currentTimeMillis();
@@ -466,7 +554,23 @@ public class FileProcessingService {
 
         consumerRepository.loadOrangeCsv(absolutePath);
         msisdnTrackingRepository.insertRecycledMsisdns();
-        log.info("✅ Successfully imported Orange consumers from {}", absolutePath);
+        log.info(" Successfully imported Orange consumers from {}", absolutePath);
+
+
+        List<Consumer> existing = consumerRepository.findAll();
+        for(Consumer consumer : existing){
+            String normalized = normalizeStatus(consumer.getStatus());
+
+            log.info("Raw={} | Normalized={}", consumer.getStatus(), normalized);
+
+            if ("ACTIF".equalsIgnoreCase(normalized)) {
+                consumer.setStatus("accepted");
+            } else {
+                consumer.setStatus("recycled");
+            }
+
+            consumerServiceImpl.updateConsistencyFlag(consumer);
+        }
 
 
         ProcessedFile fileLog = new ProcessedFile();
@@ -503,81 +607,6 @@ public class FileProcessingService {
         log.info("DONE: processed={} in {} ms", totalProcessed, (System.currentTimeMillis() - t0));
     }
 
-    public void processFileOrange(Path filePath, String operator) throws IOException {
-        long t0 = System.currentTimeMillis();
-        log.info("ENTER processFileOrange: {} | operator={}", filePath, operator);
-
-        if (Files.notExists(filePath) || !Files.isRegularFile(filePath)) {
-            log.warn("File not found or not a regular file: {}", filePath);
-            return;
-        }
-
-        ServiceProvider sp = serviceProviderRepository.findByNameIgnoreCase(operator)
-                .orElseThrow(() -> new IllegalArgumentException("Unknown operator: " + operator));
-        Long spId = sp.getId();
-        log.info("Resolved ServiceProvider id={}, name={}", spId, sp.getName());
-
-        ProcessedFile fileLog = new ProcessedFile();
-        fileLog.setFilename(filePath.getFileName().toString());
-        fileLog.setStatus(FileStatus.IN_PROGRESS);
-        fileLog.setStartedAt(LocalDateTime.now());
-        fileLog.setRecordsProcessed(0);
-        processedFileRepository.save(fileLog);
-
-        Path workingCopy = null;
-        boolean success = false;
-        int totalProcessed = 0;
-
-        try {
-            workingCopy = Files.copy(filePath, Files.createTempFile("kyc-working", ".work"),
-                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-
-            Charset cs = Charset.forName("UTF-8");
-            char sep = ',';
-
-            // ✅ call the transactional bean (ensures @Transactional works)
-            totalProcessed = orangeIngestionService.ingestFileTxOrange(workingCopy, spId, sep, cs);
-            success = true;
-
-            fileLog.setRecordsProcessed(totalProcessed);
-            fileLog.setStatus(FileStatus.COMPLETE);
-            fileLog.setCompletedAt(LocalDateTime.now());
-        } catch (Exception ex) {
-            log.error("Ingest failed for {}: {}", filePath, ex.toString(), ex);
-            fileLog.setStatus(FileStatus.FAILED);
-            fileLog.setLastError(ex.getMessage());
-        } finally {
-            fileLog.setLastUpdated(LocalDateTime.now());
-            processedFileRepository.save(fileLog);
-
-            if (workingCopy != null) {
-                try { Files.deleteIfExists(workingCopy); }
-                catch (IOException ignore) {}
-            }
-        }
-
-        try {
-            moveOriginal(filePath, success ? "processed" : "failed", fileLog);
-        } catch (IOException moveEx) {
-            log.error("Final move failed for {}: {}", filePath, moveEx.toString(), moveEx);
-            fileLog.setStatus(FileStatus.FAILED);
-            fileLog.setLastError("Move failed: " + moveEx.getMessage());
-            fileLog.setLastUpdated(LocalDateTime.now());
-            processedFileRepository.save(fileLog);
-        }
-
-        if (success) {
-            log.info("successs: processed={}");
-            runCheckConsumerForOrangeAsync(sp);
-        } else {
-            log.info("Failure: processed={}");
-        }
-
-        log.info("DONE: processed={} in {} ms", totalProcessed, (System.currentTimeMillis() - t0));
-
-
-        log.info("DONE: processed={} in {} ms", totalProcessed, (System.currentTimeMillis() - t0));
-    }
 
 
     public void processFileAfricell(Path filePath, String operator) throws IOException {
@@ -808,6 +837,48 @@ public class FileProcessingService {
 
 
 
+
+
+
+
+
+    private int flushBatch(List<Consumer> toSave, List<Consumer> duplicatesToSoftDelete) throws InterruptedException {
+        if (!duplicatesToSoftDelete.isEmpty()) {
+            // Do soft deletes in separate transaction
+            for (Consumer dup : duplicatesToSoftDelete) {
+                softDeleteConsumer(dup);
+            }
+            duplicatesToSoftDelete.clear();
+        }
+
+        if (toSave.isEmpty()) return 0;
+
+        int retries = 3;
+        while (true) {
+            try {
+                consumerRepository.saveAll(toSave);
+                int size = toSave.size();
+                toSave.clear();
+                return size;
+            } catch (PessimisticLockingFailureException e) {
+                if (--retries > 0) {
+                    log.warn("Lock wait timeout on batch save, retrying… attempts left={}", retries);
+                    Thread.sleep(500L);
+                } else {
+                    log.error("Batch save failed permanently after retries", e);
+                    throw e;
+                }
+            }
+        }
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void softDeleteConsumer(Consumer dup) {
+        dup.setConsumerStatus(0);
+        consumerRepository.save(dup);
+    }
+
+
     @Transactional(rollbackFor = Exception.class)
     protected int ingestFileTxAirtel(Path workingCopy, Long spId, char sep, Charset cs) throws Exception {
         final Timestamp nowTs = new Timestamp(System.currentTimeMillis());
@@ -903,181 +974,6 @@ public class FileProcessingService {
         return total;
     }
 
-
-
-
-    private int flushBatch(List<Consumer> toSave, List<Consumer> duplicatesToSoftDelete) throws InterruptedException {
-        if (!duplicatesToSoftDelete.isEmpty()) {
-            // Do soft deletes in separate transaction
-            for (Consumer dup : duplicatesToSoftDelete) {
-                softDeleteConsumer(dup);
-            }
-            duplicatesToSoftDelete.clear();
-        }
-
-        if (toSave.isEmpty()) return 0;
-
-        int retries = 3;
-        while (true) {
-            try {
-                consumerRepository.saveAll(toSave);
-                int size = toSave.size();
-                toSave.clear();
-                return size;
-            } catch (PessimisticLockingFailureException e) {
-                if (--retries > 0) {
-                    log.warn("Lock wait timeout on batch save, retrying… attempts left={}", retries);
-                    Thread.sleep(500L);
-                } else {
-                    log.error("Batch save failed permanently after retries", e);
-                    throw e;
-                }
-            }
-        }
-    }
-
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void softDeleteConsumer(Consumer dup) {
-        dup.setConsumerStatus(0);
-        consumerRepository.save(dup);
-    }
-
-
-    /*@Transactional(rollbackFor = Exception.class)
-    protected int ingestFileTxOrange(Path workingCopy, Long spId, char sep, Charset cs) throws Exception {
-        final Timestamp nowTs = new Timestamp(System.currentTimeMillis());
-        int total = 0;
-
-        // 🔹 Track per-vendor/date counters
-        Map<String, AtomicInteger> vendorCounters = new HashMap<>();
-        SimpleDateFormat df = new SimpleDateFormat("ddMMyyyy");
-
-        try (InputStream in = Files.newInputStream(workingCopy);
-             Reader reader = new InputStreamReader(in, cs);
-             CSVReader csv = new CSVReaderBuilder(reader)
-                     .withCSVParser(new CSVParserBuilder().withSeparator(sep).build())
-                     .build()) {
-
-            String[] row;
-            boolean isHeader = true;
-            List<Consumer> toSave = new ArrayList<>();
-
-            while ((row = csv.readNext()) != null) {
-                stripBomInPlace(row);
-
-                if (isHeader) {
-                    isHeader = false;
-                    log.info("Header column count: {}", row.length);
-                    continue;
-                }
-                if (row.length == 0) continue;
-
-                RowData r = mapRowOrange(row, spId, nowTs);
-                if (r == null) continue;
-
-                // 🔹 Normalize & clip
-                r.msisdn              = normalizeMsisdnAllowNull(r.msisdn);
-                r.firstName           = clip(r.firstName, 100);
-                r.middleName          = clip(r.middleName, 255);
-                r.lastName            = clip(r.lastName, 45);
-                r.gender              = clip(r.gender, 45);
-                r.birthDateStr        = clip(r.birthDateStr, 45);
-                r.birthPlace          = clip(r.birthPlace, 45);
-                r.alt1                = clip(r.alt1, 255);
-                r.alt2                = clip(r.alt2, 255);
-                r.idType              = clip(r.idType, 45);
-                r.idNumber            = clip(r.idNumber, 45);
-                r.registrationDateStr = clip(r.registrationDateStr, 50);
-
-                // 🔹 Try to match existing consumer using spec
-                Specification<Consumer> spec = ConsumerSpecifications.matchConsumer(r);
-                List<Consumer> matches = consumerRepository.findAll(spec);
-
-                Consumer consumer;
-                if (!matches.isEmpty()) {
-                    consumer = matches.get(0);
-                    // ✅ Merge fields only if missing
-                    if (isEmpty(consumer.getMsisdn()) && notEmpty(r.msisdn)) consumer.setMsisdn(r.msisdn);
-                    if (isEmpty(consumer.getFirstName()) && notEmpty(r.firstName)) consumer.setFirstName(r.firstName);
-                    if (isEmpty(consumer.getLastName()) && notEmpty(r.lastName)) consumer.setLastName(r.lastName);
-                    if (isEmpty(consumer.getIdentificationNumber()) && notEmpty(r.idNumber)) consumer.setIdentificationNumber(r.idNumber);
-                    if (isEmpty(consumer.getIdentificationType()) && notEmpty(r.idType)) consumer.setIdentificationType(r.idType);
-                    if (isEmpty(consumer.getGender()) && notEmpty(r.gender)) consumer.setGender(r.gender);
-                    if (isEmpty(consumer.getBirthPlace()) && notEmpty(r.birthPlace)) consumer.setBirthPlace(r.birthPlace);
-                    if (isEmpty(consumer.getAddress()) && notEmpty(r.address)) consumer.setAddress(r.address);
-                    if (isEmpty(consumer.getRegistrationDate()) && notEmpty(r.registrationDateStr)) consumer.setRegistrationDate(r.registrationDateStr);
-                    if (isEmpty(consumer.getBirthDate()) && notEmpty(r.birthDateStr)) consumer.setBirthDate(r.birthDateStr);
-                    if (isEmpty(consumer.getAlternateMsisdn1()) && notEmpty(r.alt1)) consumer.setAlternateMsisdn1(r.alt1);
-                    if (isEmpty(consumer.getAlternateMsisdn2()) && notEmpty(r.alt2)) consumer.setAlternateMsisdn2(r.alt2);
-                    if (isEmpty(consumer.getMiddleName()) && notEmpty(r.middleName)) consumer.setMiddleName(r.middleName);
-
-                } else {
-                    // ✅ New consumer
-                    consumer = new Consumer();
-                    consumer.setFirstName(r.firstName);
-                    consumer.setLastName(r.lastName);
-                    consumer.setIdentificationNumber(r.idNumber);
-                    consumer.setIdentificationType(r.idType);
-                    consumer.setMsisdn(r.msisdn);
-                    consumer.setGender(r.gender);
-                    consumer.setBirthPlace(r.birthPlace);
-                    consumer.setAddress(r.address);
-                    consumer.setRegistrationDate(r.registrationDateStr);
-                    consumer.setBirthDate(r.birthDateStr);
-                    consumer.setMiddleName(r.middleName);
-                    consumer.setAlternateMsisdn1(r.alt1);
-                    consumer.setAlternateMsisdn2(r.alt2);
-
-                    ServiceProvider spRef = new ServiceProvider();
-                    spRef.setId(spId);
-                    consumer.setServiceProvider(spRef);
-
-                    consumer.setCreatedOn(nowTs.toString());
-                }
-
-                // 🔹 Apply consistency check
-                consumerServiceImpl.updateConsistencyFlag(consumer);
-
-                // 🔹 Stamp consistentOn (if not using @PreUpdate hook)
-                if (Boolean.TRUE.equals(consumer.getIsConsistent())) {
-                    if (consumer.getConsistentOn() == null || "N/A".equalsIgnoreCase(consumer.getConsistentOn())) {
-                        consumer.setConsistentOn(LocalDate.now().toString());
-                    }
-                } else {
-                    consumer.setConsistentOn("N/A");
-                }
-
-                //  Assign vendorCode (per vendor/date, sequential)
-                String vendor = getServiceProviderName(spId); // helper method or fetch from DB
-                String date   = df.format(nowTs);
-                String key    = vendor + "-" + date;
-
-                vendorCounters.putIfAbsent(key, new AtomicInteger(1));
-                int seq = vendorCounters.get(key).getAndIncrement();
-
-                consumer.setVendorCode(vendor + "-" + date + "-" + seq);
-
-
-                toSave.add(consumer);
-
-                // 🔹 Batch flush
-                if (toSave.size() >= BATCH_SIZE) {
-                    consumerRepository.saveAll(toSave);
-                    total += toSave.size();
-                    toSave.clear();
-                }
-            }
-
-            if (!toSave.isEmpty()) {
-                consumerRepository.saveAll(toSave);
-                total += toSave.size();
-            }
-        }
-
-        return total;
-    }*/
-
-
     @Transactional(rollbackFor = Exception.class)
     protected int ingestFileTxOrange(Path workingCopy, Long spId, char sep, Charset cs) throws Exception {
         final Timestamp nowTs = new Timestamp(System.currentTimeMillis());
@@ -1085,6 +981,11 @@ public class FileProcessingService {
 
         Map<String, AtomicInteger> vendorCounters = new HashMap<>();
         SimpleDateFormat df = new SimpleDateFormat("ddMMyyyy");
+
+        List<Consumer> toSave = new ArrayList<>();
+        List<Consumer> duplicatesToSoftDelete = new ArrayList<>();
+        // 🔹 Track per-vendor/date counters
+
 
         try (InputStream in = Files.newInputStream(workingCopy);
              Reader reader = new InputStreamReader(in, cs);
@@ -1121,49 +1022,49 @@ public class FileProcessingService {
                 r.alt2 = clip(r.alt2, 255);
                 r.idType = clip(r.idType, 45);
                 r.idNumber = clip(r.idNumber, 45);
-                r.registrationDateStr = clip(r.registrationDateStr, 50);
+                r.orangeTransactionId = clip(r.orangeTransactionId, 50);
 
-                // --- Find or create consumer ---
-                Specification<Consumer> spec = ConsumerSpecifications.matchConsumer(r);
-                List<Consumer> matches = consumerRepository.findAll(spec);
+                // 🔹 Deduplication-aware match
+                Consumer consumer = findOrMergeConsumer(r, duplicatesToSoftDelete);
 
-                Consumer consumer;
-                if (!matches.isEmpty()) {
-                    consumer = matches.get(0);
-                    mergeIfEmpty(consumer, r); // helper (see below)
-                } else {
-                    consumer = buildNewConsumer(r, spId, nowTs);
-                }
+                // 🔹 Merge new row data into consumer
+                mergeConsumerFields(consumer, r, nowTs, spId);
 
-                // --- Update consistency ---
+                // 🔹 Re-check consistency
                 consumerServiceImpl.updateConsistencyFlag(consumer);
 
-                consumer.setConsistentOn(Boolean.TRUE.equals(consumer.getIsConsistent())
-                        ? LocalDate.now().toString()
-                        : "N/A");
+                // 🔹 Stamp consistentOn (if entity hook not used)
+                if (Boolean.TRUE.equals(consumer.getIsConsistent())) {
+                    if (consumer.getConsistentOn() == null || "N/A".equalsIgnoreCase(consumer.getConsistentOn())) {
+                        consumer.setConsistentOn(LocalDate.now().toString());
+                    }
+                } else {
+                    consumer.setConsistentOn("N/A");
+                }
 
-                // --- Vendor code sequence ---
-                String vendor = getServiceProviderName(spId);
-                String date = df.format(nowTs);
-                String key = vendor + "-" + date;
+                //  Assign vendorCode (per vendor/date, sequential)
+                String vendor = getServiceProviderName(spId); // helper method or fetch from DB
+                String date   = df.format(nowTs);
+                String key    = vendor + "-" + date;
+
                 vendorCounters.putIfAbsent(key, new AtomicInteger(1));
                 int seq = vendorCounters.get(key).getAndIncrement();
+
                 consumer.setVendorCode(vendor + "-" + date + "-" + seq);
 
-                batch.add(consumer);
 
-                // --- Commit every 1000 ---
-                if (batch.size() >= 1000) {
-                    flushAndCommitBatch(batch);
-                    total += batch.size();
-                    batch.clear();
+                toSave.add(consumer);
+
+                // 🔹 Batch flush (smaller for Airtel)
+                if (toSave.size() >= BATCH_SIZE) {
+                    total += flushBatch(toSave, duplicatesToSoftDelete);
                 }
             }
 
-            if (!batch.isEmpty()) {
-                flushAndCommitBatch(batch);
-                total += batch.size();
+            if (!toSave.isEmpty()) {
+                total += flushBatch(toSave, duplicatesToSoftDelete);
             }
+
         }
 
         return total;
@@ -1385,6 +1286,21 @@ public class FileProcessingService {
             }
         }
 
+        if (notEmpty(r.orangeTransactionId)) {
+            Optional<Consumer> existing = consumerRepository.findByOrangeTransactionId(r.orangeTransactionId.trim());
+            if (existing.isPresent()) {
+                Consumer consumer = existing.get();
+                System.out.println("Found existing consumer by orangeTransactionId=" + r.orangeTransactionId +
+                        " → id=" + consumer.getId());
+                return consumer;
+            } else {
+                System.out.println("New consumer for orangeTransactionId=" + r.orangeTransactionId);
+                Consumer consumer = new Consumer();
+                consumer.setOrangeTransactionId(r.orangeTransactionId.trim());
+                return consumer;
+            }
+        }
+
         // 3. Exact match fallback: ID + ID Type + MSISDN
         if (notEmpty(r.idNumber) && notEmpty(r.idType) && notEmpty(r.msisdn)) {
             List<Consumer> exactMatches = consumerRepository.findAll((root, query, cb) -> cb.and(
@@ -1470,7 +1386,7 @@ public class FileProcessingService {
 
     private void mergeConsumerFields(Consumer consumer, FileProcessingService.RowData r, Timestamp nowTs, Long spId) {
         // Handle MSISDN updates anchored on transaction IDs
-        if (notEmpty(r.vodacomTransactionId) || notEmpty(r.airtelTransactionId)) {
+        if (notEmpty(r.vodacomTransactionId) || notEmpty(r.airtelTransactionId ) || notEmpty(r.orangeTransactionId )) {
             if (notEmpty(r.msisdn)) {
                 if (consumer.getMsisdn() == null) {
                     System.out.println("Setting MSISDN for consumer id=" + consumer.getId() + " → " + r.msisdn);
@@ -1562,6 +1478,23 @@ public class FileProcessingService {
             }
         }
 
+
+        if (notEmpty(r.orangeTransactionId)) {
+            if (notEmpty(r.status)) {
+                System.out.println("Setting getStatus for Orange consumer id=" + consumer.getId() + " → " + r.status);
+                String s = r.status.trim().toLowerCase();
+
+                if (s.equalsIgnoreCase("ACTIF") || s.equals("1")) {
+                    consumer.setStatus("accepted");
+                } else if (s.equalsIgnoreCase("RESILIE") || s.equals("0")) {
+                    consumer.setStatus("recycled");
+                } else {
+                    // fallback if unknown
+                    consumer.setStatus("recycled");
+                }
+            }
+        }
+
         if (notEmpty(r.vodacomTransactionId)) {
             if (consumer.getVodacomTransactionId() == null ||
                     !consumer.getVodacomTransactionId().equals(r.vodacomTransactionId)) {
@@ -1575,6 +1508,14 @@ public class FileProcessingService {
                     !consumer.getAirtelTransactionId().equals(r.airtelTransactionId)) {
                 consumer.setAirtelTransactionId(r.airtelTransactionId.trim());
                 System.out.println("Updated Airtel TRX_ID → " + r.airtelTransactionId);
+            }
+        }
+
+        if (notEmpty(r.orangeTransactionId)) {
+            if (consumer.getOrangeTransactionId() == null ||
+                    !consumer.getOrangeTransactionId().equals(r.orangeTransactionId)) {
+                consumer.setOrangeTransactionId(r.orangeTransactionId.trim());
+                System.out.println("Updated Orange TRX_ID → " + r.orangeTransactionId);
             }
         }
 
@@ -1840,7 +1781,7 @@ public class FileProcessingService {
     }
 
     private void runCheckConsumerForOrangeAsync(ServiceProvider sp) {
-        log.info("Preparing to run checkConsumer for operator {}", sp.getName());
+        log.info("Preparing to run runCheckConsumerForAirtelAsync for operator {}", sp.getName());
         Long spId = sp.getId();
 
         // Prevent concurrent runs for the same operator
@@ -1861,31 +1802,42 @@ public class FileProcessingService {
                     return;
                 }
 
-                // 2. Filter only active consumers (estat = ACTIF)
+
+
+                log.info("Starting checkConsumer for operator {}", sp.getName());
+
+
                 List<Consumer> activeConsumers = allConsumers.stream()
-                        .filter(c -> "ACTIF".equalsIgnoreCase(c.getStatus()))
+                        .filter(c -> c.getStatus() != null && "accepted".equalsIgnoreCase(c.getStatus().trim()))
                         .collect(Collectors.toList());
 
-                // 3. Log inactive consumers
-                allConsumers.stream()
-                        .filter(c -> !"ACTIF".equalsIgnoreCase(c.getStatus()))
-                        .forEach(c ->
-                                log.info("Skipping inactive consumer: status='{}' | TransactionId={}",
-                                        c.getStatus(), c.getOrangeTransactionId())
-                        );
 
-                // 4. Process only active consumers
+                log.info("activeConsumers size = {}", activeConsumers.size());
+
+
+                allConsumers.stream()
+                        .filter(c -> c.getStatus() == null || !"accepted".equalsIgnoreCase(c.getStatus().trim()))
+                        .forEach(c -> log.info(
+                                "Skipping inactive consumer: status='{}' | transactionId={}",
+                                c.getStatus(),
+                                c.getAirtelTransactionId()
+                        ));
+
+
+                log.info("Total consumers received = {}", allConsumers.size());
+
+
                 if (!activeConsumers.isEmpty()) {
+
                     log.info("Found {} active consumers for operator {}", activeConsumers.size(), sp.getName());
 
                     User user = userService.getUserByEmail("cadmin@itmaxglobal.com");
 
                     consumerServiceImpl.checkConsumerForOrange(activeConsumers, user, sp);
-                    consumerServiceImpl.updateAnomalyStatusForConsumers(activeConsumers, user, sp);
 
                     log.info("checkConsumer completed successfully for operator {}", sp.getName());
                 } else {
-                    log.info("No active (ACTIF) consumers found for operator {}", sp.getName());
+                    log.info("No active consumers found for operator {}", sp.getName());
                 }
 
             } catch (Exception ex) {
@@ -2070,18 +2022,21 @@ public class FileProcessingService {
 
     private RowData mapRowOrange(String[] f, Long spId, Timestamp nowTs) {
         RowData r = new RowData();
-        r.msisdn              = idx(f, 0);
-        r.registrationDateStr = idx(f, 1);
-        r.firstName           = idx(f, 3);
-        r.lastName            = idx(f, 2);
-        r.gender              = idx(f, 4);
-        r.address             = idx(f, 7);
-        r.createdOnTs         =  idx(f, 1);
-        r.birthDateStr        = idx(f, 5);
-        r.birthPlace          = idx(f, 6);
-        r.idType =  idx(f, 8);
-        r.idNumber =  idx(f, 9);
-        r.serviceProviderId   = spId;
+        r.orangeTransactionId =idx(f, 0);
+        r.msisdn              = idx(f, 1);
+        r.createdOnTs         =  idx(f, 2);
+        r.middleName           = idx(f, 3);
+        r.firstName            = idx(f, 4);
+
+        r.gender              = idx(f, 5);
+        r.birthDateStr        = idx(f, 6);
+        r.birthPlace          = idx(f, 7);
+        r.address             = idx(f, 8);
+
+        r.idType =  idx(f, 9);
+        r.idNumber =  idx(f, 10);
+        r.status   =  idx(f, 11);;
+
         return r;
     }
 
@@ -2147,6 +2102,7 @@ public class FileProcessingService {
         public String vodacomTransactionId;
         public String airtelTransactionId;
 
+        public String orangeTransactionId;
         public String status;
 
 
