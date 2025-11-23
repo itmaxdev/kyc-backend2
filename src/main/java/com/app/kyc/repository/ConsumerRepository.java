@@ -324,8 +324,9 @@ public interface ConsumerRepository
     boolean existsByMsisdn(String msisdn);
 
     long countByIsConsistentTrueAndServiceProvider_Id(Long serviceProviderId);
+    long countByIsConsistentTrueAndServiceProvider_IdAndStatus(Long serviceProviderId,String status);
     long countByIsConsistentFalseAndServiceProvider_Id(Long serviceProviderId);
-
+    long countByIsConsistentFalseAndServiceProvider_IdAndStatus(Long serviceProviderId,String status);
     Page<Consumer> findByIsConsistentTrueAndConsumerStatusIn(
             Pageable pageable, Collection<Integer> statuses);
 

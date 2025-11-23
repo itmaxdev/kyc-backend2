@@ -457,8 +457,8 @@ public class ConsumerServiceImpl implements ConsumerService {
         final long allCount, consistentCount, inconsistentCount;
         if (spId != null) {
             allCount          = consumerRepository.countByServiceProviderId(spId);
-            consistentCount   = consumerRepository.countByIsConsistentTrueAndServiceProvider_Id(spId);
-            inconsistentCount = consumerRepository.countByIsConsistentFalseAndServiceProvider_Id(spId);
+            consistentCount   = consumerRepository.countByIsConsistentTrueAndServiceProvider_IdAndStatus(spId,"Recycled");
+            inconsistentCount = consumerRepository.countByIsConsistentFalseAndServiceProvider_IdAndStatus(spId,"Accepted");
         } else {
             allCount          = consumerRepository.count();
             consistentCount   = consumerRepository.countByIsConsistentTrue();
@@ -561,6 +561,7 @@ public class ConsumerServiceImpl implements ConsumerService {
     public Map<String, Object> getAllConsumers(String params)
             throws JsonMappingException, JsonProcessingException {
 
+        System.out.println("get all consumers");
         // Pageable setup
         final Pageable requested = Optional.ofNullable(PaginationUtil.getPageable(params))
                 .orElse(PageRequest.of(0, 50));
@@ -600,13 +601,13 @@ public class ConsumerServiceImpl implements ConsumerService {
         final List<Integer> allowedStatuses = Arrays.asList(0, 1);
 
         // Counter calculations
-        final long allCount, consistentCount, inconsistentCount;
+        final long  consistentCount, inconsistentCount;
         if (spId != null) {
-            allCount          = consumerRepository.countByServiceProviderId(spId);
-            consistentCount   = consumerRepository.countByIsConsistentTrueAndServiceProvider_Id(spId);
-            inconsistentCount = consumerRepository.countByIsConsistentFalseAndServiceProvider_Id(spId);
+            consistentCount   = consumerRepository.countByIsConsistentTrueAndServiceProvider_IdAndStatus(spId,"Recycled");
+            inconsistentCount = consumerRepository.countByIsConsistentFalseAndServiceProvider_IdAndStatus(spId,"Accepted");
+            System.out.println("consistentCount "+consistentCount);
+            System.out.println("inconsistentCount "+inconsistentCount);
         } else {
-            allCount          = consumerRepository.count();
             consistentCount   = consumerRepository.countByIsConsistentTrue();
             inconsistentCount = consumerRepository.countByIsConsistentFalse();
         }
