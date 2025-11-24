@@ -3663,43 +3663,83 @@ System.out.println("Get all flagged ");
 
 
 
-
-
-
-
-
     @Transactional
     public void updateAnomalyStatusForConsumers(List<Consumer> newConsumers,
                                                 User user,
                                                 ServiceProvider sp) {
 
         if (newConsumers == null || newConsumers.isEmpty()) {
-            log.info("No consumers found for service provider {}", sp.getName());
+            log.info("No consumers to process for SP {}", sp.getName());
             return;
         }
 
-        // 1) Get all links for these consumers
+        // 🔥 Get all anomaly links for these new consumers
         List<ConsumerAnomaly> consumerAnomalies =
                 consumerAnomalyRepository.findAllByConsumerIn(newConsumers);
 
         if (consumerAnomalies == null || consumerAnomalies.isEmpty()) {
-            log.info("No consumer anomalies found for service provider {}", sp.getName());
+            log.info("No consumer anomalies found for SP {}", sp.getName());
             return;
         }
 
-        // 2) Group by anomaly
+        // 🔥 FIRST RULE:
+        // If a consumer has now become RECYCLED and had REPORTED anomalies → mark them WITHDRAWN
+        for (Consumer consumer : newConsumers) {
+
+            String status = consumer.getStatus();
+            if (status == null || !status.equalsIgnoreCase("recycled")) {
+                continue; // skip non-recycled consumers
+            }
+
+            List<ConsumerAnomaly> links = consumerAnomalyRepository.findAllByConsumer(consumer);
+            if (links == null || links.isEmpty()) continue;
+
+            for (ConsumerAnomaly link : links) {
+                Anomaly anomaly = link.getAnomaly();
+                if (anomaly == null) continue;
+
+                // Only withdraw REPORTED anomalies
+                if (anomaly.getStatus() == AnomalyStatus.REPORTED) {
+                    log.info("WITHDRAW anomaly={} because consumer {} is recycled",
+                            anomaly.getId(), consumer.getId());
+
+                    anomaly.setStatus(AnomalyStatus.WITHDRAWN);
+                    anomaly.setUpdatedOn(new Date());
+                    anomaly.setUpdateBy(user.getFirstName() + " " + user.getLastName());
+                    anomalyRepository.save(anomaly);
+
+                    anomalyTrackingRepository.save(
+                            new AnomalyTracking(
+                                    anomaly,
+                                    new Date(),
+                                    AnomalyStatus.WITHDRAWN,
+                                    "Auto-withdrawn: consumer recycled",
+                                    user.getFirstName() + " " + user.getLastName(),
+                                    new Date()
+                            )
+                    );
+
+                    addAnomalyStaticsV1(anomaly.getId());
+                }
+            }
+        }
+
+        // 🔥 SECOND RULE:
+        // Normal anomaly REPORTED / FULLY RESOLVED / PARTIALLY logic
         Map<Long, List<ConsumerAnomaly>> anomaliesById =
                 consumerAnomalies.stream()
                         .collect(Collectors.groupingBy(ca -> ca.getAnomaly().getId()));
 
-        // 3) Process each anomaly group
         for (Map.Entry<Long, List<ConsumerAnomaly>> entry : anomaliesById.entrySet()) {
 
             Long anomalyId = entry.getKey();
             List<ConsumerAnomaly> links = entry.getValue();
 
             Anomaly anomaly = anomalyRepository.findById(anomalyId).orElse(null);
-            if (anomaly == null) {
+            if (anomaly == null) continue;
+
+            // ⚠️ Skip anomalies already withdrawn due to recycled consumer
+            if (anomaly.getStatus() == AnomalyStatus.WITHDRAWN) {
                 continue;
             }
 
@@ -3713,7 +3753,6 @@ System.out.println("Get all flagged ");
             anomaly.setUpdateBy(user.getFirstName() + " " + user.getLastName());
             anomalyRepository.save(anomaly);
 
-            // Tracking row
             anomalyTrackingRepository.save(
                     new AnomalyTracking(
                             anomaly,
@@ -3725,10 +3764,10 @@ System.out.println("Get all flagged ");
                     )
             );
 
-            // keep your existing statistics logic
             addAnomalyStaticsV1(anomaly.getId());
         }
     }
+
 
     /**
      * Compute status of a single anomaly based on the group of linked consumers.
