@@ -193,10 +193,20 @@ public class DashboardServiceImpl implements DashboardService {
         //numServiceProviders = serviceProviderService.countServiceProvidersByIndustryId(selectedIndustry, startDate, endDate);
 
         //count non-consistent consumers based on selected service provider for selected dates
-        numConsistentConsumers = (int) consumerService.countConsumersByServiceProvidersBetweenDates(serviceProviderIds, startDate, endDate, true, 0);
+        //numConsistentConsumers = (int) consumerService.countConsumersByServiceProvidersBetweenDates(serviceProviderIds, startDate, endDate, true, 0);
 
         //count consistent consumer based on selected service provider for selected dates
-        numNonConsistentConsumers = (int) consumerService.countConsumersByServiceProvidersBetweenDates(serviceProviderIds, startDate, endDate, false, 0);
+        //numNonConsistentConsumers = (int) consumerService.countConsumersByServiceProvidersBetweenDates(serviceProviderIds, startDate, endDate, false, 0);
+
+
+        numConsistentConsumers =
+                (int) consumerService.countConsumersByServiceProvidersBetweenDatesAndStatus(
+                        serviceProviderIds, startDate, endDate, true);   // accepted
+
+        numNonConsistentConsumers =
+                (int) consumerService.countConsumersByServiceProvidersBetweenDatesAndStatus(
+                        serviceProviderIds, startDate, endDate, false);  // recycled
+
 
         //number of subscriptions is equal to sum of all consumers
         numSubscriptions = (int) consumerService.countSubscribersByServiceProvidersBetweenDates(serviceProviderIds, startDate, endDate, 0);
@@ -303,6 +313,7 @@ public class DashboardServiceImpl implements DashboardService {
         
         // 2. Consumers per operator
         List<Object[]> consumersCount = consumerService.getConsumersbyServiceProvider(serviceProviderIds,startDate, endDate);
+        System.out.println("consumersCount is "+consumersCount);
         //Populate anomalies by count for Reported, Resolved, Pending and Withdrawn
 		for (Object[] row : consumersCount) {
 			String operator = (String) row[1];

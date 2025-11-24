@@ -228,6 +228,24 @@ public interface ConsumerRepository
     @Query(value="select count(*) sum from consumers c where c.service_provider_id in :ids and c.registration_date between :createdOnStart and :createdOnEnd and c.consumer_status = :consumerStatus",nativeQuery = true)
     long countSubscribersByServiceProvider_IdInAndRegistrationDateBetweenAndConsumerStatus(Collection<Long> ids, Date createdOnStart, Date createdOnEnd, int consumerStatus);
 
+    @Query(value = """
+    SELECT COUNT(*)
+    FROM consumers c
+    WHERE c.service_provider_id IN (:serviceProviderIds)
+      AND STR_TO_DATE(c.created_on, '%Y-%m-%d %H:%i:%s')
+            BETWEEN :startDate AND :endDate
+      AND (
+            (:isConsistent = true  AND LOWER(c.status) = 'accepted')
+         OR (:isConsistent = false AND LOWER(c.status) = 'recycled')
+      )
+""", nativeQuery = true)
+    long countConsumersByServiceProviderBetweenDatesAndStatus(
+            @Param("serviceProviderIds") Collection<Long> serviceProviderIds,
+            @Param("startDate") Date startDate,
+            @Param("endDate") Date endDate,
+            @Param("isConsistent") boolean isConsistent);
+
+
     long countByServiceProvider_IdInAndRegistrationDateBetweenAndConsumerStatus(Collection<Long> ids, Date createdOnStart, Date createdOnEnd, int consumerStatus);
 
     @Query(value="select CONCAT(YEAR(c.registration_date),'-',MONTH(c.registration_date)) as name, count((c.id)) as value from (select cc.registration_date, cc.id, cc.service_provider_id from consumers cc group by cc.identification_type,cc.identification_number) c where c.service_provider_id in ?1 and c.registration_date between ?2 and ?3 group by name order by c.registration_date",nativeQuery = true)

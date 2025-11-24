@@ -56,7 +56,14 @@ public interface ConsumerService
    
    public long countSubscribersByServiceProvidersBetweenDates(Collection<Long> serviceProvidersIds, Date createdOnStart, Date createdOnEnd, int consumerStatus);
 
-   long countDistinctConsumerByServiceProvidersBetweenDates(Collection<Long> serviceProvidersIds, Date createdOnStart, Date createdOnEnd);
+
+    public long countConsumersByServiceProvidersBetweenDatesAndStatus(
+            Collection<Long> serviceProviderIds,
+            Date createdOnStart,
+            Date createdOnEnd,
+            boolean isConsistent);
+
+    long countDistinctConsumerByServiceProvidersBetweenDates(Collection<Long> serviceProvidersIds, Date createdOnStart, Date createdOnEnd);
 
    List<DashboardObjectInterface> getAndCountConsumersByServiceProviderBetweenDatesGroupByMonthYear(Collection<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd);
    

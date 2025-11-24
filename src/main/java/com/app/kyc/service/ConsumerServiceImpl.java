@@ -850,6 +850,22 @@ public class ConsumerServiceImpl implements ConsumerService {
     }
 
     @Override
+    public long countConsumersByServiceProvidersBetweenDatesAndStatus(
+            Collection<Long> serviceProviderIds,
+            Date createdOnStart,
+            Date createdOnEnd,
+            boolean isConsistent) {
+
+        return consumerRepository.countConsumersByServiceProviderBetweenDatesAndStatus(
+                serviceProviderIds,
+                createdOnStart,
+                createdOnEnd,
+                isConsistent
+        );
+    }
+
+
+    @Override
     public long countDistinctConsumerByServiceProvidersBetweenDates(Collection<Long> serviceProvidersIds, Date createdOnStart, Date createdOnEnd) {
         return consumerRepository.countDistinctByServiceProvider_IdInAndCreatedOnBetween(serviceProvidersIds, createdOnStart, createdOnEnd);
     }
