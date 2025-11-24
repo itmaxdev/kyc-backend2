@@ -222,9 +222,26 @@ public interface ConsumerRepository
     @Query(value="select count(distinct(concat(c.identification_type,c.identification_number))) sum from consumers c where c.service_provider_id in :ids and c.registration_date between :createdOnStart and :createdOnEnd and is_consistent = :isConsistent and c.consumer_status = :consumerStatus",nativeQuery = true)
     long countConsumersByServiceProvider_IdInAndRegistrationDateBetweenAndIsConsistentAndConsumerStatus(Collection<Long> ids, Date createdOnStart, Date createdOnEnd, Boolean isConsistent, int consumerStatus);
 
-    @Query(value="select count(concat(c.id)) sum from consumers c where c.service_provider_id in :ids and c.created_on between :createdOnStart and :createdOnEnd and is_consistent = :isConsistent",nativeQuery = true)
-    long countConsumersByServiceProvider_IdInAndCreatedonDateBetweenAndIsConsistent(Collection<Long> ids, Date createdOnStart, Date createdOnEnd, Boolean isConsistent);
-    
+   /* @Query(value="select count(concat(c.id)) sum from consumers c where c.service_provider_id in :ids and c.created_on between :createdOnStart and :createdOnEnd and is_consistent = :isConsistent and status = :status",nativeQuery = true)
+    long countConsumersByServiceProvider_IdInAndCreatedonDateBetweenAndIsConsistentAndStatus(Collection<Long> ids, Date createdOnStart, Date createdOnEnd, Boolean isConsistent,String status);
+*/
+    @Query(value="""
+    SELECT COUNT(c.id)
+    FROM consumers c
+    WHERE c.service_provider_id IN :ids
+      AND STR_TO_DATE(c.created_on, '%Y-%m-%d %H:%i:%s')
+            BETWEEN :createdOnStart AND :createdOnEnd
+      AND c.is_consistent = :isConsistent
+      AND c.`status` = :status
+""", nativeQuery = true)
+    long countConsumersByServiceProvider_IdInAndCreatedonDateBetweenAndIsConsistentAndStatus(
+            @Param("ids") Collection<Long> ids,
+            @Param("createdOnStart") Date start,
+            @Param("createdOnEnd") Date end,
+            @Param("isConsistent") int isConsistent,
+            @Param("status") String status);
+
+
     @Query(value="select count(*) sum from consumers c where c.service_provider_id in :ids and c.registration_date between :createdOnStart and :createdOnEnd and c.consumer_status = :consumerStatus",nativeQuery = true)
     long countSubscribersByServiceProvider_IdInAndRegistrationDateBetweenAndConsumerStatus(Collection<Long> ids, Date createdOnStart, Date createdOnEnd, int consumerStatus);
 
@@ -262,11 +279,19 @@ public interface ConsumerRepository
             "where c.serviceProvider.id in ?1 and c.registrationDate between ?2 and ?3 and c.consumerStatus = ?4 group by name order by name")
     List<DashboardObjectInterface> countDistinctByServiceProvider_IdInAndCreatedOnBetweenGroupByYearMonthDate(Collection<Long> ids, Date createdOnStart, Date createdOnEnd, int consumerStatus);
 
-    @Query(value = "SELECT COUNT(*) FROM consumers c where c.service_provider_id IN (?1)"
-    		+ "AND STR_TO_DATE(c.created_on, '%Y-%m-%d') "
-    		+ "BETWEEN STR_TO_DATE(?2, '%Y-%m-%d') "
-    		+ "AND STR_TO_DATE(?3, '%Y-%m-%d')", nativeQuery = true)
-    long getTotalConsumers(Collection<Long> ids, Date createdOnStart, Date createdOnEnd);
+    @Query(value = """
+    SELECT COUNT(*) 
+    FROM consumers c
+    WHERE c.service_provider_id IN (?1)
+      AND DATE(STR_TO_DATE(c.created_on, '%Y-%m-%d %H:%i:%s'))
+            BETWEEN DATE(?2) AND DATE(?3)
+      AND c.`status` = ?4
+""", nativeQuery = true)
+    long getTotalConsumersAndStatus(
+            Collection<Long> ids,
+            Date createdOnStart,
+            Date createdOnEnd,
+            String status);
 
     @Query(value = "SELECT sp.name AS operatorName, COUNT(c.id) AS total " +
             "FROM consumers c " +

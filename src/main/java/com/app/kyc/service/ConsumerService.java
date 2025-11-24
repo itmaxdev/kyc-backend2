@@ -52,7 +52,7 @@ public interface ConsumerService
 
    List<DashboardObjectInterface> getAndCountDistinctConsumersGroupedByServiceProviderId(List<Long> serviceProvidersIdList, Date start, Date end);
 
-   public long countConsumersByServiceProvidersBetweenDates(Collection<Long> serviceProvidersIds, Date createdOnStart, Date createdOnEnd, boolean isConsistent, int consumerStatus);
+   public long countConsumersByServiceProvidersBetweenDatesAndStatus(Collection<Long> serviceProvidersIds, Date createdOnStart, Date createdOnEnd, int isConsistent, int consumerStatus,String status);
    
    public long countSubscribersByServiceProvidersBetweenDates(Collection<Long> serviceProvidersIds, Date createdOnStart, Date createdOnEnd, int consumerStatus);
 
@@ -73,7 +73,7 @@ public interface ConsumerService
    
    List<DashboardObjectInterface> getAndCountDistinctConsumersByServiceProviderBetweenDatesGroupByDateMonthYear(Collection<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd, int consumerStatus);
 
-  long getTotalConsumers(Collection<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd);
+  long getTotalConsumersAndStatus(Collection<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd,String status);
 
    List<Object[]> getConsumersPerOperator(Collection<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd);
 

@@ -193,20 +193,20 @@ public class DashboardServiceImpl implements DashboardService {
         //numServiceProviders = serviceProviderService.countServiceProvidersByIndustryId(selectedIndustry, startDate, endDate);
 
         //count non-consistent consumers based on selected service provider for selected dates
-        //numConsistentConsumers = (int) consumerService.countConsumersByServiceProvidersBetweenDates(serviceProviderIds, startDate, endDate, true, 0);
+        numConsistentConsumers = (int) consumerService.countConsumersByServiceProvidersBetweenDatesAndStatus(serviceProviderIds, startDate, endDate, 1, 0,"accepted");
 
         //count consistent consumer based on selected service provider for selected dates
-        //numNonConsistentConsumers = (int) consumerService.countConsumersByServiceProvidersBetweenDates(serviceProviderIds, startDate, endDate, false, 0);
+        numNonConsistentConsumers = (int) consumerService.countConsumersByServiceProvidersBetweenDatesAndStatus(serviceProviderIds, startDate, endDate, 0, 0,"accepted");
 
 
-        numConsistentConsumers =
+      /*  numConsistentConsumers =
                 (int) consumerService.countConsumersByServiceProvidersBetweenDatesAndStatus(
                         serviceProviderIds, startDate, endDate, true);   // accepted
 
         numNonConsistentConsumers =
                 (int) consumerService.countConsumersByServiceProvidersBetweenDatesAndStatus(
                         serviceProviderIds, startDate, endDate, false);  // recycled
-
+*/
 
         //number of subscriptions is equal to sum of all consumers
         numSubscriptions = (int) consumerService.countSubscribersByServiceProvidersBetweenDates(serviceProviderIds, startDate, endDate, 0);
@@ -231,7 +231,7 @@ public class DashboardServiceImpl implements DashboardService {
         //get consumers count grouped by service providers for selected dates
         //consumers = consumerService.getAndCountConsumersGroupedByServiceProviderId(serviceProviderIds, startDate, endDate);
         List<DashboardObjectInterface> consumersList = new ArrayList<>();
-        long totalConsumers = consumerService.getTotalConsumers(serviceProviderIds,startDate, endDate);
+        long totalConsumers = consumerService.getTotalConsumersAndStatus(serviceProviderIds,startDate, endDate,"accepted");
         //long consumersPerOperator = consumerService.getConsumersPerOperator();
 
         //consumers = new ArrayList<>(Arrays.asList(new DashboardObject("Total consumers", (int) totalConsumers),new DashboardObject("Consumers per operator", (int) consumersPerOperator)));

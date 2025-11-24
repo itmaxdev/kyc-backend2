@@ -840,9 +840,12 @@ public class ConsumerServiceImpl implements ConsumerService {
     }
 
     @Override
-    public long countConsumersByServiceProvidersBetweenDates(Collection<Long> serviceProvidersIds, Date createdOnStart, Date createdOnEnd, boolean isConsistent, int consumerStatus){
-        return consumerRepository.countConsumersByServiceProvider_IdInAndCreatedonDateBetweenAndIsConsistent(serviceProvidersIds,  createdOnStart, createdOnEnd, isConsistent);
+    public long countConsumersByServiceProvidersBetweenDatesAndStatus(Collection<Long> serviceProvidersIds, Date createdOnStart, Date createdOnEnd, int isConsistent, int consumerStatus, String status) {
+        return consumerRepository.countConsumersByServiceProvider_IdInAndCreatedonDateBetweenAndIsConsistentAndStatus(serviceProvidersIds,  createdOnStart, createdOnEnd, isConsistent,status);
     }
+
+
+
 
     @Override
     public long countSubscribersByServiceProvidersBetweenDates(Collection<Long> serviceProvidersIds, Date createdOnStart, Date createdOnEnd, int consumerStatus){
@@ -891,8 +894,8 @@ public class ConsumerServiceImpl implements ConsumerService {
     }
 
     @Override
-    public long getTotalConsumers (Collection<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd){ 
-        return consumerRepository.getTotalConsumers(serviceProviderIds, createdOnStart, createdOnEnd);
+    public long getTotalConsumersAndStatus (Collection<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd,String Status){
+        return consumerRepository.getTotalConsumersAndStatus(serviceProviderIds, createdOnStart, createdOnEnd,Status);
     }
 
     @Override
