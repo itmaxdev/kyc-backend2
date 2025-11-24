@@ -1620,16 +1620,23 @@ public class FileProcessingService {
         Runnable job = () -> {
             try {
                 log.info("Starting checkConsumer for operator {}", sp.getName());
-                // Scope reduction: only that operator’s consumers
+
                 List<Consumer> list = consumerRepository.findAllByServiceProvider_Id(spId);
-                //User user = userService.getUserByEmail("system@itmaxglobal.com");
+
                 User user = userService.getUserByEmail("cadmin@itmaxglobal.com");
-                consumerServiceImpl.checkConsumer(list, user, sp);
 
-                consumerAnomalyRepository.findAllByConsumerIn(list);
-                consumerServiceImpl.updateAnomalyStatusForConsumers(list, user, sp);
 
-                consumerServiceImpl.withdrawReportedAnomaliesForRecycledConsumers(sp.getId(),user);
+                List<Consumer> activeConsumers = list.stream()
+                        .filter(c -> !"Recycled".equalsIgnoreCase(c.getStatus()))
+                        .collect(Collectors.toList());
+
+
+                if (!activeConsumers.isEmpty()) {
+                    consumerServiceImpl.checkConsumer(activeConsumers, user, sp);
+                    consumerAnomalyRepository.findAllByConsumerIn(list);
+                    consumerServiceImpl.updateAnomalyStatusForConsumers(activeConsumers, user, sp);
+                    consumerServiceImpl.withdrawReportedAnomaliesForRecycledConsumers(sp.getId(), user);
+                }
 
                 log.info("Finished checkConsumer for operator {}", sp.getName());
             } catch (Exception ex) {
