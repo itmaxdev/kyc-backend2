@@ -7,6 +7,7 @@ import com.app.kyc.model.DashboardObjectInterface;
 import com.app.kyc.response.ConsumersDetailsResponseDTO;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
+import org.springframework.data.jpa.repository.Query;
 
 import java.io.IOException;
 import java.util.*;
@@ -77,7 +78,20 @@ public interface ConsumerService
    
    List<Object[]> getConsumersbyServiceProvider(Collection<Long> serviceProviderIds, Date createdOnStart, Date createdOnEnd);
 
-   Map<String, Object> getConsumersByServiceProvider(Long spId);
+    @Query("""
+    SELECT c.serviceProvider.name AS operator,
+           SUM(CASE WHEN LOWER(c.status) = 'accepted' THEN 1 ELSE 0 END) AS consistentCount,
+           SUM(CASE WHEN LOWER(c.status) = 'recycled' THEN 1 ELSE 0 END) AS inconsistentCount
+    FROM Consumer c
+    WHERE c.serviceProvider.id IN :serviceProviderIds
+      AND c.createdOn BETWEEN :createdOnStart AND :createdOnEnd
+    GROUP BY c.serviceProvider.name
+""")
+    /*List<Object[]> getConsumersbyServiceProvider(Collection<Long> serviceProviderIds,
+                                                 Date createdOnStart,
+                                                 Date createdOnEnd);*/
+
+    Map<String, Object> getConsumersByServiceProvider(Long spId);
 
 
 }
