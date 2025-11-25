@@ -275,18 +275,24 @@ public class ConsumerServiceImpl implements ConsumerService {
             }
 
             final Consumer c = consumerOpt.get();
+
             final List<Anomaly> anomalies =
                     Optional.ofNullable(c.getAnomalies()).orElse(Collections.emptyList());
-
-            final Optional<Anomaly> firstAnomalyOpt = anomalies.stream().findFirst();
-            final AnomalyType primaryAnomalyType =
-                    firstAnomalyOpt.map(Anomaly::getAnomalyType).orElse(null);
 
             // Build DTO
             ConsumerDto dto = new ConsumerDto(c, anomalies);
             dto.setStatus(c.getStatus());
 
-            // Mask anomaly notes
+            // -------------------------------------------
+            // ⭐ MASK MAIN DTO NAME FIELDS
+            // -------------------------------------------
+            dto.setFirstName(maskName(dto.getFirstName()));
+            dto.setMiddleName(maskName(dto.getMiddleName()));
+            dto.setLastName(maskName(dto.getLastName()));
+
+            // -------------------------------------------
+            // ⭐ MASK ANOMALY NOTES (existing logic)
+            // -------------------------------------------
             if (dto.getAnomlies() != null) {
                 for (AnomlyDto a : dto.getAnomlies()) {
                     if (a == null) continue;
@@ -296,43 +302,56 @@ public class ConsumerServiceImpl implements ConsumerService {
                 }
             }
 
-            // -------------------------
-            // ⭐ NEW: MSISDN Tracking
-            // -------------------------
+            // -------------------------------------------
+            // ⭐ MSISDN TRACKING ENTRIES (masked fields)
+            // -------------------------------------------
             List<MsisdnTrackingDto> msisdnTrackingList = new ArrayList<>();
 
             DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-            if (c.getMsisdn() != null) {
-                List<MsisdnTracking> trackingRows =
-                        msisdnTrackingRepository.findByMsisdnOrderByCreatedOnDesc(c.getMsisdn());
+            // -------------------------------------------
+// ⭐ MSISDN TRACKING ENTRIES (masked fields)
+// -------------------------------------------
 
-                for (MsisdnTracking t : trackingRows) {
 
-                    String createdOnStr = "";
-                    try {
-                        if (t.getCreatedOn() != null) {
-                            createdOnStr = t.getCreatedOn().format(fmt);
-                        }
-                    } catch (Exception e) {
-                        createdOnStr = t.getCreatedOn() != null ? t.getCreatedOn().toString() : "";
+            List<MsisdnTracking> trackingRows =
+                    msisdnTrackingRepository.findByMsisdnOrderByCreatedOnDesc(c.getMsisdn());
+
+            for (MsisdnTracking t : trackingRows) {
+
+                String createdOnStr = "";
+                try {
+                    if (t.getCreatedOn() != null) {
+                        createdOnStr = t.getCreatedOn().format(fmt);
                     }
-
-                    msisdnTrackingList.add(
-                            new MsisdnTrackingDto(
-                                    t.getMsisdn(),
-                                    t.getFirstName(),
-                                    t.getMiddleName(),
-                                    t.getLastName(),
-                                    t.getStatus(),
-                                    createdOnStr
-                            )
-                    );
+                } catch (Exception e) {
+                    createdOnStr = t.getCreatedOn() != null ? t.getCreatedOn().toString() : "";
                 }
+
+                // ⭐⭐⭐ MASK HERE — THIS IS THE FIX ⭐⭐⭐
+                String maskedFirst = maskName(t.getFirstName());
+                String maskedMiddle = maskName(t.getMiddleName());
+                String maskedLast = maskName(t.getLastName());
+                log.info("MASKED TRACKING: {} {} {}", maskedFirst, maskedMiddle, maskedLast);
+                msisdnTrackingList.add(
+                        new MsisdnTrackingDto(
+                                t.getMsisdn(),
+                                maskedFirst,
+                                maskedMiddle,
+                                maskedLast,
+                                t.getStatus(),
+                                createdOnStr
+                        )
+                );
             }
+
 
             dto.setMsisdnTrackingDto(msisdnTrackingList);
 
+
+            // -------------------------------------------
+            // ⭐ CONSISTENCY TRACKING
+            // -------------------------------------------
             List<ConsumerTracking> trackings = new ArrayList<>();
 
             try {
@@ -348,7 +367,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                 log.error("Failed fetching trackings for consumer id={}", c.getId(), e);
             }
 
-            // (rest of your existing code remains unchanged)
+            // (rest of your unchanged logic)
 
             return dto;
 
@@ -357,6 +376,18 @@ public class ConsumerServiceImpl implements ConsumerService {
             return null;
         }
     }
+
+    private String maskName(String name) {
+        if (name == null || name.trim().isEmpty()) {
+            return name;
+        }
+        name = name.trim();
+        if (name.length() == 1) {
+            return name + "********";
+        }
+        return name.charAt(0) + "*".repeat(name.length() - 1);
+    }
+
 
 
     /* ===================== Masking helpers ===================== */

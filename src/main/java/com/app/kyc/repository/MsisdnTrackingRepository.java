@@ -19,10 +19,11 @@ public interface MsisdnTrackingRepository extends JpaRepository<MsisdnTracking, 
     @Modifying
     @Transactional
     @Query(value = """
-    INSERT INTO msisdn_tracking (msisdn, first_name, last_name, status, created_on)
+    INSERT INTO msisdn_tracking (msisdn, first_name, middle_name, last_name, status, created_on)
     SELECT 
         c.msisdn,
         c.first_name,
+        c.middle_name,
         c.last_name,
         c.status,
         c.registration_date
