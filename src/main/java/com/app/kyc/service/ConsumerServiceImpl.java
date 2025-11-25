@@ -453,7 +453,7 @@ public class ConsumerServiceImpl implements ConsumerService {
         final long allCount, consistentCount, inconsistentCount;
         if (spId != null) {
             allCount          = consumerRepository.countByServiceProviderId(spId);
-            consistentCount   = consumerRepository.countByIsConsistentTrueAndServiceProvider_IdAndStatus(spId,"Recycled");
+            consistentCount   = consumerRepository.countByIsConsistentTrueAndServiceProvider_IdAndStatus(spId,"Accepted");
             inconsistentCount = consumerRepository.countByIsConsistentFalseAndServiceProvider_IdAndStatus(spId,"Accepted");
             System.out.println("consistentCount "+consistentCount);
             System.out.println("inconsistentCount "+inconsistentCount);
