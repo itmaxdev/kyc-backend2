@@ -322,7 +322,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                             new MsisdnTrackingDto(
                                     t.getMsisdn(),
                                     t.getFirstName(),
-                                    t.getMiddleName(),   // ✅ Added middleName
+                                    t.getMiddleName(),
                                     t.getLastName(),
                                     t.getStatus(),
                                     createdOnStr
@@ -332,11 +332,7 @@ public class ConsumerServiceImpl implements ConsumerService {
             }
 
             dto.setMsisdnTrackingDto(msisdnTrackingList);
-            // -------------------------
 
-            // (Existing history logic continues)
-            // Build history from consistent / inconsistent tracking
-            List<ConsumerHistoryDto> history = new ArrayList<>();
             List<ConsumerTracking> trackings = new ArrayList<>();
 
             try {

@@ -25,7 +25,7 @@ public interface MsisdnTrackingRepository extends JpaRepository<MsisdnTracking, 
         c.first_name,
         c.last_name,
         c.status,
-        c.created_on
+        c.registration_date
     FROM consumers c
     WHERE LOWER(TRIM(c.status)) = 'recycled'
       AND NOT EXISTS (
