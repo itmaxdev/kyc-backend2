@@ -1,39 +1,25 @@
 package com.app.kyc.service;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileReader;
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.io.StringWriter;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.text.DateFormat;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import javax.persistence.EntityManager;
-import javax.persistence.FlushModeType;
-import javax.persistence.PersistenceContext;
-
+import com.app.kyc.Masking.MaskingContext;
+import com.app.kyc.Masking.MaskingUtil;
 import com.app.kyc.entity.*;
 import com.app.kyc.model.*;
 import com.app.kyc.repository.*;
+import com.app.kyc.response.ConsumersDetailsResponseDTO;
 import com.app.kyc.response.ConsumersHasSubscriptionsMsisdnResponseDTO;
-import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.CellType;
-import org.apache.poi.ss.usermodel.Row;
+import com.app.kyc.response.ConsumersHasSubscriptionsResponseDTO;
+import com.app.kyc.response.FlaggedConsumersListDTO;
+import com.app.kyc.util.AnomalyCollection;
+import com.app.kyc.util.PaginationUtil;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.opencsv.CSVParser;
+import com.opencsv.CSVParserBuilder;
+import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.usermodel.Row.MissingCellPolicy;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -46,21 +32,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.app.kyc.Masking.MaskingContext;
-import com.app.kyc.Masking.MaskingUtil;
-import com.app.kyc.response.ConsumersDetailsResponseDTO;
-import com.app.kyc.response.ConsumersHasSubscriptionsResponseDTO;
-import com.app.kyc.response.FlaggedConsumersListDTO;
-import com.app.kyc.util.AnomalyCollection;
-import com.app.kyc.util.PaginationUtil;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonMappingException;
-import com.opencsv.CSVParser;
-import com.opencsv.CSVParserBuilder;
-import com.opencsv.CSVReader;
-import com.opencsv.CSVReaderBuilder;
-
-import lombok.extern.slf4j.Slf4j;
+import javax.persistence.EntityManager;
+import javax.persistence.FlushModeType;
+import javax.persistence.PersistenceContext;
+import java.io.*;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.text.DateFormat;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -484,8 +468,11 @@ public class ConsumerServiceImpl implements ConsumerService {
         final long allCount, consistentCount, inconsistentCount;
         if (spId != null) {
             allCount          = consumerRepository.countByServiceProviderId(spId);
-            consistentCount   = consumerRepository.countByIsConsistentTrueAndServiceProvider_IdAndStatus(spId,"Accepted");
-            inconsistentCount = consumerRepository.countByIsConsistentFalseAndServiceProvider_IdAndStatus(spId,"Accepted");
+
+            consistentCount   = consumerRepository.countConsistentNative(spId,"Accepted");
+            inconsistentCount = consumerRepository.countInconsistentNative(spId,"Accepted");
+
+
             System.out.println("consistentCount "+consistentCount);
             System.out.println("inconsistentCount "+inconsistentCount);
         } else {
@@ -632,15 +619,16 @@ public class ConsumerServiceImpl implements ConsumerService {
         // Counter calculations
         final long  consistentCount, inconsistentCount;
         if (spId != null) {
-            System.out.println("get all consumers 1");
-            consistentCount   = consumerRepository.countByIsConsistentTrueAndServiceProvider_IdAndStatus(spId,"Recycled");
-            inconsistentCount = consumerRepository.countByIsConsistentFalseAndServiceProvider_IdAndStatus(spId,"Accepted");
-            System.out.println("consistentCount "+consistentCount);
-            System.out.println("inconsistentCount "+inconsistentCount);
+            System.out.println("get all consumers 1 "+spId);
+            consistentCount   = consumerRepository.countConsistentNative(spId,"Accepted");
+            inconsistentCount = consumerRepository.countInconsistentNative(spId,"Accepted");
+
+            System.out.println("consistentCount for consumers"+consistentCount);
+            System.out.println("inconsistentCount for consumers"+inconsistentCount);
         } else {
-            System.out.println("get all consumers 1");
-            consistentCount   = consumerRepository.countByIsConsistentTrueAndStatus("Recycled");
-            inconsistentCount = consumerRepository.countByIsConsistentFalseAndStatus("Accepted");
+            System.out.println("get all consumers 2 "+spId);
+            consistentCount   = consumerRepository.countConsistentNativeWithOutSP("Accepted");
+            inconsistentCount = consumerRepository.countInconsistentNativeWithOutSP("Accepted");
         }
 
         // ACTIVE / INACTIVE counters

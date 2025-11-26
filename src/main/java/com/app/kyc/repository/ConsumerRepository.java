@@ -371,6 +371,36 @@ public interface ConsumerRepository
     long countByIsConsistentTrueAndServiceProvider_IdAndStatus(Long serviceProviderId,String status);
     long countByIsConsistentFalseAndServiceProvider_Id(Long serviceProviderId);
     long countByIsConsistentFalseAndServiceProvider_IdAndStatus(Long serviceProviderId,String status);
+
+    long countByIsConsistentAndServiceProvider_IdAndStatus(Boolean isConsistent, Long serviceProviderId, String status);
+
+
+
+    @Query(value = "SELECT COUNT(*) FROM consumers "
+            + "WHERE is_consistent = 1 AND service_provider_id = :spId AND status = :status",
+            nativeQuery = true)
+    long countConsistentNative(@Param("spId") Long spId, @Param("status") String status);
+
+    @Query(value = "SELECT COUNT(*) FROM consumers "
+            + "WHERE is_consistent = 0 AND service_provider_id = :spId AND status = :status",
+            nativeQuery = true)
+    long countInconsistentNative(@Param("spId") Long spId, @Param("status") String status);
+
+
+    @Query(value = "SELECT COUNT(*) FROM consumers "
+            + "WHERE is_consistent = 1 AND status = :status",
+            nativeQuery = true)
+    long countConsistentNativeWithOutSP( @Param("status") String status);
+
+    @Query(value = "SELECT COUNT(*) FROM consumers "
+            + "WHERE is_consistent = 0  AND status = :status",
+            nativeQuery = true)
+    long countInconsistentNativeWithOutSP(@Param("status") String status);
+    @Query(value = "SELECT id, is_consistent FROM consumers "
+            + "WHERE service_provider_id = :spId AND status = :status",
+            nativeQuery = true)
+    List<Object[]> debugConsistency(@Param("spId") Long spId, @Param("status") String status);
+
     Page<Consumer> findByIsConsistentTrueAndConsumerStatusIn(
             Pageable pageable, Collection<Integer> statuses);
 
