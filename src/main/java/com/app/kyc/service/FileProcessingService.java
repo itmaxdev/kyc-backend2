@@ -479,7 +479,7 @@ public class FileProcessingService {
 
             log.info("Raw={} | Normalized={}", consumer.getStatus(), normalized);
 
-            if ("false".equals(normalized)) {
+            if ("ACTIF".equalsIgnoreCase(normalized) || "Accepted".equalsIgnoreCase(normalized) ||   ("false".equals(normalized))) {
                 consumer.setStatus("accepted");
             } else {
                 consumer.setStatus("recycled");
@@ -563,7 +563,7 @@ public class FileProcessingService {
 
             log.info("Raw={} | Normalized={}", consumer.getStatus(), normalized);
 
-            if ("ACTIF".equalsIgnoreCase(normalized)) {
+            if ("ACTIF".equalsIgnoreCase(normalized) || "Accepted".equalsIgnoreCase(normalized) ||   ("false".equals(normalized))) {
                 consumer.setStatus("accepted");
             } else {
                 consumer.setStatus("recycled");
@@ -1460,7 +1460,7 @@ public class FileProcessingService {
                 }
 
                 String normalized = normalizeStatus(r.status);
-                if ("false".equals(normalized)) {
+                if ("ACTIF".equalsIgnoreCase(normalized) || "Accepted".equalsIgnoreCase(normalized) ||   ("false".equals(normalized))) {
                     r.status = "accepted";
                 } else {
                     r.status = "recycled";

@@ -2351,10 +2351,10 @@ System.out.println("Get all flagged ");
             entityManager.flush();
             entityManager.clear();
 
-            log.info("checkConsumerForAirtel completed for {} in {} ms",
+            log.info("checkConsumerForOrange completed for {} in {} ms",
                     sp.getName(), (System.nanoTime() - t0) / 1_000_000);
         } catch (Exception ex) {
-            log.error("checkConsumerForAirtel failed for {}: {}", sp.getName(), ex.getMessage(), ex);
+            log.error("checkConsumerForOrange failed for {}: {}", sp.getName(), ex.getMessage(), ex);
             throw ex;
         }
     }
