@@ -36,7 +36,7 @@ public interface ConsumerTrackingRepository extends JpaRepository<ConsumerTracki
         c.id AS consumer_id,
         c.service_provider_id,
         CURDATE() AS consistent_on,
-        0 AS is_consistent,
+        c.is_consistent,
         NOW() AS created_on
     FROM consumers c
     LEFT JOIN consumer_tracking t 
