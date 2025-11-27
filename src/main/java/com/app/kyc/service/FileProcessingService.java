@@ -469,8 +469,6 @@ public class FileProcessingService {
         log.info(" Importing Airtel consumer data from file: {}", absolutePath);
 
         consumerRepository.loadAirtelCsv(absolutePath);
-        msisdnTrackingRepository.insertRecycledMsisdns();
-        log.info(" Successfully imported Airtel consumers from {}", absolutePath);
 
         log.info(" Successfully imported Vodacom consumers from {}", absolutePath);
         List<Consumer> existing = consumerRepository.findAll();
@@ -487,6 +485,9 @@ public class FileProcessingService {
 
             consumerServiceImpl.updateConsistencyFlag(consumer);
         }
+
+        msisdnTrackingRepository.insertRecycledMsisdns();
+        log.info(" Successfully imported Airtel consumers from {}", absolutePath);
 
 
 
@@ -553,7 +554,7 @@ public class FileProcessingService {
         log.info("🚀 Importing Orange consumer data from file: {}", absolutePath);
 
         consumerRepository.loadOrangeCsv(absolutePath);
-        msisdnTrackingRepository.insertRecycledMsisdns();
+
         log.info(" Successfully imported Orange consumers from {}", absolutePath);
 
 
@@ -572,6 +573,7 @@ public class FileProcessingService {
             consumerServiceImpl.updateConsistencyFlag(consumer);
         }
 
+        msisdnTrackingRepository.insertRecycledMsisdns();
 
         ProcessedFile fileLog = new ProcessedFile();
         fileLog.setFilename(filePath.getFileName().toString());
