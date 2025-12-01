@@ -781,39 +781,8 @@ SET
     String findRawMsisdnById(@Param("id") Long id);
 
 
-    @Query("SELECT c FROM Consumer c LEFT JOIN FETCH c.anomalies WHERE c.id = :id")
-    Optional<Consumer> findByIdWithAnomalies(@Param("id") Long id);
 
 
-    @Query("""
-       SELECT c FROM Consumer c
-       LEFT JOIN FETCH c.anomalies
-       WHERE c.id = :id AND c.consumerStatus IN :statuses
-    """)
-    Optional<Consumer> findByIdWithAnomaliesAndStatus(
-            @Param("id") Long id,
-            @Param("statuses") List<Integer> statuses);
-
-
-    @Query("""
-       SELECT c FROM Consumer c
-       LEFT JOIN FETCH c.anomalies
-       LEFT JOIN FETCH c.services
-       WHERE c.id = :id
-       """)
-    Optional<Consumer> findByIdWithAnomaliesAndServices(@Param("id") Long id);
-
-
-    @Query("""
-       SELECT c FROM Consumer c
-       LEFT JOIN FETCH c.anomalies
-       LEFT JOIN FETCH c.services
-       WHERE c.id = :id AND c.consumerStatus IN :statuses
-       """)
-    Optional<Consumer> findByIdWithAllRelations(
-            @Param("id") Long id,
-            @Param("statuses") List<Integer> statuses
-    );
 
 
 
