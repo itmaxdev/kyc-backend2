@@ -554,11 +554,12 @@ public class FileProcessingService {
         log.info("🚀 Importing Orange consumer data from file: {}", absolutePath);
 
         consumerRepository.loadOrangeCsv(absolutePath);
+        consumerRepository.bulkUpdateConsistency();
 
         log.info(" Successfully imported Orange consumers from {}", absolutePath);
 
 
-        List<Consumer> existing = consumerRepository.findAll();
+      /* List<Consumer> existing = consumerRepository.findAll();
         for(Consumer consumer : existing){
             String normalized = normalizeStatus(consumer.getStatus());
 
@@ -571,7 +572,7 @@ public class FileProcessingService {
             }
 
             consumerServiceImpl.updateConsistencyFlag(consumer);
-        }
+        }*/
 
         msisdnTrackingRepository.insertRecycledMsisdns();
 

@@ -475,35 +475,105 @@ public interface ConsumerRepository
             SET
                 service_provider_id = 20,  -- Orange
                 orange_transaction_id     = LEFT(NULLIF(TRIM(@numero_contrat), ''), 50),
+
                 first_name          = LEFT(NULLIF(TRIM(@prenom), ''), 100),
                 last_name           = LEFT(NULLIF(TRIM(@nom), ''), 100),
                 gender              = NULLIF(TRIM(@genre), ''),
+
                 birth_date = CASE
-                                       WHEN @date_naissance REGEXP '^[0-9]{4}/[0-9]{2}/[0-9]{2}$'
-                                       THEN STR_TO_DATE(@date_naissance, '%Y/%m/%d')
-                                       ELSE NULL
-                                     END,
+                                WHEN @date_naissance REGEXP '^[0-9]{4}/[0-9]{2}/[0-9]{2}$'
+                                THEN STR_TO_DATE(@date_naissance, '%Y/%m/%d')
+                                ELSE NULL
+                             END,
+
                 registration_date = CASE
-                                              WHEN @date_creation REGEXP '^[0-9]{4}/[0-9]{2}/[0-9]{2} [0-9]{2}:[0-9]{2}$'
-                                              THEN STR_TO_DATE(@date_creation, '%Y/%m/%d %H:%i')
-                                              ELSE NULL
-                                            END,
-                        
+                                        WHEN @date_creation REGEXP '^[0-9]{4}/[0-9]{2}/[0-9]{2} [0-9]{2}:[0-9]{2}$'
+                                        THEN STR_TO_DATE(@date_creation, '%Y/%m/%d %H:%i')
+                                        ELSE NULL
+                                    END,
+
                 birth_place         = LEFT(NULLIF(TRIM(@lieu_naissance), ''), 255),
                 address             = LEFT(NULLIF(TRIM(@adresse), ''), 255),
-                identification_type = LEFT(NULLIF(TRIM(@type_piece), ''), 100),
+                identification_type   = LEFT(NULLIF(TRIM(@type_piece), ''), 100),
                 identification_number = LEFT(NULLIF(TRIM(@numero_piece), ''), 50),
+                
                 msisdn              = LEFT(NULLIF(TRIM(@msisdn), ''), 20),
-                status              = LEFT(NULLIF(TRIM(@etat), ''), 20),
-                consumer_status     = CASE
-                                        WHEN LOWER(TRIM(@etat)) IN ('active', '1') THEN 1
-                                        WHEN LOWER(TRIM(@etat)) IN ('inactive', '0') THEN 0
-                                        ELSE 0
-                                      END,
-                created_on          = NOW(),
-                is_consistent       = FALSE;
-            """, nativeQuery = true)
+
+                status = CASE 
+                           WHEN LOWER(TRIM(@etat)) IN ('active','actif','accepted','1','true')
+                                THEN 'accepted'
+                           ELSE 'recycled'
+                         END,
+
+          
+                consumer_status = CASE 
+                                    WHEN LOWER(TRIM(@etat)) IN ('active','actif','accepted','1','true')
+                                        THEN 1 
+                                    ELSE 0 
+                                  END,
+
+                is_consistent = CASE
+                                 WHEN LOWER(TRIM(@etat)) IN ('active','actif','accepted','1','true')
+                                     THEN TRUE
+                                 ELSE FALSE
+                               END,
+
+                created_on          = NOW();
+        """, nativeQuery = true)
     void loadOrangeCsv(@Param("filePath") String filePath);
+
+
+    @Modifying
+    @Transactional
+    @Query(value = """
+    UPDATE consumers c
+    LEFT JOIN (
+        SELECT msisdn, COUNT(*) AS cnt
+        FROM consumers
+        WHERE msisdn IS NOT NULL AND msisdn <> ''
+        GROUP BY msisdn
+    ) msd ON msd.msisdn = c.msisdn
+    LEFT JOIN (
+        SELECT identification_number, identification_type, COUNT(*) AS cnt
+        FROM consumers
+        WHERE identification_number IS NOT NULL AND identification_number <> ''
+          AND identification_type IS NOT NULL AND identification_type <> ''
+        GROUP BY identification_number, identification_type
+    ) idd ON idd.identification_number = c.identification_number 
+         AND idd.identification_type = c.identification_type
+    SET 
+        -- MANDATORY FIELD CHECKS
+        c.is_consistent = CASE
+            WHEN c.msisdn IS NULL OR c.msisdn = '' THEN FALSE
+            WHEN c.registration_date IS NULL THEN FALSE
+            WHEN c.first_name IS NULL OR c.first_name = '' THEN FALSE
+            WHEN c.last_name IS NULL OR c.last_name = '' THEN FALSE
+            WHEN c.middle_name IS NULL OR c.middle_name = '' THEN FALSE
+            WHEN c.gender IS NULL OR c.gender = '' THEN FALSE
+            WHEN c.birth_date IS NULL THEN FALSE
+            WHEN c.birth_place IS NULL OR c.birth_place = '' THEN FALSE
+            WHEN c.address IS NULL OR c.address = '' THEN FALSE
+            WHEN c.identification_type IS NULL OR c.identification_type = '' THEN FALSE
+            WHEN c.identification_number IS NULL OR c.identification_number = '' THEN FALSE
+            WHEN c.alternate_msisdn1 IS NULL OR c.alternate_msisdn1 = '' THEN FALSE
+            WHEN c.alternate_msisdn2 IS NULL OR c.alternate_msisdn2 = '' THEN FALSE
+
+            -- DUPLICATE MSISDN
+            WHEN msd.cnt > 1 THEN FALSE
+
+            -- DUPLICATE ID TYPE + ID NUMBER
+            WHEN idd.cnt > 2 THEN FALSE
+
+            ELSE TRUE
+        END,
+
+        c.consistent_on = CASE
+            WHEN c.is_consistent = TRUE 
+                THEN IF(c.consistent_on IS NULL OR c.consistent_on = 'N/A', CURDATE(), c.consistent_on)
+            ELSE 'N/A'
+        END;
+""", nativeQuery = true)
+    void bulkUpdateConsistency();
 
 
     @Modifying
@@ -702,8 +772,7 @@ SET
     @Query("SELECT c.msisdn FROM Consumer c WHERE c.id = :id")
     String findRawMsisdnById(@Param("id") Long id);
 
-    @Query("SELECT t FROM MsisdnTracking t WHERE t.msisdn IN :msisdns ORDER BY t.createdOn DESC")
-    List<MsisdnTracking> findAllByMsisdnIn(@Param("msisdns") List<String> msisdns);
+
 
 
 }

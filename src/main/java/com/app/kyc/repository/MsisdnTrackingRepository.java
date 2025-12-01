@@ -44,4 +44,5 @@ public interface MsisdnTrackingRepository extends JpaRepository<MsisdnTracking, 
     @Query("SELECT t FROM MsisdnTracking t WHERE t.msisdn IN :msisdns ORDER BY t.createdOn DESC")
     List<MsisdnTracking> findAllByMsisdnIn(@Param("msisdns") List<String> msisdns);
 
+
 }
