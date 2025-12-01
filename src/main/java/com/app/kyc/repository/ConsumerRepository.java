@@ -523,6 +523,7 @@ public interface ConsumerRepository
     void loadOrangeCsv(@Param("filePath") String filePath);
 
 
+
     @Modifying
     @Transactional
     @Query(value = """
