@@ -45,4 +45,5 @@ public interface MsisdnTrackingRepository extends JpaRepository<MsisdnTracking, 
     List<MsisdnTracking> findAllByMsisdnIn(@Param("msisdns") List<String> msisdns);
 
 
+
 }

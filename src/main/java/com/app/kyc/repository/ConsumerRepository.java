@@ -451,75 +451,82 @@ public interface ConsumerRepository
     @Modifying
     @Transactional
     @Query(value = """
-            LOAD DATA LOCAL INFILE :filePath
-            INTO TABLE consumers
-            CHARACTER SET utf8mb4
-            FIELDS TERMINATED BY ';' 
-            OPTIONALLY ENCLOSED BY '"' 
-            LINES TERMINATED BY '\\r\\n'
-            IGNORE 1 ROWS
-            (
-                @numero_contrat,
-                @msisdn,
-                @date_creation,
-                @nom,
-                @prenom,
-                @genre,
-                @date_naissance,
-                @lieu_naissance,
-                @adresse,
-                @type_piece,
-                @numero_piece,
-                @etat
-            )
-            SET
-                service_provider_id = 20,  -- Orange
-                orange_transaction_id     = LEFT(NULLIF(TRIM(@numero_contrat), ''), 50),
+                LOAD DATA LOCAL INFILE :filePath
+                INTO TABLE consumers
+                CHARACTER SET utf8mb4
+                FIELDS TERMINATED BY ';' 
+                OPTIONALLY ENCLOSED BY '"' 
+                LINES TERMINATED BY '\\r\\n'
+                IGNORE 1 ROWS
+                (
+                    @numero_contrat,
+                    @msisdn,
+                    @date_creation,
+                    @nom,
+                    @prenom,
+                    @genre,
+                    @date_naissance,
+                    @lieu_naissance,
+                    @adresse,
+                    @type_piece,
+                    @numero_piece,
+                    @etat
+                )
+                SET
+                    service_provider_id = 20,  -- Orange
+                    orange_transaction_id     = LEFT(NULLIF(TRIM(@numero_contrat), ''), 50),
 
-                first_name          = LEFT(NULLIF(TRIM(@prenom), ''), 100),
-                last_name           = LEFT(NULLIF(TRIM(@nom), ''), 100),
-                gender              = NULLIF(TRIM(@genre), ''),
+                    first_name          = LEFT(NULLIF(TRIM(@prenom), ''), 100),
+                    last_name           = LEFT(NULLIF(TRIM(@nom), ''), 100),
+                    gender              = NULLIF(TRIM(@genre), ''),
 
-                birth_date = CASE
-                                WHEN @date_naissance REGEXP '^[0-9]{4}/[0-9]{2}/[0-9]{2}$'
-                                THEN STR_TO_DATE(@date_naissance, '%Y/%m/%d')
-                                ELSE NULL
+                    birth_date = CASE
+                                    WHEN @date_naissance REGEXP '^[0-9]{4}/[0-9]{2}/[0-9]{2}$'
+                                    THEN STR_TO_DATE(@date_naissance, '%Y/%m/%d')
+                                    ELSE NULL
+                                 END,
+
+                    birth_date = CASE
+                                       WHEN @date_naissance REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                                       THEN STR_TO_DATE(@date_naissance, '%Y-%m-%d')
+                                       ELSE NULL
+                                     END,
+                        
+                        registration_date = CASE
+                                               WHEN @date_creation REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}$'
+                                               THEN STR_TO_DATE(@date_creation, '%Y-%m-%d %H:%i:%s')
+                                               WHEN @date_creation REGEXP '^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}$'
+                                               THEN STR_TO_DATE(@date_creation, '%Y-%m-%d %H:%i')
+                                               ELSE NULL
+                                             END,
+                        
+                    address             = LEFT(NULLIF(TRIM(@adresse), ''), 255),
+                    identification_type   = LEFT(NULLIF(TRIM(@type_piece), ''), 100),
+                    identification_number = LEFT(NULLIF(TRIM(@numero_piece), ''), 50),
+                    
+                    msisdn              = LEFT(NULLIF(TRIM(@msisdn), ''), 20),
+
+                    status = CASE 
+                               WHEN LOWER(TRIM(@etat)) IN ('active','actif','accepted','1','true')
+                                    THEN 'accepted'
+                               ELSE 'recycled'
                              END,
 
-                registration_date = CASE
-                                        WHEN @date_creation REGEXP '^[0-9]{4}/[0-9]{2}/[0-9]{2} [0-9]{2}:[0-9]{2}$'
-                                        THEN STR_TO_DATE(@date_creation, '%Y/%m/%d %H:%i')
-                                        ELSE NULL
-                                    END,
+              
+                    consumer_status = CASE 
+                                        WHEN LOWER(TRIM(@etat)) IN ('active','actif','accepted','1','true')
+                                            THEN 1 
+                                        ELSE 0 
+                                      END,
 
-                birth_place         = LEFT(NULLIF(TRIM(@lieu_naissance), ''), 255),
-                address             = LEFT(NULLIF(TRIM(@adresse), ''), 255),
-                identification_type   = LEFT(NULLIF(TRIM(@type_piece), ''), 100),
-                identification_number = LEFT(NULLIF(TRIM(@numero_piece), ''), 50),
-                
-                msisdn              = LEFT(NULLIF(TRIM(@msisdn), ''), 20),
+                    is_consistent = CASE
+                                     WHEN LOWER(TRIM(@etat)) IN ('active','actif','accepted','1','true')
+                                         THEN TRUE
+                                     ELSE FALSE
+                                   END,
 
-                status = CASE 
-                           WHEN LOWER(TRIM(@etat)) IN ('active','actif','accepted','1','true')
-                                THEN 'accepted'
-                           ELSE 'recycled'
-                         END,
-
-          
-                consumer_status = CASE 
-                                    WHEN LOWER(TRIM(@etat)) IN ('active','actif','accepted','1','true')
-                                        THEN 1 
-                                    ELSE 0 
-                                  END,
-
-                is_consistent = CASE
-                                 WHEN LOWER(TRIM(@etat)) IN ('active','actif','accepted','1','true')
-                                     THEN TRUE
-                                 ELSE FALSE
-                               END,
-
-                created_on          = NOW();
-        """, nativeQuery = true)
+                    created_on          = NOW();
+            """, nativeQuery = true)
     void loadOrangeCsv(@Param("filePath") String filePath);
 
 
@@ -773,6 +780,40 @@ SET
     @Query("SELECT c.msisdn FROM Consumer c WHERE c.id = :id")
     String findRawMsisdnById(@Param("id") Long id);
 
+
+    @Query("SELECT c FROM Consumer c LEFT JOIN FETCH c.anomalies WHERE c.id = :id")
+    Optional<Consumer> findByIdWithAnomalies(@Param("id") Long id);
+
+
+    @Query("""
+       SELECT c FROM Consumer c
+       LEFT JOIN FETCH c.anomalies
+       WHERE c.id = :id AND c.consumerStatus IN :statuses
+    """)
+    Optional<Consumer> findByIdWithAnomaliesAndStatus(
+            @Param("id") Long id,
+            @Param("statuses") List<Integer> statuses);
+
+
+    @Query("""
+       SELECT c FROM Consumer c
+       LEFT JOIN FETCH c.anomalies
+       LEFT JOIN FETCH c.services
+       WHERE c.id = :id
+       """)
+    Optional<Consumer> findByIdWithAnomaliesAndServices(@Param("id") Long id);
+
+
+    @Query("""
+       SELECT c FROM Consumer c
+       LEFT JOIN FETCH c.anomalies
+       LEFT JOIN FETCH c.services
+       WHERE c.id = :id AND c.consumerStatus IN :statuses
+       """)
+    Optional<Consumer> findByIdWithAllRelations(
+            @Param("id") Long id,
+            @Param("statuses") List<Integer> statuses
+    );
 
 
 

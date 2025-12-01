@@ -310,19 +310,19 @@ public class ConsumerServiceImpl implements ConsumerService {
             List<MsisdnTracking> trackingRows =
                     msisdnTrackingRepository.findAllByMsisdnIn(msisdnVariations);
 
-            // Sort newest → oldest
-            trackingRows.sort((a, b) -> {
-                if (a.getCreatedOn() == null) return 1;
-                if (b.getCreatedOn() == null) return -1;
-                return b.getCreatedOn().compareTo(a.getCreatedOn());
-            });
+            // ---------------------------------------------------------------
+            // ⭐ FETCH ALL CONSUMERS WHO HAVE USED THIS MSISDN
+            // ---------------------------------------------------------------
+            List<Consumer> consumersWithMsisdn =
+                    consumerRepository.findAllByMsisdn(rawMsisdn);
 
             // ---------------------------------------------------------------
-            // ⭐ MAP TO DTO LIST WITH MASKING
+            // ⭐ MERGE: TRACKING ROWS + CONSUMER ROWS THAT HAVE NO TRACKING
             // ---------------------------------------------------------------
             List<MsisdnTrackingDto> msisdnTrackingList = new ArrayList<>();
             DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
+            // 1️⃣ Add tracking entries
             for (MsisdnTracking t : trackingRows) {
 
                 String createdOnStr = "";
@@ -346,6 +346,42 @@ public class ConsumerServiceImpl implements ConsumerService {
                 );
             }
 
+            // Track which MSISDNs got tracking rows
+            Set<String> trackedConsumers = trackingRows.stream()
+                    .map(t -> t.getMsisdn())
+                    .collect(Collectors.toSet());
+
+            // 2️⃣ Add missing consumer rows
+            for (Consumer cx : consumersWithMsisdn) {
+                if (!trackedConsumers.contains(cx.getMsisdn())) {
+
+                    String createdOnStr = "";
+                    if (cx.getRegistrationDate() != null) {
+                        createdOnStr = cx.getRegistrationDate().toString();
+                    }
+
+                    msisdnTrackingList.add(
+                            new MsisdnTrackingDto(
+                                    cx.getMsisdn(),
+                                    maskName(cx.getFirstName()),
+                                    maskName(cx.getMiddleName()),
+                                    maskName(cx.getLastName()),
+                                    cx.getStatus(),
+                                    createdOnStr
+                            )
+                    );
+                }
+            }
+
+            // ---------------------------------------------------------------
+            // ⭐ SORT NEWEST → OLDEST
+            // ---------------------------------------------------------------
+            msisdnTrackingList.sort((a, b) -> {
+                if (a.getCreatedOn() == null) return 1;
+                if (b.getCreatedOn() == null) return -1;
+                return b.getCreatedOn().compareTo(a.getCreatedOn());
+            });
+
             dto.setMsisdnTrackingDto(msisdnTrackingList);
 
             // ---------------------------------------------------------------
@@ -365,7 +401,7 @@ public class ConsumerServiceImpl implements ConsumerService {
             } catch (Exception e) {
                 log.error("Failed fetching trackings for consumer id={}", c.getId(), e);
             }
-
+            log.info("dto is one  "+dto.getId());
             return dto;
 
         } catch (Exception e) {
@@ -373,6 +409,7 @@ public class ConsumerServiceImpl implements ConsumerService {
             return null;
         }
     }
+
 
 
 
