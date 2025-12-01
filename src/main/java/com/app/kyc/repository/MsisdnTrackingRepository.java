@@ -6,6 +6,7 @@ import com.app.kyc.entity.MsisdnTracking;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,4 +40,8 @@ public interface MsisdnTrackingRepository extends JpaRepository<MsisdnTracking, 
     int insertRecycledMsisdns();
 
     List<MsisdnTracking> findByMsisdnOrderByCreatedOnDesc(String msisdn);
+
+    @Query("SELECT t FROM MsisdnTracking t WHERE t.msisdn IN :msisdns ORDER BY t.createdOn DESC")
+    List<MsisdnTracking> findAllByMsisdnIn(@Param("msisdns") List<String> msisdns);
+
 }

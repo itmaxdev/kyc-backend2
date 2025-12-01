@@ -5,6 +5,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 
+import com.app.kyc.entity.MsisdnTracking;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -697,6 +698,12 @@ SET
 
     long countByStatus(String status);
     long countByStatusAndServiceProvider_Id(String status, Long spId);
+
+    @Query("SELECT c.msisdn FROM Consumer c WHERE c.id = :id")
+    String findRawMsisdnById(@Param("id") Long id);
+
+    @Query("SELECT t FROM MsisdnTracking t WHERE t.msisdn IN :msisdns ORDER BY t.createdOn DESC")
+    List<MsisdnTracking> findAllByMsisdnIn(@Param("msisdns") List<String> msisdns);
 
 
 }
