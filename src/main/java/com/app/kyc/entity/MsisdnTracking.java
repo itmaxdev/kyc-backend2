@@ -28,12 +28,20 @@ public class MsisdnTracking {
     @Column(name = "middle_name", length = 100)
     private String middleName;
 
-
     @Column(name = "last_name", length = 100)
     private String lastName;
 
     @Column(name = "status", length = 20)
     private String status;
+
+    @Column(name = "service_provider_id ", length = 100)
+    private Integer serviceProviderId ;
+
+    @Column(name = "identification_number ", length = 100)
+    private String identificationNumber;
+
+    @Column(name = "identification_type ", length = 100)
+    private String identificationType;
 
     @Column(name = "created_on", nullable = false)
     private LocalDateTime createdOn;

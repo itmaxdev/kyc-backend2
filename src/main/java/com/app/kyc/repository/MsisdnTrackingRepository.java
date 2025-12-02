@@ -20,24 +20,30 @@ public interface MsisdnTrackingRepository extends JpaRepository<MsisdnTracking, 
     @Modifying
     @Transactional
     @Query(value = """
-    INSERT INTO msisdn_tracking (msisdn, first_name, middle_name, last_name, status, created_on)
+    INSERT INTO msisdn_tracking 
+        (msisdn, first_name, middle_name, last_name, status, created_on,
+         service_provider_id, identification_number, identification_type)
     SELECT 
         c.msisdn,
         c.first_name,
         c.middle_name,
         c.last_name,
         c.status,
-        c.registration_date
+        c.registration_date,
+        c.service_provider_id,
+        c.identification_number,
+        c.identification_type
     FROM consumers c
     WHERE LOWER(TRIM(c.status)) = 'recycled'
       AND NOT EXISTS (
             SELECT 1 
             FROM msisdn_tracking t 
-            WHERE t.msisdn COLLATE utf8mb4_unicode_ci
-                  = c.msisdn COLLATE utf8mb4_unicode_ci
+            WHERE t.msisdn COLLATE utf8mb4_unicode_ci =
+                  c.msisdn COLLATE utf8mb4_unicode_ci
       )
     """, nativeQuery = true)
     int insertRecycledMsisdns();
+
 
     List<MsisdnTracking> findByMsisdnOrderByCreatedOnDesc(String msisdn);
 
