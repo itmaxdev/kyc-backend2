@@ -35,7 +35,7 @@ public class MsisdnTracking {
     private String status;
 
     @Column(name = "service_provider_id ", length = 100)
-    private Integer serviceProviderId ;
+    private Long serviceProviderId ;
 
     @Column(name = "identification_number ", length = 100)
     private String identificationNumber;

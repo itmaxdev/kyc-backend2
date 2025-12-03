@@ -812,6 +812,48 @@ SET
     String findRawMsisdnById(@Param("id") Long id);
 
 
+    @Query(value = """
+SELECT c.*
+FROM consumers c
+INNER JOIN (
+    SELECT msisdn, MAX(registration_date) AS max_reg_date
+    FROM consumers
+    WHERE msisdn IS NOT NULL AND msisdn <> ''
+    GROUP BY msisdn
+) t ON t.msisdn = c.msisdn AND t.max_reg_date = c.registration_date
+WHERE 
+    (:spId IS NULL OR c.service_provider_id = :spId)
+    AND (:search IS NULL OR LOWER(c.msisdn) LIKE %:search%
+                      OR LOWER(c.first_name) LIKE %:search%
+                      OR LOWER(c.last_name) LIKE %:search%)
+    AND (:consistent IS NULL OR c.is_consistent = :consistent)
+    AND (:status IS NULL OR c.status = :status)
+ORDER BY c.registration_date DESC
+""",
+            countQuery = """
+SELECT COUNT(*)
+FROM consumers c
+INNER JOIN (
+    SELECT msisdn, MAX(registration_date) AS max_reg_date
+    FROM consumers
+    WHERE msisdn IS NOT NULL AND msisdn <> ''
+    GROUP BY msisdn
+) t ON t.msisdn = c.msisdn AND t.max_reg_date = c.registration_date
+WHERE 
+    (:spId IS NULL OR c.service_provider_id = :spId)
+    AND (:search IS NULL OR LOWER(c.msisdn) LIKE %:search%
+                      OR LOWER(c.first_name) LIKE %:search%
+                      OR LOWER(c.last_name) LIKE %:search%)
+    AND (:consistent IS NULL OR c.is_consistent = :consistent)
+    AND (:status IS NULL OR c.status = :status)
+""",
+            nativeQuery = true)
+    Page<Consumer> findLatestConsumersFiltered(
+            @Param("spId") Long spId,
+            @Param("search") String search,
+            @Param("consistent") Boolean consistent,
+            @Param("status") String status,
+            Pageable pageable);
 
 
 
