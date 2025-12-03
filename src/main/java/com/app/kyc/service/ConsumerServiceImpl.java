@@ -45,7 +45,6 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @Service
 @Slf4j
@@ -413,138 +412,7 @@ public class ConsumerServiceImpl implements ConsumerService {
     }
 
 
-
     @Override
-    public List<ConsumerDto> getConsumersByMsisdnId(Long id) {
-
-        try {
-            // ---------------------------------------------------------------
-            // 1️⃣ Get raw MSISDN for given consumer PK
-            // ---------------------------------------------------------------
-            String rawMsisdn = consumerRepository.findRawMsisdnById(id);
-
-            if (rawMsisdn == null || rawMsisdn.isBlank()) {
-                log.warn("No MSISDN found for id={}", id);
-                return Collections.emptyList();
-            }
-
-            // ---------------------------------------------------------------
-            // 2️⃣ Fetch ALL consumers using the same MSISDN
-            // ---------------------------------------------------------------
-            List<Consumer> consumers = consumerRepository.findAllByMsisdn(rawMsisdn);
-
-            if (consumers.isEmpty()) {
-                log.warn("No consumers found for MSISDN={}", rawMsisdn);
-                return Collections.emptyList();
-            }
-
-            log.info("Found {} consumers for MSISDN {}", consumers.size(), rawMsisdn);
-
-            List<ConsumerDto> dtoList = new ArrayList<>();
-
-            // MSISDN variations
-            List<String> variations = expandMsisdnVariations(rawMsisdn);
-
-            // Common tracking rows for all consumers
-            List<MsisdnTracking> trackingRows =
-                    msisdnTrackingRepository.findAllByMsisdnIn(variations);
-
-            DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-
-            // ---------------------------------------------------------------
-            // 3️⃣ Create DTO for each consumer
-            // ---------------------------------------------------------------
-            for (Consumer c : consumers) {
-
-                List<Anomaly> anomalies =
-                        Optional.ofNullable(c.getAnomalies()).orElse(Collections.emptyList());
-
-                ConsumerDto dto = new ConsumerDto(c, anomalies);
-                dto.setStatus(c.getStatus());
-
-                // Masking
-                dto.setFirstName(maskName(dto.getFirstName()));
-                dto.setMiddleName(maskName(dto.getMiddleName()));
-                dto.setLastName(maskName(dto.getLastName()));
-
-                // Mask anomaly notes
-                if (dto.getAnomlies() != null) {
-                    for (AnomlyDto a : dto.getAnomlies()) {
-                        if (a != null && a.getNote() != null) {
-                            a.setNote(maskNoteByType(a.getNote(), a.getAnomalyType()));
-                        }
-                    }
-                }
-
-                // -----------------------------------------------------------
-                // 4️⃣ Build MSISDN Tracking DTO List
-                // -----------------------------------------------------------
-                List<MsisdnTrackingDto> trackingDtos = new ArrayList<>();
-
-                for (MsisdnTracking t : trackingRows) {
-
-                    String createdOn = "";
-                    if (t.getCreatedOn() != null) {
-                        try {
-                            createdOn = t.getCreatedOn().format(fmt);
-                        } catch (Exception e) {
-                            createdOn = t.getCreatedOn().toString();
-                        }
-                    }
-
-                    trackingDtos.add(
-                            new MsisdnTrackingDto(
-                                    t.getMsisdn(),
-                                    maskName(t.getFirstName()),
-                                    maskName(t.getMiddleName()),
-                                    maskName(t.getLastName()),
-                                    t.getStatus(),
-                                    createdOn,
-                                    t.getServiceProviderId(),
-                                    t.getIdentificationNumber(),
-                                    t.getIdentificationType()
-                            )
-                    );
-                }
-
-                // Sort newest first
-                trackingDtos.sort(Comparator.comparing(MsisdnTrackingDto::getCreatedOn).reversed());
-
-                // Assign to DTO
-                dto.setMsisdnTrackingDto(trackingDtos);
-
-                // -----------------------------------------------------------
-                // 5️⃣ Consistency tracking
-                // -----------------------------------------------------------
-                List<ConsumerTracking> trackings = new ArrayList<>();
-
-                try {
-                    ConsumerTracking latestConsistent =
-                            consumerTrackingRepository.findFirstByConsumerIdAndIsConsistentTrueOrderByCreatedOnDesc(c.getId());
-                    ConsumerTracking latestInconsistent =
-                            consumerTrackingRepository.findFirstByConsumerIdAndIsConsistentFalseOrderByCreatedOnDesc(c.getId());
-
-                    if (latestConsistent != null) trackings.add(latestConsistent);
-                    if (latestInconsistent != null) trackings.add(latestInconsistent);
-
-                } catch (Exception e) {
-                    log.error("Failed to load tracking for consumerId={}", c.getId(), e);
-                }
-
-                dtoList.add(dto);
-            }
-
-            return dtoList;
-
-        } catch (Exception e) {
-            log.error("getConsumersByMsisdnId failed for id={}", id, e);
-            return Collections.emptyList();
-        }
-    }
-
-
-
-    /*@Override
     public List<ConsumerDto> getConsumersByMsisdnId(Long id) {
 
         try {
@@ -666,7 +534,7 @@ public class ConsumerServiceImpl implements ConsumerService {
             log.error("getConsumersByMsisdnId failed for id={}", id, e);
             return Collections.emptyList();
         }
-    }*/
+    }
 
 
 
@@ -767,10 +635,9 @@ public class ConsumerServiceImpl implements ConsumerService {
     public Map<String, Object> getAllConsumersforMsisdn(String params)
             throws JsonMappingException, JsonProcessingException {
 
-        // Pageable setup
+        // Pageable (null-safe) + cap page size
         final Pageable requested = Optional.ofNullable(PaginationUtil.getPageable(params))
                 .orElse(PageRequest.of(0, 50));
-
         final int MAX_PAGE_SIZE = 5000;
         final Pageable pageable = PageRequest.of(
                 requested.getPageNumber(),
@@ -778,14 +645,12 @@ public class ConsumerServiceImpl implements ConsumerService {
                 requested.getSort()
         );
 
-        // Extract filter object
+        // Filters
         final Pagination pagination = PaginationUtil.getFilterObject(params);
-
         final String type = Optional.ofNullable(pagination)
                 .map(Pagination::getFilter).map(f -> f.getType())
                 .map(String::trim).map(String::toUpperCase)
                 .orElse("ALL");
-
         final Long spId = Optional.ofNullable(pagination)
                 .map(Pagination::getFilter).map(f -> f.getServiceProviderID())
                 .orElse(null);
@@ -797,66 +662,117 @@ public class ConsumerServiceImpl implements ConsumerService {
                 .map(String::toLowerCase)
                 .orElse(null);
 
-        // ✔ Consistency filters
-        Boolean consistentFilter = null;
-        if ("CONSISTENT".equals(type)) consistentFilter = true;
-        else if ("INCONSISTENT".equals(type)) consistentFilter = false;
+        // Allowed statuses for CONSISTENT/INCONSISTENT tabs
+        final List<Integer> allowedStatuses = Arrays.asList(0, 1);
 
-        // ✔ Status filters
-        String statusFilter = null;
-        if ("ACTIVE".equals(type)) statusFilter = "Accepted";
-        else if ("INACTIVE".equals(type)) statusFilter = "Recycled";
-
-        // ===========================================
-        // 🔥 CALL NEW SQL TO FETCH ONLY LATEST RECORD PER MSISDN
-        // ===========================================
-        Page<Consumer> page = consumerRepository.findLatestConsumersFiltered(
-                spId,
-                searchText,
-                consistentFilter,
-                statusFilter,
-                pageable
-        );
-
-        Long filterCount = page.getTotalElements();
-
-        List<ConsumersHasSubscriptionsMsisdnResponseDTO> finalData =
-                toDtoPage1(page.getContent());
-
-        // COUNTS
-        long consistentCount, inconsistentCount;
+        // Main counters
+        final long allCount, consistentCount, inconsistentCount;
         if (spId != null) {
-            consistentCount   = consumerRepository.countConsistentNative(spId, "Accepted");
-            inconsistentCount = consumerRepository.countInconsistentNative(spId, "Accepted");
+            allCount          = consumerRepository.countByServiceProviderId(spId);
+
+            consistentCount   = consumerRepository.countConsistentNative(spId,"Accepted");
+            inconsistentCount = consumerRepository.countInconsistentNative(spId,"Accepted");
+
+
+            System.out.println("consistentCount "+consistentCount);
+            System.out.println("inconsistentCount "+inconsistentCount);
         } else {
+            allCount          = consumerRepository.count();
             consistentCount   = consumerRepository.countByIsConsistentTrue();
             inconsistentCount = consumerRepository.countByIsConsistentFalse();
         }
 
-        long activeCount = (spId != null)
-                ? consumerRepository.countByStatusAndServiceProvider_Id("Accepted", spId)
-                : consumerRepository.countByStatus("Accepted");
+        // Active / inactive counters
+        final long activeCount, inactiveCount;
+        if (spId != null) {
+            activeCount = consumerRepository.countByStatusAndServiceProvider_Id("Accepted", spId);
+            inactiveCount = consumerRepository.countByStatusAndServiceProvider_Id("Recycled", spId);
+        } else {
+            activeCount = consumerRepository.countByStatus("Accepted");
+            inactiveCount = consumerRepository.countByStatus("Recycled");
+        }
 
-        long inactiveCount = (spId != null)
-                ? consumerRepository.countByStatusAndServiceProvider_Id("Recycled", spId)
-                : consumerRepository.countByStatus("Recycled");
+        // ============================
+        // 🔥 FILTER BLOCK
+        // ============================
+        final Page<Consumer> filterData;
+        long filterCount;
 
-        // 🔥 FINAL RESPONSE
+        if ("CONSISTENT".equals(type)) {
+
+            filterCount = consumerRepository.count(
+                    ConsumerSpecifications.withFilters(spId, searchText, true, allowedStatuses)
+            );
+            filterData = consumerRepository.findAll(
+                    ConsumerSpecifications.withFilters(spId, searchText, true, allowedStatuses),
+                    pageable
+            );
+
+        } else if ("INCONSISTENT".equals(type)) {
+
+            filterCount = consumerRepository.count(
+                    ConsumerSpecifications.withFilters(spId, searchText, false, allowedStatuses)
+            );
+            filterData = consumerRepository.findAll(
+                    ConsumerSpecifications.withFilters(spId, searchText, false, allowedStatuses),
+                    pageable
+            );
+
+        } else if ("ACTIVE".equals(type)) {
+
+            // 🔥 Active = Accepted + isConsistent = true
+            filterCount = consumerRepository.count(
+                    ConsumerSpecifications.withFilters(spId, searchText, true, Arrays.asList(0))
+            );
+
+            filterData = consumerRepository.findAll(
+                    ConsumerSpecifications.withFilters(spId, searchText, true, Arrays.asList(0)),
+                    pageable
+            );
+
+        } else if ("INACTIVE".equals(type)) {
+
+            // 🔥 Inactive = Recycled + isConsistent = false
+            filterCount = consumerRepository.count(
+                    ConsumerSpecifications.withFilters(spId, searchText, false, Arrays.asList(1))
+            );
+
+            filterData = consumerRepository.findAll(
+                    ConsumerSpecifications.withFilters(spId, searchText, false, Arrays.asList(1)),
+                    pageable
+            );
+
+        } else {
+
+            // Default = ALL
+            filterCount = consumerRepository.count(
+                    ConsumerSpecifications.withFilters(spId, searchText, null, null)
+            );
+
+            filterData = consumerRepository.findAll(
+                    ConsumerSpecifications.withFilters(spId, searchText, null, null),
+                    PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
+                            Sort.by(Sort.Direction.DESC, "isConsistent"))
+            );
+        }
+
+        // Prepare final DTO list
+        final List<ConsumersHasSubscriptionsMsisdnResponseDTO> finalData =
+                toDtoPage1(dedup(filterData.getContent()));
+
+        // Build response map
         Map<String, Object> resp = new HashMap<>();
         resp.put("count", filterCount);
-        resp.put("filterCount", filterCount);
-
         resp.put("consistentCount", consistentCount);
         resp.put("inconsistentCount", inconsistentCount);
+        resp.put("filterCount", filterCount);
 
         resp.put("activeCount", activeCount);
         resp.put("inactiveCount", inactiveCount);
 
-        resp.put("data", finalData);
-
+            resp.put("data", finalData);
         return resp;
     }
-
 
     @Transactional(readOnly = true)
     public Map<String, Object> getAllConsumers(String params)
