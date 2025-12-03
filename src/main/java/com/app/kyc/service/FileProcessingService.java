@@ -555,6 +555,7 @@ public class FileProcessingService {
 
         consumerRepository.loadOrangeCsv(absolutePath);
         consumerRepository.bulkUpdateConsistency();
+        consumerRepository.insertMissingMandatoryFieldAnomalies();
 
         log.info(" Successfully imported Orange consumers from {}", absolutePath);
 

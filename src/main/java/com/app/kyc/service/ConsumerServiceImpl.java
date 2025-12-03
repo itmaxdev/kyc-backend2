@@ -245,6 +245,7 @@ public class ConsumerServiceImpl implements ConsumerService {
 
 
 
+
     @Override
     public ConsumerDto getConsumerByMsisdnId(Long id) {
         try {
@@ -401,7 +402,7 @@ public class ConsumerServiceImpl implements ConsumerService {
             } catch (Exception e) {
                 log.error("Failed fetching trackings for consumer id={}", c.getId(), e);
             }
-            log.info("dto is one  "+dto.getId());
+            log.info("dto is one  " + dto.getId());
             return dto;
 
         } catch (Exception e) {
@@ -410,6 +411,130 @@ public class ConsumerServiceImpl implements ConsumerService {
         }
     }
 
+
+    @Override
+    public List<ConsumerDto> getConsumersByMsisdnId(Long id) {
+
+        try {
+            // ---------------------------------------------------------------
+            // 1️⃣ Get the raw MSISDN based on consumer PK id
+            // ---------------------------------------------------------------
+            String rawMsisdn = consumerRepository.findRawMsisdnById(id);
+
+            if (rawMsisdn == null || rawMsisdn.isBlank()) {
+                log.warn("No MSISDN found for id={}", id);
+                return Collections.emptyList();
+            }
+
+            // ---------------------------------------------------------------
+            // 2️⃣ Fetch ALL consumers that used this MSISDN
+            // ---------------------------------------------------------------
+            List<Consumer> consumers =
+                    consumerRepository.findAllByMsisdn(rawMsisdn);
+
+            if (consumers.isEmpty()) {
+                log.warn("No consumers found for MSISDN={}", rawMsisdn);
+                return Collections.emptyList();
+            }
+
+            log.info("Found {} consumers for MSISDN {}", consumers.size(), rawMsisdn);
+
+            // ---------------------------------------------------------------
+            // 3️⃣ Build DTOs for each consumer
+            // ---------------------------------------------------------------
+            List<ConsumerDto> dtoList = new ArrayList<>();
+
+            for (Consumer c : consumers) {
+
+                List<Anomaly> anomalies =
+                        Optional.ofNullable(c.getAnomalies())
+                                .orElse(Collections.emptyList());
+
+                ConsumerDto dto = new ConsumerDto(c, anomalies);
+                dto.setStatus(c.getStatus());
+
+                // Mask main fields
+                dto.setFirstName(maskName(dto.getFirstName()));
+                dto.setMiddleName(maskName(dto.getMiddleName()));
+                dto.setLastName(maskName(dto.getLastName()));
+
+                // Mask anomaly notes
+                if (dto.getAnomlies() != null) {
+                    for (AnomlyDto a : dto.getAnomlies()) {
+                        if (a == null || a.getNote() == null) continue;
+                        a.setNote(maskNoteByType(a.getNote(), a.getAnomalyType()));
+                    }
+                }
+
+                // ---------------------------------------------------------------
+                // 4️⃣ MSISDN Tracking for this specific consumer
+                // ---------------------------------------------------------------
+                List<String> variations = expandMsisdnVariations(rawMsisdn);
+
+                List<MsisdnTracking> trackingRows =
+                        msisdnTrackingRepository.findAllByMsisdnIn(variations);
+
+                List<MsisdnTrackingDto> trackingDtos = new ArrayList<>();
+
+                DateTimeFormatter fmt =
+                        DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+                for (MsisdnTracking t : trackingRows) {
+
+                    String createdOn = "";
+                    try {
+                        createdOn = t.getCreatedOn() != null ?
+                                t.getCreatedOn().format(fmt) : "";
+                    } catch (Exception ex) {
+                        createdOn = t.getCreatedOn() != null ?
+                                t.getCreatedOn().toString() : "";
+                    }
+
+                    trackingDtos.add(
+                            new MsisdnTrackingDto(
+                                    t.getMsisdn(),
+                                    maskName(t.getFirstName()),
+                                    maskName(t.getMiddleName()),
+                                    maskName(t.getLastName()),
+                                    t.getStatus(),
+                                    createdOn
+                            )
+                    );
+                }
+
+                // Sort newest first
+                trackingDtos.sort((a, b) -> b.getCreatedOn().compareTo(a.getCreatedOn()));
+
+                dto.setMsisdnTrackingDto(trackingDtos);
+
+                // ---------------------------------------------------------------
+                // 5️⃣ Consistency Tracking
+                // ---------------------------------------------------------------
+                List<ConsumerTracking> trackings = new ArrayList<>();
+
+                try {
+                    ConsumerTracking latestConsistent =
+                            consumerTrackingRepository.findFirstByConsumerIdAndIsConsistentTrueOrderByCreatedOnDesc(c.getId());
+                    ConsumerTracking latestInconsistent =
+                            consumerTrackingRepository.findFirstByConsumerIdAndIsConsistentFalseOrderByCreatedOnDesc(c.getId());
+
+                    if (latestConsistent != null) trackings.add(latestConsistent);
+                    if (latestInconsistent != null) trackings.add(latestInconsistent);
+
+                } catch (Exception e) {
+                    log.error("Failed to load tracking for consumerId={}", c.getId(), e);
+                }
+
+                dtoList.add(dto);
+            }
+
+            return dtoList;
+
+        } catch (Exception e) {
+            log.error("getConsumersByMsisdnId failed for id={}", id, e);
+            return Collections.emptyList();
+        }
+    }
 
 
 
@@ -645,7 +770,7 @@ public class ConsumerServiceImpl implements ConsumerService {
         resp.put("activeCount", activeCount);
         resp.put("inactiveCount", inactiveCount);
 
-        resp.put("data", finalData);
+            resp.put("data", finalData);
         return resp;
     }
 

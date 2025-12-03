@@ -205,7 +205,7 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
 	List<Anomaly> findByServiceProviderId(@Param("spId") Long spId);
 
 
-	// 1️⃣ Insert Incomplete Data Anomalies
+	/*// 1️⃣ Insert Incomplete Data Anomalies
 	@Modifying
 	@Transactional
 	@Query(value = """
@@ -267,7 +267,7 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long>
 			@Param("updatedOn") Date updatedOn,
 			@Param("updatedBy") String updatedBy,
 			@Param("anomalyFormattedId") String anomalyFormattedId
-	);
+	);*/
 
 
 

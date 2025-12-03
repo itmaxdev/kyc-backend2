@@ -534,54 +534,85 @@ public interface ConsumerRepository
     @Modifying
     @Transactional
     @Query(value = """
-    UPDATE consumers c
-    LEFT JOIN (
-        SELECT msisdn, COUNT(*) AS cnt
-        FROM consumers
-        WHERE msisdn IS NOT NULL AND msisdn <> ''
-        GROUP BY msisdn
-    ) msd ON msd.msisdn = c.msisdn
-    LEFT JOIN (
-        SELECT identification_number, identification_type, COUNT(*) AS cnt
-        FROM consumers
-        WHERE identification_number IS NOT NULL AND identification_number <> ''
-          AND identification_type IS NOT NULL AND identification_type <> ''
-        GROUP BY identification_number, identification_type
-    ) idd ON idd.identification_number = c.identification_number 
-         AND idd.identification_type = c.identification_type
-    SET 
-        -- MANDATORY FIELD CHECKS
-        c.is_consistent = CASE
-            WHEN c.msisdn IS NULL OR c.msisdn = '' THEN FALSE
-            WHEN c.registration_date IS NULL THEN FALSE
-            WHEN c.first_name IS NULL OR c.first_name = '' THEN FALSE
-            WHEN c.last_name IS NULL OR c.last_name = '' THEN FALSE
-            WHEN c.middle_name IS NULL OR c.middle_name = '' THEN FALSE
-            WHEN c.gender IS NULL OR c.gender = '' THEN FALSE
-            WHEN c.birth_date IS NULL THEN FALSE
-            WHEN c.birth_place IS NULL OR c.birth_place = '' THEN FALSE
-            WHEN c.address IS NULL OR c.address = '' THEN FALSE
-            WHEN c.identification_type IS NULL OR c.identification_type = '' THEN FALSE
-            WHEN c.identification_number IS NULL OR c.identification_number = '' THEN FALSE
-            WHEN c.alternate_msisdn1 IS NULL OR c.alternate_msisdn1 = '' THEN FALSE
-            WHEN c.alternate_msisdn2 IS NULL OR c.alternate_msisdn2 = '' THEN FALSE
+UPDATE consumers c
+LEFT JOIN (
+    SELECT msisdn, COUNT(*) AS cnt
+    FROM consumers
+    WHERE msisdn IS NOT NULL AND msisdn <> ''
+    GROUP BY msisdn
+) msd ON msd.msisdn = c.msisdn
+LEFT JOIN (
+    SELECT identification_number, identification_type, COUNT(*) AS cnt
+    FROM consumers
+    WHERE identification_number IS NOT NULL AND identification_number <> ''
+      AND identification_type IS NOT NULL AND identification_type <> ''
+    GROUP BY identification_number, identification_type
+) idd ON idd.identification_number = c.identification_number
+     AND idd.identification_type = c.identification_type
+SET 
+    c.is_consistent = CASE
+        WHEN c.msisdn IS NULL OR c.msisdn = '' THEN FALSE
+        WHEN c.registration_date IS NULL THEN FALSE
+        WHEN c.first_name IS NULL OR c.first_name = '' THEN FALSE
+        WHEN c.last_name IS NULL OR c.last_name = '' THEN FALSE
+        WHEN c.middle_name IS NULL OR c.middle_name = '' THEN FALSE
+        WHEN c.gender IS NULL OR c.gender = '' THEN FALSE
+        WHEN c.birth_date IS NULL THEN FALSE
+        WHEN c.birth_place IS NULL OR c.birth_place = '' THEN FALSE
+        WHEN c.address IS NULL OR c.address = '' THEN FALSE
+        WHEN c.identification_type IS NULL OR c.identification_type = '' THEN FALSE
+        WHEN c.identification_number IS NULL OR c.identification_number = '' THEN FALSE
+        WHEN msd.cnt > 1 THEN FALSE
+        WHEN idd.cnt > 2 THEN FALSE
+        ELSE TRUE
+    END,
 
-            -- DUPLICATE MSISDN
-            WHEN msd.cnt > 1 THEN FALSE
-
-            -- DUPLICATE ID TYPE + ID NUMBER
-            WHEN idd.cnt > 2 THEN FALSE
-
-            ELSE TRUE
-        END,
-
-        c.consistent_on = CASE
-            WHEN c.is_consistent = TRUE 
-                THEN IF(c.consistent_on IS NULL OR c.consistent_on = 'N/A', CURDATE(), c.consistent_on)
-            ELSE 'N/A'
-        END;
+    c.consistent_on = CASE
+        WHEN c.is_consistent = TRUE THEN 
+            IF(c.consistent_on IS NULL OR c.consistent_on = 'N/A', CURDATE(), c.consistent_on)
+        ELSE 'N/A'
+    END
 """, nativeQuery = true)
     void bulkUpdateConsistency();
+
+
+    @Modifying
+    @Transactional
+    @Query(value = """
+INSERT INTO anomalies(
+    reported_by_id,
+    note,
+    anomaly_type_id,
+    consumer_id,
+    reported_on,
+    status
+)
+SELECT 
+    3,
+    CONCAT(
+        'Missing Mandatory Fields ', c.id, ': ',
+        TRIM(BOTH ', ' FROM CONCAT(
+            CASE WHEN c.first_name IS NULL OR c.first_name = '' THEN 'FirstName, ' ELSE '' END,
+            CASE WHEN c.middle_name IS NULL OR c.middle_name = '' THEN 'MiddleName, ' ELSE '' END,
+            CASE WHEN c.last_name IS NULL OR c.last_name = '' THEN 'LastName, ' ELSE '' END,
+            CASE WHEN c.gender IS NULL OR c.gender = '' THEN 'Gender, ' ELSE '' END,
+            CASE WHEN c.birth_date IS NULL THEN 'BirthDate, ' ELSE '' END,
+            CASE WHEN c.birth_place IS NULL OR c.birth_place = '' THEN 'BirthPlace, ' ELSE '' END,
+            CASE WHEN c.address IS NULL OR c.address = '' THEN 'Address, ' ELSE '' END,
+            CASE WHEN c.identification_type IS NULL OR c.identification_type = '' THEN 'IdentificationType, ' ELSE '' END,
+            CASE WHEN c.identification_number IS NULL OR c.identification_number = '' THEN 'IdentificationNumber, ' ELSE '' END,
+            CASE WHEN c.registration_date IS NULL THEN 'RegistrationDate, ' ELSE '' END
+        ))
+    ),
+    1,
+    c.id,
+    NOW(),
+    0
+FROM consumers c
+WHERE c.is_consistent = FALSE
+""", nativeQuery = true)
+    void insertMissingMandatoryFieldAnomalies();
+
 
 
     @Modifying
