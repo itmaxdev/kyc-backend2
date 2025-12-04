@@ -39,9 +39,6 @@ public interface ConsumerRepository
             "   note, id from anomalies) as b on a.id = b.consumers_services_id) as g on u.id = reported_by_id", nativeQuery = true)
     List<FlaggedConsumersListDTO> getAllFlaggedConsumers();
 
-    @Query(value = "SELECT id FROM anomalies WHERE anomaly_formatted_id LIKE CONCAT(:prefix, '%')", nativeQuery = true)
-    List<Long> findIdsByFormattedIdPrefix(@Param("prefix") String prefix);
-
 
 
     // ANY status (used above). If you prefer active-only, add "AND c.consumer_status = 0".
@@ -590,7 +587,7 @@ INSERT INTO anomalies(
 SELECT 
     3,
     CONCAT(
-        'Missing Mandatory Fields ', c.id, ': ',
+        'Missing Mandatory Fields ',': ',
         TRIM(BOTH ', ' FROM CONCAT(
             CASE WHEN c.first_name IS NULL OR c.first_name = '' THEN 'FirstName, ' ELSE '' END,
             CASE WHEN c.middle_name IS NULL OR c.middle_name = '' THEN 'MiddleName, ' ELSE '' END,

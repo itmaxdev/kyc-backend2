@@ -179,48 +179,9 @@ public class Anomaly
     * Builds: {vendor}-{ddMMyyyy}-{zeroPaddedId}
     * e.g. vodacom-07102025-000123
     */
-   //@PostPersist
-   private void assignFormattedId() {
-      if (this.anomalyFormattedId != null && !this.anomalyFormattedId.isBlank()) return;
-
-      String vendor = resolveVendorSlug(consumersService);    // "vodacom" (slug)
-      String day = new java.text.SimpleDateFormat("ddMMyyyy").format(
-              reportedOn != null ? reportedOn : new Date()
-      );
-
-      // use DB primary key to guarantee uniqueness system-wide
-      String padded = String.format("%06d", this.id); // adjust width if you prefer 2, 4, 8, etc.
-
-      this.anomalyFormattedId = vendor + "-" + day + "-" + padded;
-      // Still within the same persistence context; Hibernate will UPDATE before commit.
-   }
 
 
-   private String resolveVendorSlug(ConsumerService cs) {
-      // Try to derive the vendor from your model:
-      // Option A (common in your schema): Consumer -> ServiceProvider -> name
-      try {
-         if (cs != null &&
-                 cs.getConsumer() != null &&
-                 cs.getConsumer().getServiceProvider() != null &&
-                 cs.getConsumer().getServiceProvider().getName() != null) {
-            return slugify(cs.getConsumer().getServiceProvider().getName());
-         }
-      } catch (Exception ignore) {}
 
-      // Option B (if Service -> ServiceProvider -> name is where vendor lives):
-      try {
-         if (cs != null &&
-                 cs.getService() != null &&
-                 cs.getService().getServiceProvider() != null &&
-                 cs.getService().getServiceProvider().getName() != null) {
-            return slugify(cs.getService().getServiceProvider().getName());
-         }
-      } catch (Exception ignore) {}
-
-      // Fallback
-      return "vodacom";
-   }
 
    private String slugify(String raw) {
       String s = raw == null ? "vodacom" : raw.trim().toLowerCase(Locale.ROOT);

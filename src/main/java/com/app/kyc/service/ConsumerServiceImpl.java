@@ -426,9 +426,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                 return Collections.emptyList();
             }
 
-            // ---------------------------------------------------------------
-            // 2️⃣ Fetch ALL consumers that used this MSISDN
-            // ---------------------------------------------------------------
+
             List<Consumer> consumers =
                     consumerRepository.findAllByMsisdn(rawMsisdn);
 
@@ -439,9 +437,7 @@ public class ConsumerServiceImpl implements ConsumerService {
 
             log.info("Found {} consumers for MSISDN {}", consumers.size(), rawMsisdn);
 
-            // ---------------------------------------------------------------
-            // 3️⃣ Build DTOs for each consumer
-            // ---------------------------------------------------------------
+
             List<ConsumerDto> dtoList = new ArrayList<>();
 
             for (Consumer c : consumers) {
@@ -466,9 +462,7 @@ public class ConsumerServiceImpl implements ConsumerService {
                     }
                 }
 
-                // ---------------------------------------------------------------
-                // 4️⃣ MSISDN Tracking for this specific consumer
-                // ---------------------------------------------------------------
+
                 List<String> variations = expandMsisdnVariations(rawMsisdn);
 
                 List<MsisdnTracking> trackingRows =
@@ -507,9 +501,7 @@ public class ConsumerServiceImpl implements ConsumerService {
 
                 dto.setMsisdnTrackingDto(trackingDtos);
 
-                // ---------------------------------------------------------------
-                // 5️⃣ Consistency Tracking
-                // ---------------------------------------------------------------
+
                 List<ConsumerTracking> trackings = new ArrayList<>();
 
                 try {
@@ -1399,31 +1391,38 @@ System.out.println("Get all flagged ");
         return anomaliesWithCount;
     }*/
 
+
     @Transactional(readOnly = true)
     public Map<String, Object> getAllFlaggedConsumers2(String params)
             throws JsonMappingException, JsonProcessingException {
 
-        System.out.println("Get all flagged" +params);
-
-
         final Pagination pagination = PaginationUtil.getFilterObject(params);
-        final Pageable pageable     = PaginationUtil.getPageable(params);
+        final Pageable pageable = PaginationUtil.getPageable(params);
 
         final List<Integer> consumerStatus = new ArrayList<>();
         final List<AnomalyStatus> anomalyStatus = new ArrayList<>();
         final List<AnomalyStatus> resolutionStatus = new ArrayList<>();
-        List<AnomlyDto> pageAnomaly;
-        long totalAnomaliesCount;
 
-        final boolean noSpFilter = pagination != null
-                && pagination.getFilter() != null
-                && (pagination.getFilter().getServiceProviderID() == null
-                || pagination.getFilter().getServiceProviderID() == -1);
+        // -------------------------------------------------------------------
+        // OVERRIDE isResolved BASED ON resolution = "resolved"
+        // -------------------------------------------------------------------
+        String resolutionFilter = Optional.ofNullable(pagination)
+                .map(Pagination::getFilter)
+                .map(f -> f.getResolution())
+                .orElse("");
 
-        final boolean isResolved = pagination != null
-                && pagination.getFilter() != null
-                && Boolean.TRUE.equals(pagination.getFilter().getIsResolved());
+        boolean isResolved =
+                Boolean.TRUE.equals(
+                        Optional.ofNullable(pagination)
+                                .map(Pagination::getFilter)
+                                .map(f -> f.getIsResolved())
+                                .orElse(false)
+                )
+                        || "resolved".equalsIgnoreCase(resolutionFilter);
 
+        System.out.println("Resolved Mode: " + isResolved);
+
+        // Search text
         final String searchText = Optional.ofNullable(pagination)
                 .map(Pagination::getFilter)
                 .map(f -> f.getSearchText())
@@ -1431,76 +1430,72 @@ System.out.println("Get all flagged ");
                 .map(String::toLowerCase)
                 .orElse(null);
 
+        final boolean noSpFilter = pagination.getFilter().getServiceProviderID() == null
+                || pagination.getFilter().getServiceProviderID() == -1;
+
+        List<AnomlyDto> pageAnomaly;
+        long totalAnomaliesCount;
+
+        // =====================================================================
+        //                   ** NO SERVICE PROVIDER FILTER **
+        // =====================================================================
         if (noSpFilter) {
-            //System.out.println("Get all flagged noSpFilter" +noSpFilter);
-           // System.out.println("Get all flagged  pagination.getFilter().getAnomalyStatus()" + pagination.getFilter().getResolution());
 
             if (isResolved) {
-                System.out.println("Get all flagged isResolved" +isResolved);
+                // RESOLVED ONLY
                 consumerStatus.add(1);
                 anomalyStatus.add(AnomalyStatus.RESOLVED_FULLY);
+                resolutionStatus.add(AnomalyStatus.RESOLVED_FULLY);
 
                 Page<Anomaly> anomalyData =
                         anomalyRepository.findAllByConsumerStatus(
                                 pageable, consumerStatus, anomalyStatus,
                                 pagination.getFilter().getAnomalyType(), searchText);
-                System.out.println("Get all flagged isResolved before anomalyStatus values" +anomalyStatus);
+
                 pageAnomaly = anomalyData.stream()
-                        .map(a -> {
-                            AnomlyDto d = new AnomlyDto(a, 0);
-                            String fid = a.getAnomalyFormattedId();
-                            if (fid == null || fid.isBlank()) fid = a.getFormattedId();
-                            if (fid != null && !fid.isBlank()) d.setFormattedId(fid);
-                            return d;
-                        })
+                        .map(a -> new AnomlyDto(a, 0))
                         .collect(Collectors.toList());
+
                 totalAnomaliesCount = anomalyData.getTotalElements();
 
             } else {
-               // System.out.println("Get all flagged isResolved later values" +isResolved);
+                // NOT RESOLVED
                 anomalyStatus.addAll(this.setStatusList(pagination.getFilter().getAnomalyStatus()));
-
                 resolutionStatus.addAll(this.setResolution(pagination.getFilter().getResolution()));
-                //System.out.println("Get all flagged isResolved pageable values" +pageable);
-                //System.out.println("Get all flagged isResolved anomalyStatus values" +anomalyStatus);
-                //System.out.println("Get all flagged isResolved resolutionStatus values" +resolutionStatus);
-               // System.out.println("Get all flagged isResolved searchText values" +searchText);
-               // System.out.println("Get all flagged isResolved getAnomalyType values" +pagination.getFilter().getAnomalyType());
+
                 Page<Anomaly> anomalyData =
                         anomalyRepository.findAllByConsumersAll(
                                 pageable, anomalyStatus,
-                                pagination.getFilter().getAnomalyType(), resolutionStatus, searchText);
+                                pagination.getFilter().getAnomalyType(),
+                                resolutionStatus, searchText);
 
                 pageAnomaly = anomalyData.stream()
-                        .map(a -> {
-                            AnomlyDto d = new AnomlyDto(a);
-                            String fid = a.getAnomalyFormattedId();
-                            if (fid == null || fid.isBlank()) fid = a.getFormattedId();
-                            if (fid != null && !fid.isBlank()) d.setFormattedId(fid);
-                            return d;
-                        })
+                        .map(a -> new AnomlyDto(a))
                         .collect(Collectors.toList());
+
                 totalAnomaliesCount = anomalyData.getTotalElements();
             }
-        } else {
-            System.out.println("Get all flagged with sp filter" );
-            final Long spId = pagination.getFilter().getServiceProviderID();
-            List<Long> spIds;
 
-            if (spId != 0) {
-                spIds = Arrays.asList(spId);
-            } else {
-                spIds = serviceProviderRepository.findAll()
-                        .stream()
-                        .map(ServiceProvider::getId)
-                        .collect(Collectors.toList());
-            }
+        } else {
+
+            // =====================================================================
+            //                   ** WITH SERVICE PROVIDER FILTER **
+            // =====================================================================
+
+            final Long spId = pagination.getFilter().getServiceProviderID();
+            List<Long> spIds = (spId != null && spId != 0)
+                    ? Arrays.asList(spId)
+                    : serviceProviderRepository.findAll()
+                    .stream()
+                    .map(ServiceProvider::getId)
+                    .collect(Collectors.toList());
 
             if (isResolved) {
+                // RESOLVED ONLY
                 consumerStatus.add(1);
                 anomalyStatus.add(AnomalyStatus.RESOLVED_FULLY);
-                System.out.println("Get all flagged with isResolved "+isResolved );
-                System.out.println("Get all flagged with anomalyStatus "+anomalyStatus.size());
+                resolutionStatus.add(AnomalyStatus.RESOLVED_FULLY);
+
                 Page<Anomaly> anomalyData =
                         anomalyRepository.findAllByConsumerStatusAndServiceProviderId(
                                 pageable, consumerStatus, spIds,
@@ -1508,21 +1503,16 @@ System.out.println("Get all flagged ");
                                 resolutionStatus, searchText);
 
                 pageAnomaly = anomalyData.stream()
-                        .map(a -> {
-                            AnomlyDto d = new AnomlyDto(a, 0);
-                            String fid = a.getAnomalyFormattedId();
-                            if (fid == null || fid.isBlank()) fid = a.getFormattedId();
-                            if (fid != null && !fid.isBlank()) d.setFormattedId(fid);
-                            return d;
-                        })
+                        .map(a -> new AnomlyDto(a, 0))
                         .collect(Collectors.toList());
+
                 totalAnomaliesCount = anomalyData.getTotalElements();
 
             } else {
-                System.out.println("Get all flagged with Not isResolved "+isResolved );
-                System.out.println("Get all flagged with Not anomalyStatus "+anomalyStatus.size());
+                // NOT RESOLVED
                 consumerStatus.add(0);
                 consumerStatus.add(1);
+
                 anomalyStatus.addAll(this.setStatusList(pagination.getFilter().getAnomalyStatus()));
                 resolutionStatus.addAll(this.setResolution(pagination.getFilter().getResolution()));
 
@@ -1533,18 +1523,16 @@ System.out.println("Get all flagged ");
                                 resolutionStatus, searchText);
 
                 pageAnomaly = anomalyData.stream()
-                        .map(a -> {
-                            AnomlyDto d = new AnomlyDto(a);
-                            String fid = a.getAnomalyFormattedId();
-                            if (fid == null || fid.isBlank()) fid = a.getFormattedId();
-                            if (fid != null && !fid.isBlank()) d.setFormattedId(fid);
-                            return d;
-                        })
+                        .map(a -> new AnomlyDto(a))
                         .collect(Collectors.toList());
+
                 totalAnomaliesCount = anomalyData.getTotalElements();
             }
         }
 
+        // =====================================================================
+        //              IF EMPTY → RETURN EMPTY RESULT
+        // =====================================================================
         if (pageAnomaly.isEmpty()) {
             Map<String, Object> empty = new HashMap<>();
             empty.put("data", Collections.emptyList());
@@ -1552,27 +1540,24 @@ System.out.println("Get all flagged ");
             return empty;
         }
 
-        // --------- HYDRATE CONSUMERS VIA ConsumerAnomaly ---------
+        // =====================================================================
+        //        HYDRATE CONSUMERS USING ConsumerAnomaly JOIN TABLE
+        // =====================================================================
         List<Long> anomalyIds = pageAnomaly.stream()
                 .map(AnomlyDto::getId)
-                .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
-        List<ConsumerAnomaly> links = consumerAnomalyRepository.findAllByAnomalyIdInFetchConsumer(anomalyIds);
+        List<ConsumerAnomaly> links =
+                consumerAnomalyRepository.findAllByAnomalyIdInFetchConsumer(anomalyIds);
 
         Map<Long, List<ConsumerDto>> consumersByAnomalyId = links.stream()
                 .collect(Collectors.groupingBy(
                         ca -> ca.getAnomaly().getId(),
-                        Collectors.collectingAndThen(
-                                Collectors.mapping(ca -> {
-                                    ConsumerDto cd = new ConsumerDto(ca.getConsumer(), Collections.emptyList());
-                                    if (cd.getFirstName() == null) cd.setFirstName("");
-                                    if (cd.getLastName()  == null) cd.setLastName("");
-                                    if (ca.getNotes() != null) cd.setNotes(ca.getNotes());
-                                    return cd;
-                                }, Collectors.toSet()),
-                                set -> new ArrayList<>(set)
-                        )
+                        Collectors.mapping(ca -> {
+                            ConsumerDto cd = new ConsumerDto(ca.getConsumer(), Collections.emptyList());
+                            if (ca.getNotes() != null) cd.setNotes(ca.getNotes());
+                            return cd;
+                        }, Collectors.toList())
                 ));
 
         Map<Long, Long> effectedCountByAnomalyId = links.stream()
@@ -1580,51 +1565,29 @@ System.out.println("Get all flagged ");
                         ca -> ca.getAnomaly().getId(),
                         Collectors.mapping(
                                 ca -> ca.getConsumer().getId(),
-                                Collectors.collectingAndThen(
-                                        Collectors.toSet(),
-                                        set -> (long) set.size()
-                                )
+                                Collectors.collectingAndThen(Collectors.toSet(), set -> (long) set.size())
                         )
                 ));
 
-        Map<Long, Map<Long, String>> notesByAnomalyThenConsumer = new HashMap<>();
-        for (ConsumerAnomaly ca : links) {
-            final Long aId = ca.getAnomaly().getId();
-            final Long cId = ca.getConsumer().getId();
-            if (aId == null || cId == null) continue;
-            notesByAnomalyThenConsumer
-                    .computeIfAbsent(aId, k -> new HashMap<>())
-                    .put(cId, ca.getNotes());
-        }
-
-        // --------- PATCH DTOs ---------
+        // PATCH DTOs
         for (AnomlyDto dto : pageAnomaly) {
-            int effected = effectedCountByAnomalyId.getOrDefault(dto.getId(), 0L).intValue();
-            dto.setEffectedRecords(effected);
 
-            List<ConsumerDto> fromLinks = consumersByAnomalyId.get(dto.getId());
+            dto.setEffectedRecords(
+                    effectedCountByAnomalyId.getOrDefault(dto.getId(), 0L).intValue()
+            );
+
             if (dto.getConsumers() == null || dto.getConsumers().isEmpty()) {
-                if (fromLinks != null) dto.setConsumers(fromLinks);
-            } else {
-                Map<Long, String> notesForAnomaly = notesByAnomalyThenConsumer.get(dto.getId());
-                for (ConsumerDto c : dto.getConsumers()) {
-                    if (c.getFirstName() == null) c.setFirstName("");
-                    if (c.getLastName()  == null) c.setLastName("");
-                    if (notesForAnomaly != null && c.getId() != null) {
-                        String note = notesForAnomaly.get(c.getId());
-                        if (note != null) c.setNotes(note);
-                    }
-                }
+                dto.setConsumers(consumersByAnomalyId.get(dto.getId()));
             }
         }
 
-        // ✅ Removed: vendor/day re-numbering. We now strictly use DB value (anomaly_formatted_id).
+        Map<String, Object> result = new HashMap<>();
+        result.put("data", pageAnomaly);
+        result.put("count", totalAnomaliesCount);
 
-        Map<String, Object> anomaliesWithCount = new HashMap<>();
-        anomaliesWithCount.put("data", pageAnomaly);
-        anomaliesWithCount.put("count", totalAnomaliesCount);
-        return anomaliesWithCount;
+        return result;
     }
+
 
 
 
@@ -2752,113 +2715,6 @@ System.out.println("Get all flagged ");
             em.clear();
         }
     }
-
-
-
-    // 🔹 Tracks history of consumer changes
-    /**
-     * 🔹 Adds a consumer consistency tracking record for auditing.
-     */
-
-
-
-
-    // 🔹 Tracks anomaly creation and status changes
-    /**
-     * 🔹 Adds a tracking entry whenever a new anomaly is inserted or updated.
-     */
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void addAnomalyTrackingHistory(String prefix, String note, String updatedBy) {
-
-        // Fetch anomaly IDs directly from DB (fresh data)
-        List<Long> anomalyIds = anomalyRepository.findIdsByFormattedIdPrefix(prefix);
-
-        if (anomalyIds == null || anomalyIds.isEmpty()) {
-            log.info("ℹ️ No anomaly IDs found for prefix={}", prefix);
-            return;
-        }
-
-        log.info("🧾 Found {} anomalies to track (prefix={})", anomalyIds.size(), prefix);
-
-        // Prepare batch
-        List<AnomalyTracking> batch = new ArrayList<>();
-        Date now = new Date();
-        int totalCount = 0;
-        final int batchSize = 1000;
-
-        for (Long anomalyId : anomalyIds) {
-            try {
-                // ✅ Use managed reference (no detached entity issue)
-                Anomaly ref = entityManager.getReference(Anomaly.class, anomalyId);
-
-                AnomalyTracking tracking = new AnomalyTracking();
-                tracking.setAnomaly(ref);
-                tracking.setStatus(AnomalyStatus.REPORTED);
-                tracking.setCreatedOn(now);
-                tracking.setUpdateBy(updatedBy);
-                tracking.setNote(note);
-
-                batch.add(tracking);
-
-                if (batch.size() >= batchSize) {
-                    anomalyTrackingRepository.saveAll(batch);
-                    entityManager.flush();
-                    entityManager.clear();
-                    totalCount += batch.size();
-                    batch.clear();
-                }
-
-            } catch (Exception ex) {
-                log.error("⚠️ Failed to add tracking for anomalyId={}: {}", anomalyId, ex.getMessage());
-                entityManager.clear();
-            }
-        }
-
-        if (!batch.isEmpty()) {
-            anomalyTrackingRepository.saveAll(batch);
-            entityManager.flush();
-            entityManager.clear();
-            totalCount += batch.size();
-        }
-
-        log.info("✅ Added {} anomaly tracking entries for {}", totalCount, prefix);
-    }
-
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void addConsumerTrackingHistory(ServiceProvider serviceProvider, String updatedBy) {
-
-        List<Consumer> consumers = consumerRepository.findByServiceProvider(serviceProvider);
-
-        if (consumers == null || consumers.isEmpty()) {
-            log.info("ℹ️ No consumers found for {}", serviceProvider.getName());
-            return;
-        }
-
-        List<ConsumerTracking> trackingList = new ArrayList<>();
-        Date now = new Date();
-
-        for (Consumer c : consumers) {
-            if (c.getId() == null) {
-                log.warn("⚠️ Skipping Consumer with null ID for service provider {}", serviceProvider.getName());
-                continue;
-            }
-
-            trackingList.add(new ConsumerTracking(
-                    c.getId(),
-                    serviceProvider,
-                    (c.getConsistentOn() != null) ? c.getConsistentOn() : "N/A",
-                    c.getIsConsistent() != null ? c.getIsConsistent() : Boolean.FALSE,
-                    now
-            ));
-        }
-
-        consumerTrackingRepository.saveAll(trackingList);
-        entityManager.flush();
-        entityManager.clear();
-
-        log.info("✅ Added {} consumer tracking records for {}", trackingList.size(), serviceProvider.getName());
-    }
-
 
 
 
